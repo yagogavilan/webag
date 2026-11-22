@@ -14,6 +14,7 @@ info:
     Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
     Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas legadas de edição do admin (`editAdminStore`, `PATCH /v1/admin/stores/{storeId}`, e `editAdminStoreSettings`, `PUT /v1/admin/stores/{storeId}/settings/{section}`) foram REMOVIDAS na R1.1, contrato e código no mesmo commit (exceção consciente à regra de não remover; nenhum consumidor: o web nunca as chamou). Hoje o admin edita dados e configuração só por `editAdminStoreProfile` e `editAdminStoreConfig`, com motivo, versão e auditoria.
     Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
+    Permissões do admin (WB-355): TODA operação `/v1/admin/*` declara `x-admin-permission` (chave da tabela única `permissions.ts`; `admin-self` = qualquer perfil de admin, só nas rotas do próprio TOTP). Rota nova sem a chave falha no CI; o teste de matriz percorre todas as rotas reais com os 4 perfis, um lojista e um cliente.
     "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
     Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
 servers:
@@ -637,6 +638,7 @@ paths:
     get:
       tags: [admin-users]
       operationId: listAdmins
+      x-admin-permission: 'admins:manage'
       summary: Listar admins
       description: "Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
       responses:
@@ -653,6 +655,7 @@ paths:
     post:
       tags: [admin-users]
       operationId: inviteAdmin
+      x-admin-permission: 'admins:manage'
       summary: Convidar admin
       description: "Convite de 256 bits, uso único, ligado ao e-mail, válido por 48 h. Exige reautenticação recente (403 `REAUTH_REQUIRED`). Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
       requestBody:
@@ -680,6 +683,7 @@ paths:
     delete:
       tags: [admin-users]
       operationId: revokeAdminInvitation
+      x-admin-permission: 'admins:manage'
       summary: Revogar convite de admin
       description: "Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -697,6 +701,7 @@ paths:
     patch:
       tags: [admin-users]
       operationId: updateAdmin
+      x-admin-permission: 'admins:manage'
       summary: Mudar perfil ou ativar/desativar admin
       description: "Vale na hora e encerra as sessões do alvo. 409 `LAST_SUPER_ADMIN` impede remover o último super admin. Exige reautenticação recente. Permissão de admin: `admins:manage` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -724,6 +729,7 @@ paths:
     post:
       tags: [admin-users]
       operationId: resetAdminTotp
+      x-admin-permission: 'admins:manage'
       summary: Redefinir o acesso de outro admin
       description: "Só super admin, nunca o próprio. Exige motivo e o canal da conferência de identidade (SEC-093). Apaga TOTP e códigos de recuperação, invalida a senha, revoga as sessões e envia link de reativação (48 h, uso único) só ao e-mail cadastrado. Exige reautenticação recente. Permissão de admin: `admins:manage`."
       parameters:
@@ -749,6 +755,7 @@ paths:
     post:
       tags: [admin-users]
       operationId: setupTotp
+      x-admin-permission: 'admin-self'
       summary: Iniciar a configuração do TOTP
       description: "Única área liberada a um admin sem segundo fator. 409 se já configurado. SEC-113: se o TOTP foi perdido (usou código de recuperação), só a sessão aberta por código de recuperação pode reconfigurar (403 `RECOVERY_SESSION_REQUIRED` nas demais); no primeiro enrolamento vale o prazo de 48 h (403 `ENROLLMENT_EXPIRED`)."
       responses:
@@ -768,6 +775,7 @@ paths:
     post:
       tags: [admin-users]
       operationId: regenerateRecoveryCodes
+      x-admin-permission: 'admin-self'
       summary: Gerar novos códigos de recuperação (SEC-092)
       description: "Exige TOTP ativo e reautenticação recente (403 `REAUTH_REQUIRED`). Os 10 códigos novos aparecem uma única vez; os anteriores deixam de valer e o titular recebe e-mail. 409 `TOTP_NOT_CONFIGURED` sem TOTP."
       responses:
@@ -787,6 +795,7 @@ paths:
     get:
       tags: [admin-users]
       operationId: getTotpStatus
+      x-admin-permission: 'admin-self'
       summary: Estado do 2º fator do próprio admin
       description: "Quantos códigos de recuperação restam; `recoveryCodesLow` é verdadeiro com 3 ou menos (o painel pede novos)."
       responses:
@@ -804,6 +813,7 @@ paths:
     post:
       tags: [admin-users]
       operationId: confirmTotp
+      x-admin-permission: 'admin-self'
       summary: Confirmar o TOTP e receber os códigos de recuperação
       description: "Os 10 códigos de recuperação aparecem uma única vez."
       requestBody:
@@ -844,6 +854,7 @@ paths:
     get:
       tags: [regions]
       operationId: listCitiesAdmin
+      x-admin-permission: 'regions:read'
       summary: Cidades e bairros (admin)
       description: "Permissão de admin: `regions:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       responses:
@@ -860,6 +871,7 @@ paths:
     post:
       tags: [regions]
       operationId: createCity
+      x-admin-permission: 'regions:write'
       summary: Criar cidade
       description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       requestBody:
@@ -887,6 +899,7 @@ paths:
     patch:
       tags: [regions]
       operationId: updateCity
+      x-admin-permission: 'regions:write'
       summary: Editar ou ativar/inativar cidade
       description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -916,6 +929,7 @@ paths:
     post:
       tags: [regions]
       operationId: createNeighborhood
+      x-admin-permission: 'regions:write'
       summary: Criar bairro
       description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -947,6 +961,7 @@ paths:
     patch:
       tags: [regions]
       operationId: updateNeighborhood
+      x-admin-permission: 'regions:write'
       summary: Editar ou ativar/inativar bairro
       description: "Permissão de admin: `regions:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -993,6 +1008,7 @@ paths:
     get:
       tags: [categories]
       operationId: listCategoriesAdmin
+      x-admin-permission: 'categories:read'
       summary: Árvore de categorias (admin) e ícones disponíveis
       description: "Permissão de admin: `categories:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       responses:
@@ -1009,6 +1025,7 @@ paths:
     post:
       tags: [categories]
       operationId: createCategory
+      x-admin-permission: 'categories:write'
       summary: Criar categoria ou subcategoria
       description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       requestBody:
@@ -1040,6 +1057,7 @@ paths:
     put:
       tags: [categories]
       operationId: reorderCategories
+      x-admin-permission: 'categories:write'
       summary: Reordenar categorias do mesmo nível
       description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       requestBody:
@@ -1065,6 +1083,7 @@ paths:
     patch:
       tags: [categories]
       operationId: updateCategory
+      x-admin-permission: 'categories:write'
       summary: Editar, ativar ou inativar categoria
       description: "Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1097,6 +1116,7 @@ paths:
     delete:
       tags: [categories]
       operationId: deleteCategory
+      x-admin-permission: 'categories:write'
       summary: Excluir categoria sem vínculos
       description: "409 `CATEGORY_IN_USE` se houver subcategorias (e, nas próximas ondas, produtos ou lojas). Permissão de admin: `categories:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1116,6 +1136,7 @@ paths:
     get:
       tags: [config]
       operationId: listParameters
+      x-admin-permission: 'parameters:read'
       summary: Parâmetros do negócio
       description: "Permissão de admin: `parameters:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       responses:
@@ -1133,6 +1154,7 @@ paths:
     put:
       tags: [config]
       operationId: updateParameter
+      x-admin-permission: 'parameters:write'
       summary: Alterar parâmetro
       description: "Valida a faixa (422 `PARAMETER_OUT_OF_RANGE`), exige motivo, grava histórico e auditoria. Com `expectedUpdatedAt`, outra edição no meio devolve 409 `PARAMETER_CONFLICT` (recarregue). Validação cruzada do ETA (RN-02, BUG-022), também no `reset`: `entrega_max_min` menos `entrega_faixa_min` precisa cobrir `entrega_preparo_padrao_min` + `entrega_despacho_min` + 5 e `entrega_faixa_min` <= `entrega_max_min` / 4; senão 422 `PARAMETER_OUT_OF_RANGE` com a prévia do alcance no `detail` e em `reachKm` (km de alcance que o valor proposto daria). Piso legal de troca é fixo (422 `PARAMETER_LOCKED`). Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1166,6 +1188,7 @@ paths:
     post:
       tags: [config]
       operationId: resetParameter
+      x-admin-permission: 'parameters:write'
       summary: Restaurar o padrão do parâmetro
       description: "Permissão de admin: `parameters:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1214,6 +1237,7 @@ paths:
     get:
       tags: [config]
       operationId: listFeatureFlags
+      x-admin-permission: 'flags:read'
       summary: Feature flags (admin)
       description: "Permissão de admin: `flags:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       responses:
@@ -1231,6 +1255,7 @@ paths:
     put:
       tags: [config]
       operationId: setFeatureFlag
+      x-admin-permission: 'flags:write'
       summary: Ligar ou desligar feature flag
       description: "Permissão de admin: `flags:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1275,6 +1300,7 @@ paths:
     get:
       tags: [config]
       operationId: getAdminMaintenance
+      x-admin-permission: 'maintenance:read'
       summary: Modo manutenção (admin)
       description: "Permissão de admin: `maintenance:read` (todo perfil)."
       responses:
@@ -1290,6 +1316,7 @@ paths:
     put:
       tags: [config]
       operationId: setMaintenance
+      x-admin-permission: 'maintenance:write'
       summary: "Ligar ou desligar o modo manutenção (só super admin; auditado)"
       description: "Permissão de admin: `maintenance:write` (só super admin). Ligado, `POST /v1/orders` e `POST /v1/card-intents` respondem 503 `MAINTENANCE`; leitura, sacola, pedidos em andamento (inclusive pagar o já criado), webhooks do provedor e o painel admin seguem. `message` e `expectedBackAt` só valem ao ligar (sem mensagem vale o texto padrão). Desligar não exige nada do usuário. O agendamento de início e fim (WB-121 C4) é fase 2. Auditoria: `maintenance.enable` / `maintenance.disable` com motivo, antes e depois."
       requestBody:
@@ -1333,6 +1360,7 @@ paths:
     get:
       tags: [legal]
       operationId: listLegalVersions
+      x-admin-permission: 'legal:read'
       summary: Versões publicadas do documento
       description: "Permissão de admin: `legal:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1353,6 +1381,7 @@ paths:
     post:
       tags: [legal]
       operationId: publishLegalDocument
+      x-admin-permission: 'legal:write'
       summary: Publicar nova versão
       description: "Versões são imutáveis. `relevantChange: true` obriga os usuários a aceitar no próximo uso. SEC-187: o texto deve vir com os valores contratuais já escritos; só `{{SITE_URL}}`, `{{VERSAO}}` e `{{VIGENCIA}}` podem ficar como variável. Qualquer outro `{{...}}` (ou chave sem par) é recusado com 422 `LEGAL_VARIABLE_NOT_ALLOWED` e nada é gravado; trocar um valor é publicar uma versão nova. A auditoria guarda o SHA-256 do texto. Permissão de admin: `legal:write` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1384,6 +1413,7 @@ paths:
     get:
       tags: [audit]
       operationId: listAuditLog
+      x-admin-permission: 'audit:own'
       summary: Trilha de auditoria
       description: "Append-only. Filtros por ator, ação, alvo e período; paginação por cursor. Super admin vê tudo; os demais perfis veem só as PRÓPRIAS ações (o filtro `actorId` é forçado no servidor). Permissão de admin: `audit:own` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -1412,6 +1442,7 @@ paths:
     get:
       tags: [audit]
       operationId: exportAuditLog
+      x-admin-permission: 'audit:own'
       summary: Exportar a auditoria em CSV
       description: "Mesmos filtros da listagem (sem cursor), até 5.000 linhas mais recentes; `X-Export-Truncated: true` quando há mais. Células que começam com `=`, `+`, `-` ou `@` saem com apóstrofo (sem execução em planilha). A exportação é registrada na auditoria (`audit.export`). Limite de 10 por minuto. Permissão de admin: `audit:own`."
       parameters:
@@ -1465,6 +1496,7 @@ paths:
     get:
       tags: [finance]
       operationId: getStoreCommission
+      x-admin-permission: 'commissions:read'
       summary: Comissão efetiva da loja e histórico
       description: "Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros."
       parameters:
@@ -1485,6 +1517,7 @@ paths:
     put:
       tags: [finance]
       operationId: setStoreCommission
+      x-admin-permission: 'commissions:write'
       summary: Definir comissão (linha nova; não retroativa)
       description: "Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo."
       parameters:
@@ -1533,6 +1566,7 @@ paths:
     get:
       tags: [stores]
       operationId: getAdminStoreExposureLimit
+      x-admin-permission: 'stores:read'
       summary: Limite de exposição da loja (admin)
       description: "Permissão de admin: `stores:read`."
       parameters:
@@ -1553,6 +1587,7 @@ paths:
     put:
       tags: [stores]
       operationId: setAdminStoreExposureLimit
+      x-admin-permission: 'stores:decide'
       summary: Liberar ou ajustar o limite da loja nova
       description: "Permissão de admin: `stores:decide` (operação e super admin). `default` volta aos parâmetros, `released` tira o limite, `custom` troca o teto (R$ 100,00 a R$ 50.000,00). Motivo obrigatório; auditado."
       parameters:
@@ -1582,6 +1617,7 @@ paths:
     get:
       tags: [finance]
       operationId: getCategoryCommission
+      x-admin-permission: 'commissions:read'
       summary: Histórico de comissão da categoria
       description: "Permissão de admin: `commissions:read` (financeiro e super admin). Histórico dos últimos 50 registros."
       parameters:
@@ -1602,6 +1638,7 @@ paths:
     put:
       tags: [finance]
       operationId: setCategoryCommission
+      x-admin-permission: 'commissions:write'
       summary: Definir comissão (linha nova; não retroativa)
       description: "Permissão de admin: `commissions:write`. `pct` de 0 a 30 com até 2 casas; `null` remove o override e volta a valer a regra seguinte (loja > categoria > padrão, RN-10). Não altera pedidos já pagos (snapshot). Auditado com motivo."
       parameters:
@@ -1631,6 +1668,7 @@ paths:
     get:
       tags: [logistics]
       operationId: listDeliveryFeeTables
+      x-admin-permission: 'delivery-fees:read'
       summary: Tabelas de taxa de entrega em vigor (WB-236)
       description: "Uma tabela por escopo (padrão geral, cidade ou bairro). A taxa de entrega é da Webag, cobrada do cliente e vem do ENDEREÇO DE DESTINO (bairro > cidade > padrão) e da faixa de distância em linha reta; o lojista não tem taxa nem raio próprio (DEC-036). Pedido mínimo e entrega grátis são os parâmetros globais `pedido_minimo_cents` e `frete_gratis_acima_cents`. Permissão de admin: `delivery-fees:read`."
       responses:
@@ -1651,6 +1689,7 @@ paths:
     put:
       tags: [logistics]
       operationId: putDeliveryFeeTable
+      x-admin-permission: 'delivery-fees:write'
       summary: Nova versão da tabela de um escopo
       description: "Cria uma versão NOVA (histórico), válida a partir de `effectiveFrom` (padrão: agora; não retroativa; até 90 dias à frente); o pedido guarda a faixa usada. Até 6 faixas `[fromM, toM)` contíguas a partir de 0, a última terminando no `raio_max_km`. Taxa de entrega de R$ 0 a R$ 50; taxa de troca até `taxa_coleta_max_cents` (padrão: 50% da entrega). `expectedVersion` = versão atual (0 se não houver): outra pessoa gravou antes = 409 `FEE_TABLE_CONFLICT`. Só super admin e financeiro: `delivery-fees:write`. Auditado."
       requestBody:
@@ -1682,6 +1721,7 @@ paths:
     get:
       tags: [logistics]
       operationId: listDeliveryFeeHistory
+      x-admin-permission: 'delivery-fees:read'
       summary: Versões de um escopo (inclui as futuras)
       description: "Permissão de admin: `delivery-fees:read`."
       parameters:
@@ -1710,6 +1750,7 @@ paths:
     get:
       tags: [logistics]
       operationId: previewDeliveryFee
+      x-admin-permission: 'delivery-fees:read'
       summary: Prévia da taxa (a mesma conta do checkout)
       description: "Mesma função do carrinho: o valor é igual ao do checkout para o mesmo par loja/destino. Mostra custo previsto e margem prevista (negativa = a faixa dá prejuízo). Permissão de admin: `delivery-fees:read`."
       parameters:
@@ -1736,6 +1777,7 @@ paths:
     get:
       tags: [logistics]
       operationId: listCouriers
+      x-admin-permission: 'logistics:read'
       summary: Motoboys (WB-231)
       description: "Operação e super admin cadastram; financeiro e suporte leem. Permissão de admin: `logistics:read`."
       parameters:
@@ -1763,6 +1805,7 @@ paths:
     post:
       tags: [logistics]
       operationId: createCourier
+      x-admin-permission: 'logistics:write'
       summary: Cadastrar motoboy
       description: "Só nome, WhatsApp, observação e o aceite \"documentos conferidos fora do app\" (sem CPF nem upload). Telefone duplicado entre ativos: 409 `COURIER_PHONE_IN_USE`. Permissão: `logistics:write`. Auditado."
       requestBody:
@@ -1792,6 +1835,7 @@ paths:
     patch:
       tags: [logistics]
       operationId: updateCourier
+      x-admin-permission: 'logistics:write'
       summary: Editar ou inativar motoboy
       description: "Não há exclusão: só inativar. Inativar com corrida ativa: 409 `COURIER_HAS_ACTIVE_DELIVERIES` (reatribua primeiro). Antes e depois na auditoria. Permissão: `logistics:write`."
       parameters:
@@ -1825,6 +1869,7 @@ paths:
     get:
       tags: [logistics]
       operationId: listDeliveries
+      x-admin-permission: 'logistics:read'
       summary: Fila de corridas (WB-230)
       description: "`tab=active` (padrão): mais antiga primeiro, a partir do horário de \"pronto\" (que não muda ao reatribuir), com `waitingMinutes` e `sla` (ok, long, late) pelos parâmetros `logistica_sla_atribuir_min` e `logistica_sla_atribuir_critico_min`. `tab=done`: concluídas hoje. Filtros no servidor. Permissão: `logistics:read`."
       parameters:
@@ -1857,6 +1902,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getDelivery
+      x-admin-permission: 'logistics:read'
       summary: Detalhe da corrida com a linha do tempo
       description: "Nome, telefone e endereço do cliente (`contact`) só aparecem enquanto a corrida está ativa (LGPD) E para quem despacha (`logistics:write`); financeiro e suporte usam `POST .../contact-reveal` (SEC-144). Nunca devolve o código de entrega. Permissão: `logistics:read`."
       parameters:
@@ -1878,6 +1924,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getLogisticsAvailability
+      x-admin-permission: 'logistics:read'
       summary: Horário e pausas da logística agora (BUG-016)
       description: "`open=false` com `closedBy` `HOURS` (fora de `logistica_horario`/`logistica_dias`, Brasília; `opensAt` = próxima abertura) ou `PAUSED`. `pauses` lista as pausas abertas (geral = `cityId` nulo)."
       responses:
@@ -1901,6 +1948,7 @@ paths:
     post:
       tags: [logistics]
       operationId: pauseLogistics
+      x-admin-permission: 'logistics:write'
       summary: Pausar as entregas, geral ou de uma cidade, com motivo (BUG-016, DEC-039c)
       description: "Enquanto pausada, o carrinho bloqueia a entrega com `LOGISTICS_CLOSED` (só retirada) e a descoberta mostra a entrega indisponível. Auditado. Repetir a mesma pausa devolve a existente."
       requestBody:
@@ -1931,6 +1979,7 @@ paths:
     post:
       tags: [logistics]
       operationId: resumeLogistics
+      x-admin-permission: 'logistics:write'
       summary: Liberar a entrega pausada (geral ou de uma cidade)
       description: "409 `NOT_PAUSED` se não há pausa ativa nesse escopo. Auditado."
       requestBody:
@@ -1957,6 +2006,7 @@ paths:
     post:
       tags: [logistics]
       operationId: assignDeliveryBatch
+      x-admin-permission: 'logistics:write'
       summary: Atribuir um lote de corridas da mesma cidade ao mesmo motoboy (DEC-053)
       description: "De 2 a `entrega_lote_max` corridas de entrega prontas e sem motoboy, todas da mesma cidade. 422 `INVALID_BATCH` (quantidade, tipo ou estado) e `BATCH_DIFFERENT_AREA`. Cada corrida segue a regra de `assignDelivery`; as que perderam a disputa vêm em `failed` com o `code`."
       requestBody:
@@ -1992,6 +2042,7 @@ paths:
     post:
       tags: [logistics]
       operationId: assignDelivery
+      x-admin-permission: 'logistics:write'
       summary: Atribuir motoboy (PRONTA -> AGUARDANDO)
       description: "Dois operadores: vale o primeiro, o outro recebe 409 `DELIVERY_ALREADY_ASSIGNED`. Motoboy inativo: 422 `COURIER_INACTIVE`. Endereço incompleto: 422 `ADDRESS_INCOMPLETE` até enviar `addressConfirmed: true`. Permissão: `logistics:write`. Auditado."
       parameters:
@@ -2030,6 +2081,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getDeliveryWhatsapp
+      x-admin-permission: 'logistics:write'
       summary: Mensagem pronta e link wa.me para o motoboy
       description: "Só com a corrida atribuída e ativa. A mensagem leva só loja, endereços, 1º nome e telefone do cliente, volumes e observação; nunca CPF, e-mail, itens, valores nem o código de entrega. Permissão: `logistics:write` (a mensagem leva o contato do cliente; financeiro e suporte recebem 403, SEC-144)."
       parameters:
@@ -2059,6 +2111,7 @@ paths:
     post:
       tags: [logistics]
       operationId: markDeliveryWhatsappSent
+      x-admin-permission: 'logistics:write'
       summary: Registrar que a mensagem foi enviada
       description: "Permissão: `logistics:write`."
       parameters:
@@ -2076,6 +2129,7 @@ paths:
     post:
       tags: [logistics]
       operationId: updateDeliveryStatus
+      x-admin-permission: 'logistics:write'
       summary: Avançar a corrida (RN-18)
       description: "`action`: confirm (a caminho da loja), picked_up (saiu para entrega), delivered (exige o código de 4 dígitos quando a flag `codigo_entrega` está ligada; 5 erros bloqueiam com 429 `DELIVERY_CODE_LOCKED`; só o super admin conclui com `overrideReason`), not_delivered (exige `failReason`), reattempt (até `entrega_reentrega_max`), return_confirmed, reassign e cancel (exigem `reason`). Transição inválida: 409 `INVALID_DELIVERY_TRANSITION`. Cada mudança grava evento e auditoria e avisa o cliente. **WB-262:** em `delivered` a operação pode informar `deliveredAt` (a hora real, recuo até 60 min, motivo acima de 5 min); a hora real e a do clique ficam no histórico e na auditoria; a compensação por atraso (RN-19 4c), o relatório de prazo e as janelas de troca e avaliação contam da hora real. Permissão: `logistics:write`."
       parameters:
@@ -2122,6 +2176,7 @@ paths:
     put:
       tags: [logistics]
       operationId: setDeliveryCost
+      x-admin-permission: 'logistics:write'
       summary: Custo pago ao motoboy (WB-239)
       description: "Só com a corrida terminada. Corrigir um custo já lançado exige `reason` e preserva o valor anterior no histórico. Acima de 1,5x o previsto da faixa ou de `entrega_custo_alerta_cents` exige `reason` (422 `COST_REASON_REQUIRED`) e alerta o financeiro (`delivery_cost_high`); acima de `entrega_custo_max_cents`, 422 `COST_ABOVE_LIMIT` (SEC-145). Permissão: `logistics:write`."
       parameters:
@@ -2158,6 +2213,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getLogisticsReportSummary
+      x-admin-permission: 'logistics:report'
       summary: Relatório de logística (WB-240)
       description: "Corridas do período pela hora em que ficaram prontas (dia civil de Brasília), sem as canceladas. Entregas, no prazo (pronto até entregue dentro de `logistica_alerta_entrega_min`, [HIPÓTESE] até o PO definir o prazo), falhas por motivo, tempos médios em minutos, taxa cobrada, custo, margem (só das corridas com custo registrado), custo do subsídio do frete grátis (taxa zero) e margem por cidade com `negativeMargin` destacando a negativa; os totais são a soma das linhas. Permissão: `logistics:report` (super admin, operação, financeiro)."
       parameters:
@@ -2220,6 +2276,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getLogisticsReportPayable
+      x-admin-permission: 'logistics:report'
       summary: A pagar por motoboy (WB-240 C2)
       description: "Custo das corridas já lançadas e ainda não pagas, por motoboy, com quem lançou (`registeredBy`, SEC-145). `format=csv` exporta (valores em centavos, BOM) e a exportação é auditada (`logistics.payable.export`). Permissão: `logistics:report`."
       parameters:
@@ -2266,6 +2323,7 @@ paths:
     get:
       tags: [logistics]
       operationId: getLogisticsStats
+      x-admin-permission: 'logistics:report'
       summary: Indicadores do piloto da logística (W.4, WB-258 C5)
       description: "Permissão `logistics:report` (super admin, operação e financeiro). Alimenta o 4º número da Logística (\"No prazo hoje\": use `from` = `to` = hoje) e o bloco \"Prazo no piloto\". Período por dia civil de Brasília da hora REAL da entrega (`deliveredAt`, WB-262). `onTime`: entregue até o fim da faixa reancorada no pagamento (`of` = entregas com faixa; `pct` nulo sem entregas). `withinCeiling`: até `entrega_max_min` (120) depois do pagamento, a meta de 95% em 2 h. `precisionMedianMinutes`: mediana de |entrega real - meio da faixa| `[HIPÓTESE: o PO não definiu a conta]`. `lateCancellations`: pedidos cancelados pelo cliente com o motivo 'Atraso na entrega'. `compensations`: cupons concedidos por atraso (`granted`), os já resgatados e o custo real deles; `abdicatedFee`: o frete que os cupons de frete grátis de compensação já zeraram. `prepByStore`: preparo real (ACEITO até PRONTO) x informado por loja, mediana, só lojas com 3 ou mais pedidos; `warn` quando o real passa do informado em 10 min ou mais (WB-258 C6). **Não traz 'atrasos por causa'**: a causa é marcada pela operação (WB-255 C5) e esse registro ainda não existe na API."
       parameters:
@@ -2319,6 +2377,7 @@ paths:
     post:
       tags: [logistics]
       operationId: markDeliveryPayouts
+      x-admin-permission: 'logistics:payout'
       summary: Marcar um lote de corridas de um motoboy como pago (controle, sem movimentar dinheiro)
       description: "O PIX é feito fora do app (DEC-036c). Lote de um único motoboy, com custo registrado em todas. Permissão: `logistics:payout` (financeiro e super admin, SEC-145). Quem lançou o custo de alguma corrida do lote não marca como pago: 403 `SEGREGATION_OF_DUTIES`; o super admin pode com `overrideReason` (auditado)."
       requestBody:
@@ -2360,6 +2419,7 @@ paths:
     post:
       tags: [logistics]
       operationId: revealDeliveryContact
+      x-admin-permission: 'logistics:contact'
       summary: Revelar telefone e endereço do cliente da corrida (SEC-144)
       description: "Permissão: `logistics:contact` (super admin, operação, financeiro e suporte). Motivo obrigatório (10 a 200 caracteres); a leitura vai para a auditoria (`delivery.contact_revealed`: quem, quando e por quê, sem o dado). 409 `CONTACT_NOT_AVAILABLE` depois que a corrida termina e o contato é apagado (`pii_corrida_retencao_dias`, padrão 7)."
       parameters:
@@ -2405,6 +2465,7 @@ paths:
     post:
       tags: [orders]
       operationId: adminConfirmStoreReturn
+      x-admin-permission: 'logistics:write'
       summary: Admin registra que a loja recebeu a devolução (SEC-143)
       description: "Permissão: `logistics:write`, com reautenticação. A corrida `returned_to_store` NÃO cancela nem estorna o pedido (a operação declara, a loja confirma); quando a loja não confirma no painel, o admin registra com motivo (auditado). Quem declarou a devolução não confirma pela loja (403 `SEGREGATION_OF_DUTIES`; super admin pode). Cancela o pedido e estorna tudo, com a taxa de entrega. 409 `RETURN_NOT_PENDING` se não há devolução aguardando."
       parameters:
@@ -2443,6 +2504,7 @@ paths:
     post:
       tags: [orders]
       operationId: adminRespondLateCancel
+      x-admin-permission: 'logistics:write'
       summary: Operação responde ao cancelamento por atraso com o pedido em saída (WB-255 C6)
       description: "Permissão `logistics:write`. `accept`: a corrida vira `not_delivered` e segue o fluxo de devolução à loja (SEC-143). `arrive_soon`: informa ao cliente que chega logo (`note`, padrão 'Chegamos em até 10 minutos'); o cliente pode pedir de novo. Auditado. 409 `NO_CANCEL_REQUEST` se não há pedido pendente (ou já foi respondido, inclusive pelo aceite automático). SEC-175: se o pedido ou a corrida já não está em `out_for_delivery` (entregue, não entregue, cancelado), o pedido de cancelamento vira `superseded` (200, sem aceitar nem avisar o cliente); o aceite e a transição da corrida são uma só transação (se a corrida não puder mudar, nada é aceito e o pedido segue `pending`)."
       parameters:
@@ -2478,6 +2540,7 @@ paths:
     post:
       tags: [orders]
       operationId: adminRefundOrder
+      x-admin-permission: 'orders:refund'
       summary: Estorno manual do admin, total ou parcial (SEC-039)
       description: "Permissão de admin: `orders:refund` (super admin e financeiro). Valor acima de `estorno_super_admin_cents` só o super admin (403 `SUPER_ADMIN_REQUIRED`); o limite vale pela SOMA dos estornos manuais do pedido (SEC-142, não se contorna fracionando) e há teto diário por operador (`estorno_financeiro_dia_cents`, mesma resposta 403). Reautenticação recente, motivo obrigatório e `Idempotency-Key` obrigatória (repetir a mesma chave e valor não estorna de novo; mesma chave com outro valor é 422 `IDEMPOTENCY_KEY_REUSED`). A soma dos estornos não passa do valor pago (422 `REFUND_EXCEEDS_PAID`). Se o provedor recusar, o estorno vai para a fila de pendências e a resposta é `queued`. Estorno que zera o pedido o leva a `cancelled` (ator admin; estoque devolvido, corrida cancelada); pedido já entregue ou encerrado fica como está (BUG-011). Auditado."
       parameters:
@@ -2522,6 +2585,7 @@ paths:
     post:
       tags: [orders]
       operationId: adminCancelOrder
+      x-admin-permission: 'orders:refund'
       summary: Cancelamento do pedido pelo admin (RN-08, BUG-011)
       description: "Permissão de admin: `orders:refund`. Reautenticação recente e motivo obrigatório; auditado. Cancela o pedido em qualquer estado ativo, devolve o estoque, cancela a corrida em aberto e, por padrão (`refund` = true), estorna o que falta devolver; sem super admin, o estorno conta no limite acumulado (403 `SUPER_ADMIN_REQUIRED`, SEC-142). Pedido entregue ou já encerrado: 409 `ORDER_NOT_CANCELLABLE`. Repetir é idempotente."
       parameters:
@@ -2563,6 +2627,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: listAdminAlerts
+      x-admin-permission: 'alerts:read'
       summary: "Alertas de operação (B3, WB-198 e WB-113 leitura)"
       description: |
         Caixa de alertas do admin: tudo o que o sistema pede a um humano (conciliação e divergência de pagamento, estornos recusados, "não recebi" com auto-conclusão retida, cancelamento sem resposta, entrega e coleta atrasadas, loja com cancelamento alto, LGPD com prazo...). Mais recentes primeiro; por padrão só os abertos. Paginado por cursor.
@@ -2593,6 +2658,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: getAdminAlertsSummary
+      x-admin-permission: 'alerts:read'
       summary: "Contagem dos alertas abertos do perfil (contador do Início)"
       description: "Só os tipos que o perfil vê. `bySeverity` e `byArea` somam `open`. `byKind` vem do maior para o menor. Permissão de admin: `alerts:read`. O mesmo número (`open` e `critical`) vem em `GET /v1/admin/overview/pending` > `alerts`."
       responses:
@@ -2609,6 +2675,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: listAdminAlertKinds
+      x-admin-permission: 'alerts:read'
       summary: "Tipos de alerta que o perfil vê, com rótulo, gravidade e o que fazer"
       description: "Catálogo para os filtros e rótulos do painel (o painel não inventa texto). Permissão de admin: `alerts:read`."
       responses:
@@ -2630,6 +2697,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: getAdminAlert
+      x-admin-permission: 'alerts:read'
       summary: Alerta de operação
       description: "404 também para o tipo que o perfil não vê (não revela que existe). Permissão de admin: `alerts:read`."
       parameters:
@@ -2650,6 +2718,7 @@ paths:
     post:
       tags: [admin-ops]
       operationId: resolveAdminAlert
+      x-admin-permission: 'alerts:resolve'
       summary: "Encerrar o alerta com nota (WB-113 C2 \"Resolvida\")"
       description: "Grava quem, quando e a nota no alerta e na auditoria (`alert.resolve`). Só quem vê o tipo encerra (404 para os demais). Encerrar de novo: 409 `ALERT_ALREADY_RESOLVED`. Se o mesmo problema voltar, o sistema abre um alerta novo. Permissão de admin: `alerts:resolve` (super admin, operação e financeiro)."
       parameters:
@@ -2681,6 +2750,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: searchAdminUsers
+      x-admin-permission: 'users:read'
       summary: "Buscar clientes e lojistas (B4, WB-102)"
       description: |
         Busca (SEC-181, o mascaramento não pode ser desfeito pela busca): **nome por trecho** (3 caracteres ou mais), **e-mail só inteiro** (valor exato, sem diferenciar caixa), **celular só completo** (10 ou 11 dígitos com DDD, com ou sem formatação) ou **ID exato**. E-mail ou celular incompleto, ou em outro formato, devolve lista vazia (200), nunca 400 nem pista do motivo. Cada busca com `q` é auditada (`user.search`: tipo, HMAC do termo e número de resultados; nunca o termo) e limitada a 60 por minuto por admin, além do limite por IP (429). Sem `q` lista os mais recentes (não audita). Clientes, lojistas e funcionários de loja; conta de admin não aparece (é `/v1/admin/admins`). Dados MASCARADOS (nome abreviado, e-mail e celular parciais). "Revelar" e redefinir senha ficam fora (DEC-071: WB-102 C4 cortado; o usuário usa "esqueci a senha"). Paginado por cursor. Permissão de admin: `users:read` (super admin, operação e suporte).
@@ -2708,6 +2778,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: getAdminUser
+      x-admin-permission: 'users:read'
       summary: "Detalhe do usuário: lojas, pedidos recentes e histórico de bloqueios (mascarado)"
       description: "Permissão de admin: `users:read`. `allowedActions` diz se o perfil pode `block` ou `unblock` (só super admin e operação). Conta de admin: 404."
       parameters:
@@ -2728,6 +2799,7 @@ paths:
     post:
       tags: [admin-ops]
       operationId: blockAdminUser
+      x-admin-permission: 'users:block'
       summary: "Bloquear o usuário com motivo (WB-102 C3 e C5)"
       description: "O usuário perde as sessões na hora e passa a ver \"Conta indisponível\" (403 `ACCOUNT_BLOCKED` no login). Se for dono de loja, a loja aprovada é suspensa junto (WB-102 C5; `suspendedStoreIds`, e `failedStoreIds` se alguma suspensão falhar: o bloqueio vale mesmo assim). Pedidos em andamento NÃO são cancelados: seguem para a decisão do admin. Auditado (`user.block`) com motivo. 409: `USER_ALREADY_BLOCKED`, `USER_NOT_ACTIVE` (excluída). Conta de admin: 404. Permissão de admin: `users:block` (super admin e operação)."
       parameters:
@@ -2759,6 +2831,7 @@ paths:
     post:
       tags: [admin-ops]
       operationId: unblockAdminUser
+      x-admin-permission: 'users:block'
       summary: "Desbloquear o usuário com motivo (WB-102 C3)"
       description: "Reverte o bloqueio do USUÁRIO. A loja suspensa junto NÃO volta sozinha: o admin a reativa pela tela de lojas (`POST /v1/admin/stores/{id}/reactivate`), de propósito. Auditado (`user.unblock`). 409 `USER_NOT_BLOCKED`. Permissão de admin: `users:block`."
       parameters:
@@ -2790,6 +2863,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: listAdminOrders
+      x-admin-permission: 'orders:read'
       summary: "Pedidos: visão geral e filtros (B5, WB-108 C1)"
       description: |
         Todos os pedidos, mais recentes primeiro, páginas de 50 por padrão (máx. 50), cursor. `q` busca o número do pedido (trecho), o e-mail EXATO do cliente ou o ID (do pedido ou do cliente). `status` aceita vários estados separados por vírgula. `city` é a cidade da loja (igual, sem diferenciar maiúsculas). `from` e `to` valem para a data de criação. Nome do cliente abreviado ("Maria L."). Cortados (DEC-071): destaque "Atenção" (C3), "Revelar" (C4) e CSV (C5). Permissão de admin: `orders:read` (todo perfil). Cada busca com `q` é auditada (`order.search`: tipo, HMAC do termo e número de resultados; nunca o termo) e limitada a 60 por minuto por admin, além do limite por IP (429; A-07).
@@ -2823,6 +2897,7 @@ paths:
     get:
       tags: [admin-ops]
       operationId: getAdminOrder
+      x-admin-permission: 'orders:read'
       summary: "Pedido: itens, valores, pagamento, estornos, linha do tempo, corrida, trocas e avaliação (B5, WB-108 C2)"
       description: |
         Dado pessoal do cliente mascarado (nome abreviado, e-mail e celular parciais) e endereço só com bairro, cidade e UF. `allowedActions` diz o que ESTE perfil pode fazer: `cancel` (pedido em estado não terminal; `POST /v1/admin/orders/{orderId}/cancel`) e `refund` (pedido pago, sem contestação e com saldo; `POST /v1/admin/orders/{orderId}/refunds`). Hoje cancelar e estornar são do financeiro e do super admin (`orders:refund`). `refunds` traz o pago, o já estornado (ou em fila), o que resta e cada estorno. `refundLimit.superAdminOnlyAboveCents`: acima desse valor só o super admin estorna (WB-109 C3; `profileCapCents` é nulo para o super admin). Permissão de admin: `orders:read`. **Auditoria (WB-352 C14, DEC-121):** cada abertura da ficha grava `audit_log` (`admin.order.view`: admin, pedido, loja, hora; sem o conteúdo exibido), no máximo 1 linha por (admin, pedido) a cada 10 min para a recarga da tela não inflar a trilha [HIPÓTESE]; a linha é gravada antes de o dado ser devolvido, e a falha de gravação derruba a resposta (500, sem dado). É o único caminho de dado de cliente para o suporte; não há "Revelar" dado completo na v1.1. Esta rota não aceita `X-View-As` (403 `VIEW_AS_READ_ONLY`). Resposta `Cache-Control: private, no-store`.
@@ -2844,6 +2919,7 @@ paths:
     get:
       tags: [payments]
       operationId: listPaymentAlerts
+      x-admin-permission: 'payments:alerts:read'
       summary: Alertas de conciliação e divergência
       description: "Permissão de admin: `payments:alerts:read` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -2867,6 +2943,7 @@ paths:
     get:
       tags: [payments]
       operationId: listRefundQueue
+      x-admin-permission: 'payments:refunds:read'
       summary: Fila de estornos pendentes (SEC-130)
       description: "Estornos que o provedor recusou: em nova tentativa com backoff (`pending` com `failures` > 0), esgotados (`exhausted`) e cobertos pela Webag a pagar por fora (`covered`). Sem `status`, lista os três. Só `exhausted` pode ser coberto. Permissão de admin: `payments:refunds:read`."
       parameters:
@@ -2890,6 +2967,7 @@ paths:
     post:
       tags: [payments]
       operationId: retryRefundIntent
+      x-admin-permission: 'payments:refunds:retry'
       summary: Tentar o estorno de novo agora
       description: "Reautenticação recente exigida. Mesma chave de idempotência do estorno: não estorna duas vezes. 409 `REFUND_IN_FLIGHT` se outra chamada ao provedor está em andamento (SEC-141). Auditado. Permissão de admin: `payments:refunds:retry`."
       parameters:
@@ -2916,6 +2994,7 @@ paths:
     post:
       tags: [payments]
       operationId: coverRefundIntent
+      x-admin-permission: 'payments:refunds:cover'
       summary: Cobertura da Webag (DEC-020a)
       description: "Só super admin, com reautenticação e motivo. A Webag assume o valor até `estorno_cobertura_teto_cents` por pedido (422 `COVERAGE_ABOVE_LIMIT` acima); a parte da loja vira dívida no ledger. O estorno deixa de ser tentado no provedor. Só intenção `exhausted` e sem chamada ao provedor em andamento: `pending` (ainda em retentativa) ou em voo é 409 `REFUND_NOT_COVERABLE`/`REFUND_IN_FLIGHT` (SEC-141). Permissão de admin: `payments:refunds:cover`."
       parameters:
@@ -2947,6 +3026,7 @@ paths:
     post:
       tags: [payments]
       operationId: reprocessWebhookEvent
+      x-admin-permission: 'payments:webhooks:reprocess'
       summary: Reprocessar evento de webhook
       description: "Mesma idempotência do processamento normal; auditado. Permissão de admin: `payments:webhooks:reprocess` (tabela em apps/api/src/platform/auth/permissions.ts)."
       parameters:
@@ -4108,6 +4188,7 @@ paths:
       tags:
       - admin-stores
       operationId: listAdminStores
+      x-admin-permission: 'stores:read'
       summary: Fila de lojas
       description: "Permissão `stores:read`. Ordem por data de envio; `overdue` conta dias úteis (seg a sex, America/Sao_Paulo) e fica falso em \"correção pedida\". **v1.1 R1 (WB-350):** `status=all`, busca `q` por nome ou cidade e os atalhos `noActiveProduct` (loja aprovada sem produto ativo: a loja a ativar) e `ownCommission`; os itens ganham `activeProducts`, `orders30d`, `sales30dCents`, `commissionPct` e `commissionSource` (campos novos, opcionais). Páginas de até 50 (a tela pede 25 ou 50; 100 não cabe no limite de 3G)."
       parameters:
@@ -4177,6 +4258,7 @@ paths:
       tags:
       - admin-stores
       operationId: getAdminStore
+      x-admin-permission: 'stores:read'
       summary: Detalhe da loja para análise
       description: "Permissão `stores:read`. Lista os documentos (sem arquivo), itens reprovados, histórico, conta de recebimento e outras lojas com o mesmo documento."
       parameters:
@@ -4204,6 +4286,7 @@ paths:
       tags:
       - admin-stores
       operationId: accessStoreDocument
+      x-admin-permission: 'stores:documents'
       summary: Abrir documento (URL de 5 min, auditada)
       description: "Permissão `stores:documents` (super e operação). Motivo obrigatório da lista curta. A auditoria é gravada ANTES da URL (falha fechada). URL assinada de até 5 min no domínio do storage, com `Content-Type` do banco. SEC-188: a abertura (por documento, por admin, com data) é o registro que a aprovação da loja exige (`approveStore`)."
       parameters:
@@ -4247,6 +4330,7 @@ paths:
       tags:
       - admin-stores
       operationId: approveStore
+      x-admin-permission: 'stores:decide'
       summary: Aprovar a loja
       description: "Permissão `stores:decide`. De \"em análise\" para \"aprovada\". 409 `STORE_ALREADY_DECIDED` (\"Já decidida por [nome]\") se outro admin decidiu antes. SEC-188: 409 `DOCUMENTS_NOT_REVIEWED` se QUEM APROVA não abriu (`POST .../documents/{documentId}/access`, auditado como `store.document_view`) cada documento obrigatório vigente da loja; `errors[].field` = `documents.<kind>` do que falta. Documento reenviado é outro documento e exige nova abertura. A tentativa bloqueada é auditada (`store.approve_blocked`)."
       parameters:
@@ -4276,6 +4360,7 @@ paths:
       tags:
       - admin-stores
       operationId: reactivateStore
+      x-admin-permission: 'stores:decide'
       summary: Reativar loja suspensa
       description: "Permissão `stores:decide`. Só de \"suspensa\". A loja volta visível se continuar atendendo a RN-03."
       parameters:
@@ -4305,6 +4390,7 @@ paths:
       tags:
       - admin-stores
       operationId: requestStoreCorrection
+      x-admin-permission: 'stores:decide'
       summary: Pedir correção (motivo por item)
       description: "Permissão `stores:decide`. Um motivo por item reprovado (documento ou `store_data`). O prazo do SLA fica pausado até o reenvio."
       parameters:
@@ -4342,6 +4428,7 @@ paths:
       tags:
       - admin-stores
       operationId: rejectStore
+      x-admin-permission: 'stores:decide'
       summary: Recusar a loja (final)
       description: "Permissão `stores:decide`. Motivo obrigatório; novo cadastro só com o suporte."
       parameters:
@@ -4379,6 +4466,7 @@ paths:
       tags:
       - admin-stores
       operationId: suspendStore
+      x-admin-permission: 'stores:decide'
       summary: Suspender a loja
       description: "Permissão `stores:decide`. Só de \"aprovada\"; motivo obrigatório; a loja some da API pública na hora."
       parameters:
@@ -4416,6 +4504,7 @@ paths:
       tags:
       - admin-stores
       operationId: releaseStorePaymentAccount
+      x-admin-permission: 'stores:decide'
       summary: Liberar conta com titular divergente
       description: "Permissão `stores:decide` com TOTP recente. Motivo (mín. 10 caracteres) e auditoria."
       parameters:
@@ -4449,6 +4538,7 @@ paths:
       tags:
       - admin-stores
       operationId: decideStoreDataReview
+      x-admin-permission: 'stores:decide'
       summary: Decidir alteração de nome pendente
       description: "Permissão `stores:decide`. `decision`: approve ou reject."
       parameters:
@@ -5105,6 +5195,7 @@ paths:
     get:
       tags: [moderation]
       operationId: adminListProducts
+      x-admin-permission: 'products:read'
       summary: Produtos (moderação)
       description: "Filtros por loja, categoria, status, moderação, período e busca. Permissão de admin: `products:read`."
       parameters:
@@ -5134,6 +5225,7 @@ paths:
     post:
       tags: [moderation]
       operationId: moderateProduct
+      x-admin-permission: 'products:moderate'
       summary: Pausar, remover ou restaurar produto
       description: "Pausar e remover exigem motivo (422 `REASON_REQUIRED`), avisam o lojista por e-mail com o motivo e entram na auditoria. O status de moderação é separado do status do lojista; só o admin o reverte. 3 remoções da loja em 30 dias a sinalizam para análise de suspensão (`storeFlagged`). Permissão de admin: `products:moderate`."
       parameters:
@@ -5167,6 +5259,7 @@ paths:
     get:
       tags: [moderation]
       operationId: listModerationTerms
+      x-admin-permission: 'moderation:read'
       summary: Listas de moderação
       description: "Categorias proibidas (BLOQUEIAM o cadastro) e palavras suspeitas (só SINALIZAM). Permissão de admin: `moderation:read`."
       responses:
@@ -5183,6 +5276,7 @@ paths:
     post:
       tags: [moderation]
       operationId: addModerationTerm
+      x-admin-permission: 'moderation:write'
       summary: Adicionar item às listas
       description: "Palavra suspeita: uma palavra só, casa como palavra inteira sem caixa nem acento. Categoria proibida: id de categoria existente (a subcategoria herda). Permissão de admin: `moderation:write`."
       requestBody:
@@ -5212,6 +5306,7 @@ paths:
     delete:
       tags: [moderation]
       operationId: removeModerationTerm
+      x-admin-permission: 'moderation:write'
       summary: Remover item das listas
       description: "Não altera produtos já cadastrados. Permissão de admin: `moderation:write`."
       parameters:
@@ -5373,6 +5468,7 @@ paths:
     get:
       tags: [home]
       operationId: listAdminBanners
+      x-admin-permission: 'banners:read'
       summary: Todos os banners (admin)
       description: "Permissão de admin: `banners:read`. Inclui inativos e vencidos; `live` diz se está no ar agora."
       responses:
@@ -5388,6 +5484,7 @@ paths:
     post:
       tags: [home]
       operationId: createBanner
+      x-admin-permission: 'banners:write'
       summary: Criar banner (admin)
       description: "Permissão de admin: `banners:write`. A imagem vem de `POST /v1/uploads` com `purpose: banner` (sem `storeId`, 2:1) concluído. Destino `store`, `category` ou `product` exige o ID existente; `coupon` exige o código; `none` não leva destino. Auditado."
       requestBody:
@@ -5417,6 +5514,7 @@ paths:
     patch:
       tags: [home]
       operationId: updateBanner
+      x-admin-permission: 'banners:write'
       summary: Editar banner (admin)
       description: "Permissão de admin: `banners:write`. Auditado."
       requestBody:
@@ -5443,6 +5541,7 @@ paths:
     delete:
       tags: [home]
       operationId: deleteBanner
+      x-admin-permission: 'banners:write'
       summary: Apagar banner (admin)
       description: "Permissão de admin: `banners:write`. Auditado."
       responses:
@@ -6898,6 +6997,7 @@ paths:
     get:
       tags: [exchanges]
       operationId: listExchangeMediations
+      x-admin-permission: 'exchanges:mediate'
       summary: Fila "Em mediação" (WB-110)
       description: "Mais antiga primeiro, com `overdue` quando passa de `mediacao_dias_uteis` dias úteis e `origin` (`customer_contest`, `store_refusal` ou `inspection_failed`). `refusalNotAllowedByLaw` avisa que a recusa da loja não é permitida por lei (arrependimento; defeito dentro do prazo) e sugere aprovar. Permissão: `exchanges:mediate` (super admin e operação)."
       parameters:
@@ -6940,6 +7040,7 @@ paths:
     post:
       tags: [exchanges]
       operationId: decideExchangeMediation
+      x-admin-permission: 'exchanges:mediate'
       summary: Decidir a mediação (WB-110 C2)
       description: "`customer` (a favor do cliente): antes de a loja receber o item, a troca é aprovada e segue o fluxo (inclusive a taxa); com o item já na loja, vale a inspeção como aprovada (reembolso ou peça nova). `store`: recusa FINAL, libera a reserva e o cliente não pode contestar de novo. Justificativa de 10 a 200 caracteres, registrada no histórico da troca; as partes são avisadas. 409 `EXCHANGE_NOT_IN_MEDIATION` se já decidida. Permissão: `exchanges:mediate`."
       parameters:
@@ -6979,6 +7080,7 @@ paths:
     get:
       tags: [exchanges]
       operationId: getExchangesReport
+      x-admin-permission: 'exchanges:report'
       summary: Relatório de trocas por loja e categoria (WB-248)
       description: "Permissão de admin `exchanges:report` (operação, financeiro e super admin). Período em dias de Brasília, no máximo 366 dias. Traz pedidos entregues, trocas por tipo, taxa de troca por loja (com `alert` acima de `troca_taxa_alerta_pct`), tamanho/cor com e sem tabela de medidas, resolvida como troca ou reembolso, aprovação automática, mediações e tempo até resolver. Receita da taxa e custo das corridas (`feeRevenue`, `logisticsCost`, `netLogisticsCost`) só para financeiro e super admin. `format=csv` exporta por loja e é auditado."
       parameters:
@@ -7359,6 +7461,7 @@ paths:
     get:
       tags: [privacy]
       operationId: listPrivacyRequests
+      x-admin-permission: 'privacy:manage'
       summary: Fila de pedidos de titulares (super admin)
       description: "Abertos primeiro, prazo mais curto no topo. O e-mail do solicitante vem mascarado (`m***@dominio`); revelar é `POST .../reveal`."
       parameters:
@@ -7380,6 +7483,7 @@ paths:
     post:
       tags: [privacy]
       operationId: registerPrivacyRequest
+      x-admin-permission: 'privacy:manage'
       summary: Registrar pedido recebido por e-mail (super admin)
       requestBody:
         required: true
@@ -7404,6 +7508,7 @@ paths:
     get:
       tags: [privacy]
       operationId: getPrivacyRequest
+      x-admin-permission: 'privacy:manage'
       summary: Detalhe e histórico do pedido (super admin)
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7424,6 +7529,7 @@ paths:
     post:
       tags: [privacy]
       operationId: revealPrivacyRequest
+      x-admin-permission: 'privacy:manage'
       summary: Revelar e-mail e mensagem do solicitante (reautenticação + motivo, auditado)
       description: "Exige reautenticação recente (403 `REAUTH_REQUIRED`) e motivo (>= 10 caracteres). Grava a auditoria `privacy.request_revealed` e o histórico do pedido."
       parameters:
@@ -7453,6 +7559,7 @@ paths:
     post:
       tags: [privacy]
       operationId: startPrivacyRequest
+      x-admin-permission: 'privacy:manage'
       summary: Marcar como em andamento
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7475,6 +7582,7 @@ paths:
     post:
       tags: [privacy]
       operationId: answerPrivacyRequest
+      x-admin-permission: 'privacy:manage'
       summary: Registrar a resposta e avisar o titular por e-mail
       description: "Fecha o pedido; responder de novo é 409 `DSR_ALREADY_ANSWERED`."
       parameters:
@@ -7800,6 +7908,7 @@ paths:
     get:
       tags: [reports]
       operationId: getAdminPendingCounts
+      x-admin-permission: 'overview:read'
       summary: Pendências por área para o Início e a barra do admin (W.7)
       description: "Qualquer perfil de admin lê, mas cada área só vem para quem tem a permissão dela; as outras voltam `null` (o painel não mostra número que a pessoa não pode abrir). `stores.inReview`: lojas em análise (`stores:read`). `disputes.inMediation`: trocas em mediação (`exchanges:mediate`: operação e super admin). `refunds.needingAction`: estornos recusados pelo provedor que esperam a operação, os mesmos da fila de estornos sem os já cobertos (`payments:refunds:read`: financeiro e super admin). `dataRequests`: pedidos de titular (LGPD) abertos e quantos vencem em até 5 dias ou já venceram (`privacy:manage`: super admin). Só contagens, sem dado pessoal."
       responses:
@@ -7824,6 +7933,7 @@ paths:
     get:
       tags: [exchanges]
       operationId: listAdminExchanges
+      x-admin-permission: 'exchanges:read'
       summary: Lista de trocas para o admin (AT3/M3)
       description: "Super admin, operação, financeiro e suporte (`exchanges:read`). Mais recentes primeiro; sem dado pessoal do cliente. `q` busca pelo número (TR-XXXXX)."
       parameters:
@@ -7848,6 +7958,7 @@ paths:
     get:
       tags: [exchanges]
       operationId: getAdminExchange
+      x-admin-permission: 'exchanges:read'
       summary: Detalhe da troca para o admin (linha do tempo, fotos, corridas)
       description: "`exchanges:read`. O código do balcão nunca vem (`storeCode` nulo)."
       parameters:
@@ -7868,6 +7979,7 @@ paths:
     post:
       tags: [exchanges]
       operationId: waiveExchangeFee
+      x-admin-permission: 'exchanges:waive-fee'
       summary: Isentar a taxa de coleta (operação e super admin)
       description: "[HIPÓTESE do design: perfis operação e super admin] Só com a taxa AINDA NÃO paga e sem pagamento em andamento (409 `EXCHANGE_NOT_AWAITING_FEE`, `EXCHANGE_FEE_ALREADY_PAID`, `EXCHANGE_PAYMENT_IN_PROGRESS`, `EXCHANGE_NO_FEE`). Zera a taxa; sem diferença de preço a pagar a troca é liberada na hora (coleta na fila); com diferença, continua aguardando só ela. Motivo obrigatório; histórico da troca e auditoria `exchange.fee_waived`."
       parameters:
@@ -7900,6 +8012,7 @@ paths:
     post:
       tags: [marketing]
       operationId: estimatePushCampaign
+      x-admin-permission: 'marketing:push'
       summary: Estimativa "Quem recebe" do push segmentado
       description: "`marketing:push` (super admin e operação). Conta só quem aceitou receber ofertas (`marketing_push` vigente), com aparelho ativo e que não atingiu `push_mkt_max_semana`. Abaixo de `push_mkt_min_segmento` a contagem exata NÃO sai (`eligible` nulo, `belowMinimum` verdadeiro): protege contra reidentificação. `nextSendAt` é quando sairia se enviasse agora (fora das 9h-20h vira o próximo início)."
       requestBody:
@@ -7925,6 +8038,7 @@ paths:
     get:
       tags: [marketing]
       operationId: listPushCampaigns
+      x-admin-permission: 'marketing:push'
       summary: Histórico de campanhas (enviados, entregues, abertos, descadastros)
       description: "Mais recentes primeiro. `delivered` = mensagens aceitas pelo provedor (recibo de entrega é DT-044); `opened` = o app avisou a abertura; `unsubscribed` = revogou o marketing em até 48 h do envio."
       parameters:
@@ -7944,6 +8058,7 @@ paths:
     post:
       tags: [marketing]
       operationId: createPushCampaign
+      x-admin-permission: 'marketing:push'
       summary: Criar e agendar (ou enviar na janela) uma campanha de push
       description: "`Idempotency-Key` evita campanha em dobro. Recusas: 409 `PUSH_MARKETING_DISABLED` (flag `push_marketing` ou limite semanal em zero), 422 `SEGMENT_TOO_SMALL` (abaixo de `push_mkt_min_segmento`), 409 `ESTIMATE_CHANGED` (o N confirmado em `expectedRecipients` mudou; vem `eligible`), 400 (destino inativo, horário passado). O público é RECALCULADO no envio (consentimento, limite semanal, mínimo e flag); fora da janela `push_mkt_janela` o envio vai para o próximo início. Auditada."
       parameters:
@@ -7975,6 +8090,7 @@ paths:
     get:
       tags: [marketing]
       operationId: getPushCampaign
+      x-admin-permission: 'marketing:push'
       summary: Detalhe e métricas da campanha
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7994,6 +8110,7 @@ paths:
     post:
       tags: [marketing]
       operationId: cancelPushCampaign
+      x-admin-permission: 'marketing:push'
       summary: Cancelar campanha agendada
       description: "Só enquanto `scheduled`; depois do envio não há desfazer (409 `CAMPAIGN_NOT_CANCELLABLE`)."
       parameters:
@@ -8044,6 +8161,7 @@ paths:
     get:
       tags: [marketing]
       operationId: listPlatformCoupons
+      x-admin-permission: 'coupons:read'
       summary: Cupons da plataforma (uso, desconto total e pedidos)
       description: "`coupons:read` (super admin, operação e financeiro). Só escopo `platform` (cupom de loja é do lojista). `uses` não conta uso devolvido. `status`: scheduled, live, paused, ended, exhausted."
       parameters:
@@ -8064,6 +8182,7 @@ paths:
     post:
       tags: [marketing]
       operationId: createPlatformCoupon
+      x-admin-permission: 'coupons:write'
       summary: Criar cupom da plataforma (custo da Webag)
       description: "`coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado."
       requestBody:
@@ -8091,6 +8210,7 @@ paths:
     get:
       tags: [marketing]
       operationId: getPlatformCoupon
+      x-admin-permission: 'coupons:read'
       summary: Detalhe e relatório de uso do cupom
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -8109,6 +8229,7 @@ paths:
     patch:
       tags: [marketing]
       operationId: updatePlatformCoupon
+      x-admin-permission: 'coupons:write'
       summary: Pausar, reativar, prorrogar ou mudar limites
       description: "Pausar vale na hora (`active: false`). Depois do 1º uso `value` e `percentCapCents` não mudam (409 `COUPON_IN_USE`); `maxUses` não pode ficar abaixo dos usos. Código e tipo nunca mudam."
       parameters:
@@ -8140,6 +8261,7 @@ paths:
     get:
       tags: [marketing]
       operationId: listHighlights
+      x-admin-permission: 'banners:read'
       summary: Destaques fixados na Início (loja ou produto)
       description: "Permissão `banners:read`. `targetUnavailable`: o item foi inativado e o destaque some do app sozinho (WB-115 C2)."
       responses:
@@ -8155,6 +8277,7 @@ paths:
     post:
       tags: [marketing]
       operationId: createHighlight
+      x-admin-permission: 'banners:write'
       summary: Fixar uma loja ou produto na Início
       description: "Permissão `banners:write`. Item inativo: 400; no máximo 12 destaques ativos (422 `HIGHLIGHT_LIMIT`). Entram ANTES dos critérios automáticos e só para quem enxerga o item (RN-03). `cityId` nulo = todas."
       requestBody:
@@ -8180,6 +8303,7 @@ paths:
     patch:
       tags: [marketing]
       operationId: updateHighlight
+      x-admin-permission: 'banners:write'
       summary: Editar período, cidade, ordem ou pausar o destaque
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -8205,6 +8329,7 @@ paths:
     delete:
       tags: [marketing]
       operationId: deleteHighlight
+      x-admin-permission: 'banners:write'
       summary: Remover o destaque
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -8248,6 +8373,7 @@ paths:
     get:
       tags: [reports]
       operationId: getOperationsReport
+      x-admin-permission: 'reports:operations'
       summary: Relatório operacional (KPIs, série por dia, cancelamentos)
       description: "`reports:operations` (super admin, operação e financeiro). Definições da RN-15: pedido = chegou a RECEBIDO (tem pagamento), data = dia do pagamento em Brasília; GMV = total dos não cancelados/recusados/expirados; ticket = GMV concluído / entregues; cancelamento = (cancelado + recusado) / pedidos; recompra = % de clientes com 2+ entregues em 30 dias do 1º (coorte do período, só com 30 dias completos); novas lojas = aprovadas no período. `variation` compara com o período anterior de mesma duração. `revenue.ledger` sai do LEDGER para o mesmo filtro e bate com `revenue.orders` (snapshot dos pedidos). Sem dado pessoal."
       parameters:
@@ -8272,6 +8398,7 @@ paths:
     get:
       tags: [reports]
       operationId: exportOperationsReportCsv
+      x-admin-permission: 'reports:operations'
       summary: Indicadores do período em CSV (auditado)
       parameters:
         - { name: from, in: query, required: true, description: 'Dia inicial (Brasília), inclusivo.', schema: { type: string, format: date } }
@@ -8297,6 +8424,7 @@ paths:
     get:
       tags: [reports]
       operationId: listReportOrders
+      x-admin-permission: 'reports:operations'
       summary: Pedidos do filtro (o "Ver os N pedidos")
       description: "Os mesmos filtros do relatório, paginado, mais recentes primeiro; os totais do relatório conferem com esta lista. Sem dado do cliente."
       parameters:
@@ -8324,6 +8452,7 @@ paths:
     get:
       tags: [reports]
       operationId: exportReportOrdersCsv
+      x-admin-permission: 'reports:operations'
       summary: Pedidos do filtro em CSV (até 10.000 linhas; auditado)
       description: "Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` (reduza o período ou filtre por loja; o envio por e-mail do link fica para depois). Fórmulas de planilha são neutralizadas."
       parameters:
@@ -8353,6 +8482,7 @@ paths:
     get:
       tags: [reports]
       operationId: exportFinanceRevenueCsv
+      x-admin-permission: 'reports:finance'
       summary: R1 Receita por pedido em CSV (DT-060)
       description: "Uma linha por pedido PAGO no período (data do pagamento). Valores do pedido (snapshot) e do ledger (taxa do provedor, líquido da loja e estornos). Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, loja, pago_em, status, bruto, cupom_loja, cupom_plataforma, comissao, taxa_entrega, taxa_servico, application_fee, taxa_provedor, liquido_lojista, estornos, total_pago. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`)."
       parameters:
@@ -8380,6 +8510,7 @@ paths:
     get:
       tags: [reports]
       operationId: exportFinanceRefundsCsv
+      x-admin-permission: 'reports:finance'
       summary: R2 Estornos em CSV (DT-060)
       description: "Uma linha por estorno (intenção de estorno que não falhou) pedido no período, inclusive os da troca. Permissão `reports:finance` (financeiro e super admin). Datas em dia de Brasília (inclusivo, até 366 dias). Valores em reais com vírgula; separador `;`; começa com BOM. Colunas: pedido, troca, loja, estornado_em, valor, meio, motivo, situacao (pending, done, exhausted, covered), ator, ator_id. Acima de 10.000 linhas: 422 `EXPORT_TOO_LARGE` com `rows` (encontradas) e `maxRows` e a mensagem 'Período grande demais. Reduza o intervalo (máximo 10.000 linhas)'; não há envio por e-mail na 1.0 (DEC-060). Cada exportação é auditada (`report.export`)."
       parameters:
@@ -8550,6 +8681,7 @@ paths:
     get:
       tags: [help]
       operationId: listHelpFaqs
+      x-admin-permission: 'help:read'
       summary: Perguntas da ajuda (admin)
       description: "`help:read` (todos os perfis de admin)."
       parameters:
@@ -8567,6 +8699,7 @@ paths:
     post:
       tags: [help]
       operationId: createHelpFaq
+      x-admin-permission: 'help:write'
       summary: Nova pergunta (operação e super admin)
       description: "Grupos do cliente: order, payment, exchange, account; do lojista: orders, products, exchanges, money, team. Entra no fim do grupo. Auditado."
       requestBody:
@@ -8590,6 +8723,7 @@ paths:
     post:
       tags: [help]
       operationId: reorderHelpFaqs
+      x-admin-permission: 'help:write'
       summary: Nova ordem de um grupo
       description: "`ids` precisa ser exatamente o conjunto de perguntas do grupo, uma vez cada (400 caso contrário)."
       requestBody:
@@ -8620,6 +8754,7 @@ paths:
     patch:
       tags: [help]
       operationId: updateHelpFaq
+      x-admin-permission: 'help:write'
       summary: Editar, mover de grupo ou (des)publicar uma pergunta
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -8652,6 +8787,7 @@ paths:
     delete:
       tags: [help]
       operationId: deleteHelpFaq
+      x-admin-permission: 'help:write'
       summary: Apagar uma pergunta
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -8668,6 +8804,7 @@ paths:
     get:
       tags: [help]
       operationId: getHelpContacts
+      x-admin-permission: 'help:read'
       summary: Contatos do suporte e do encarregado
       responses:
         '200':
@@ -8682,6 +8819,7 @@ paths:
     put:
       tags: [help]
       operationId: putHelpContacts
+      x-admin-permission: 'help:write'
       summary: Salvar contatos (campo ausente = não muda; nulo ou vazio = apaga)
       description: "`help:write`. WhatsApp com DDD (10 a 13 dígitos), e-mails válidos, horário até 60 caracteres. Auditado."
       requestBody:
@@ -8760,6 +8898,7 @@ paths:
     get:
       tags: [content-reports]
       operationId: listContentReports
+      x-admin-permission: 'moderation:read'
       summary: Fila de denúncias por alvo (DN2)
       description: "`moderation:read` (super admin e operação). Várias denúncias do mesmo item viram uma linha, a mais antiga primeiro, com `overdue` depois de `denuncia_prazo_dias_uteis` dias úteis."
       parameters:
@@ -8783,6 +8922,7 @@ paths:
     get:
       tags: [content-reports]
       operationId: getContentReport
+      x-admin-permission: 'moderation:read'
       summary: "Caso: item denunciado e denúncias (denunciante abreviado)"
       parameters:
         - { name: targetType, in: path, required: true, schema: { type: string, enum: [review, product, store] } }
@@ -8803,6 +8943,7 @@ paths:
     post:
       tags: [content-reports]
       operationId: keepReportedContent
+      x-admin-permission: 'moderation:write'
       summary: "Manter (encerra as denúncias e avisa os denunciantes por e-mail)"
       description: "`moderation:write`. 409 `REPORT_ALREADY_HANDLED` se não há denúncia aberta."
       parameters:
@@ -8836,6 +8977,7 @@ paths:
     post:
       tags: [content-reports]
       operationId: removeReportedReview
+      x-admin-permission: 'moderation:write'
       summary: Remover a avaliação (ofensa, dado pessoal, ilegal ou spam)
       description: "`moderation:write`. NÃO existe o motivo \"avaliação negativa\" (RN-12). A nota deixa de contar, o autor e os denunciantes são avisados por e-mail e a ação é auditada (`review.removed`)."
       parameters:
@@ -8871,6 +9013,7 @@ paths:
     post:
       tags: [content-reports]
       operationId: forwardReportedContent
+      x-admin-permission: 'moderation:write'
       summary: Encaminhar produto ou loja à moderação própria
       description: "Só `product` e `store` (avaliação se mantém ou se remove). Devolve `next` com o destino da moderação."
       parameters:

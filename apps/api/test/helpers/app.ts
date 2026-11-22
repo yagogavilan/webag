@@ -3,7 +3,7 @@ import type { Type } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DiscoveryService, MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
-import { IS_PUBLIC } from '../../src/platform/auth/decorators.js';
+import { ADMIN_PERMISSION, ADMIN_SELF, ALLOW_PENDING_MFA, IS_PUBLIC } from '../../src/platform/auth/decorators.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Redis } from 'ioredis';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -121,11 +121,22 @@ export function totpAt(secretBase32: string, stepOffset = 0): string {
 }
 
 /** Lista as rotas HTTP registradas (método, caminho com placeholders e se são públicas). Base da matriz de RBAC. */
-export function listRoutes(app: NestExpressApplication): { method: string; path: string; isPublic: boolean }[] {
+export interface ListedRoute {
+  method: string;
+  path: string;
+  isPublic: boolean;
+  /** WB-355: permissão de admin declarada por `@AdminOnly` (handler ou classe) ou `admin-self` (`@AdminSelf`); `null` se a rota não declara nenhuma. */
+  adminPermission: string | null;
+  /** Rota de admin que um admin com o segundo fator pendente alcança (`@AllowPendingMfa`). */
+  allowPendingMfa: boolean;
+  operation: string;
+}
+
+export function listRoutes(app: NestExpressApplication): ListedRoute[] {
   const discovery = new DiscoveryService(app.get(ModulesContainer));
   const scanner = new MetadataScanner();
   const reflector = new Reflector();
-  const routes: { method: string; path: string; isPublic: boolean }[] = [];
+  const routes: ListedRoute[] = [];
   const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
   for (const wrapper of discovery.getControllers()) {
     const { instance, metatype } = wrapper;
@@ -143,6 +154,9 @@ export function listRoutes(app: NestExpressApplication): { method: string; path:
         method: methods[methodIndex] ?? 'GET',
         path,
         isPublic: reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC, [handler, metatype]) === true,
+        adminPermission: reflector.getAllAndOverride<string | undefined>(ADMIN_PERMISSION, [handler, metatype]) ?? (reflector.getAllAndOverride<boolean | undefined>(ADMIN_SELF, [handler, metatype]) ? 'admin-self' : null),
+        allowPendingMfa: reflector.getAllAndOverride<boolean | undefined>(ALLOW_PENDING_MFA, [handler, metatype]) === true,
+        operation: `${metatype.name}.${name}`,
       });
     }
   }

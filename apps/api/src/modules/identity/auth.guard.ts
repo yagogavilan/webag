@@ -2,6 +2,7 @@ import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import {
   ADMIN_PERMISSION,
+  ADMIN_SELF,
   ALLOW_PENDING_MFA,
   buildContext,
   IS_PUBLIC,
@@ -91,6 +92,14 @@ export class AuthGuard implements CanActivate {
           .catch(() => undefined);
         throw errors.forbidden();
       }
+    }
+
+    // WB-355: rota do admin sobre a própria conta (TOTP): qualquer perfil de admin; outro papel é negado e registrado, antes de o corpo ser validado.
+    if (this.reflector.getAllAndOverride<boolean | undefined>(ADMIN_SELF, targets) && !principal.adminProfile) {
+      await this.audit
+        .recordStandalone(buildContext(req), { action: 'admin.access_denied', targetType: 'route', targetId: `${req.method} ${req.path}`, after: { permission: 'admin-self' } })
+        .catch(() => undefined);
+      throw errors.forbidden();
     }
 
     const roles = this.reflector.getAllAndOverride<UserRole[] | undefined>(ROLES, targets);

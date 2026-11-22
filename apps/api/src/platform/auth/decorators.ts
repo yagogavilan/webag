@@ -6,6 +6,7 @@ import type { AdminPermission, StorePermissionName } from './permissions.js';
 export const IS_PUBLIC = 'webag:public';
 export const ADMIN_PERMISSION = 'webag:admin-permission';
 export const STORE_PERMISSION = 'webag:store-permission';
+export const ADMIN_SELF = 'webag:admin-self';
 export const ROLES = 'webag:roles';
 export const REQUIRE_REAUTH = 'webag:reauth';
 export const ALLOW_PENDING_MFA = 'webag:allow-pending-mfa';
@@ -14,6 +15,8 @@ export const ALLOW_PENDING_MFA = 'webag:allow-pending-mfa';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 /** Exige perfil de admin com a permissão (tabela única em permissions.ts). */
 export const AdminOnly = (permission: AdminPermission) => SetMetadata(ADMIN_PERMISSION, permission);
+/** WB-355: rota do admin sobre a PRÓPRIA conta (TOTP): qualquer perfil de admin, nunca outro papel. Negada no guard, antes da validação do corpo. */
+export const AdminSelf = () => SetMetadata(ADMIN_SELF, true);
 /** Exige membro da loja `:storeId` com a permissão; não-membro recebe 404 (SEC-020). */
 export const StorePermission = (permission: StorePermissionName) =>
   SetMetadata(STORE_PERMISSION, permission);
