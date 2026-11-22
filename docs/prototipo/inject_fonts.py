@@ -40,7 +40,7 @@ def css() -> str:
 def main() -> None:
     block = css()
     pat = re.compile(r"<!--WEBAG-FONTS-->.*?<!--/WEBAG-FONTS-->", re.S)
-    for name in ("app-cliente.html", "paineis.html", "app-cliente-v3.html", "paineis-v3.html"):
+    for name in ("app-cliente.html", "paineis.html", "app-cliente-v3.html", "paineis-v3.html", "v1-1-lojista-e-admin.html"):
         f = ROOT / name
         s = f.read_text(encoding="utf-8")
         if not pat.search(s):
