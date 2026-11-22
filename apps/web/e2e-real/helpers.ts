@@ -9,7 +9,18 @@ import { expect, type Page } from '@playwright/test';
 export const API = (process.env.REAL_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 export const MAIL = (process.env.MAILPIT_URL ?? 'http://localhost:8025').replace(/\/$/, '');
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@webag.local';
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'Webag-Admin-Dev-2026';
+/** Valor de uma chave no `.env` da raiz (os testes rodam de `apps/web`); vazio se não houver `.env` ou a chave. */
+function rootEnvValue(key: string): string | undefined {
+  try {
+    const raw = readFileSync(resolve(process.cwd(), '../../.env'), 'utf8');
+    const line = raw.split(/\r?\n/).findLast((l) => new RegExp(`^\\s*${key}\\s*=`).test(l));
+    return line?.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2') || undefined;
+  } catch {
+    return undefined;
+  }
+}
+/** Ordem: `ADMIN_PASSWORD`, `SEED_ADMIN_PASSWORD` do `.env` da raiz (aleatória, gerada pelo `pnpm run setup`) e o padrão fixo de CI/dev. */
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? rootEnvValue('SEED_ADMIN_PASSWORD') ?? 'Webag-Admin-Dev-2026';
 export const MERCHANT_PASSWORD = 'Webag-Lojista-2026!';
 
 /**

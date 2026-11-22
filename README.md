@@ -25,12 +25,12 @@ Pronto: http://localhost:3001/admin/entrar (admin), http://localhost:3001/lojist
 | | Windows 10/11 | macOS | Linux (Ubuntu/Debian) |
 |---|---|---|---|
 | Git | [git-scm.com](https://git-scm.com/download/win) | `brew install git` | `sudo apt install -y git curl` |
-| Node 24 | [nodejs.org](https://nodejs.org) (LTS) | `brew install node@24` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash - && sudo apt install -y nodejs` |
-| pnpm 10 | PowerShell como administrador: `corepack enable` (ou `npm i -g pnpm@10.28.0`) | `corepack enable` | `sudo corepack enable` |
+| Node 24 | [nodejs.org](https://nodejs.org): escolha a versão **24** de forma explícita (o botão "LTS" pode oferecer outra) | `brew install node@24` | `curl -fsSL https://deb.nodesource.com/setup_24.x \| sudo -E bash - && sudo apt install -y nodejs` |
+| pnpm 10 | Prompt de Comando (`cmd`, sem administrador): `npm i -g pnpm@10.28.0` (não dependa do `corepack`: versões novas do Node não o trazem) | `corepack enable` | `sudo corepack enable` |
 | Docker | [Docker Desktop](https://www.docker.com/products/docker-desktop/) com o backend **WSL 2** (reinicie quando pedir e deixe o programa **aberto**) | Docker Desktop (aberto) | `curl -fsSL https://get.docker.com \| sudo sh && sudo usermod -aG docker "$USER"` e entre na sessão de novo |
-| Onde rodar os comandos | PowerShell (ou um terminal WSL 2, ver nota) | Terminal | Terminal |
+| Onde rodar os comandos | Prompt de Comando (`cmd`); no PowerShell o Windows costuma bloquear o `pnpm` | Terminal | Terminal |
 
-- **Windows**: os comandos são os mesmos, no PowerShell. Se algo do Docker ou do Node der problema, a saída mais robusta é instalar o **WSL 2 + Ubuntu** (`wsl --install` no PowerShell), seguir a coluna Linux **dentro** do Ubuntu e clonar em `~/webag` (não em `/mnt/c/...`, que é lento).
+- **Windows**: os comandos são os mesmos, no Prompt de Comando (`cmd`). O **WSL 2 + Ubuntu** (`wsl --install`, coluna Linux dentro do Ubuntu, clone em `~/webag` e não em `/mnt/c/...`) serve para desenvolver no computador, mas **não para abrir no iPhone**: o WSL 2 fica atrás de uma rede virtual (NAT) que o celular não alcança. Para o iPhone, use o caminho nativo do Windows (`docs/guias/rodar-no-meu-computador.md`).
 - **macOS com chip Apple (M1 ou mais novo)**: depois do `pnpm run setup` criar o `.env`, defina `POSTGIS_IMAGE=imresamu/postgis:18-3.6-alpine` nele (a imagem oficial do PostGIS é só Intel) e rode `pnpm run setup` de novo.
 - Confirme: `git --version`, `node --version` (v24...), `pnpm --version` (10.28...), `docker compose version`.
 - Sem Docker: `SKIP_DOCKER=1 pnpm run setup` (PowerShell: `$env:SKIP_DOCKER=1; pnpm run setup`), com Postgres 16+ com PostGIS e Redis seus, e o armazenamento S3 e o e-mail de teste por sua conta.
@@ -45,16 +45,18 @@ Todas criadas pelo seed. **Nunca existem em produção** (o seed de produção s
 
 | Perfil | E-mail | Senha | Observação |
 |---|---|---|---|
-| Admin (super admin) | `admin@webag.local` | `Webag-Admin-Dev-2026` | No 1º login o painel exige o 2º fator (ver abaixo) |
+| Admin (super admin) | `admin@webag.local` | `SEED_ADMIN_PASSWORD` do seu `.env` (o `pnpm run setup` gera uma aleatória, a mostra no fim e o `pnpm iphone` a repete no recado; com `CI=true` ou `WEBAG_FIXED_DEV_SECRETS=1` vale `Webag-Admin-Dev-2026`) | No 1º login o painel exige o 2º fator (ver abaixo) |
 | Lojista (dono) | `lojista.mercadinho-boa-compra@seed.webag.local` | `webag-seed-lojista-2026` | Há 12 lojas: troque o final pelo nome da loja (`lojista.farmacia-saude-ja@...`, `lojista.pet-shop-amigo-fiel@...`, `lojista.padaria-pao-quente@...` etc.; lista em `apps/api/seed/onda2.ts` e `onda3.ts`) |
 | Lojista (funcionário) | `funcionario.mercadinho-boa-compra@seed.webag.local` | `webag-seed-lojista-2026` | Só pedidos e catálogo; não vê financeiro, equipe nem configurações. Uma por loja |
 | Cliente | `cliente.ana@seed.webag.local` | `webag-seed-lojista-2026` | Também `bruno`, `carla`, `diego`, `elisa`, `fabio`. Endereço em Francisco Morato; cada um já tem pedidos de demonstração |
 | Cupons | `BEMVINDO10`, `FRETEGRATIS`, `LOJA5` | | |
 | Mailpit (e-mails de código e convite) | http://localhost:8025 | | Recebe tudo; não envia nada para fora |
-| Console do armazenamento | http://localhost:9001 | `webag-dev` / `webag-dev-secret-only` | Fotos |
-| Banco | `localhost:5432`, banco `webag` | `webag` / `webag_dev_only` | |
+| Console do armazenamento | http://localhost:9001 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` do `.env` (aleatórias no `.env` criado pelo setup) | Fotos. Só abre em 127.0.0.1 |
+| Banco | `localhost:5432`, banco `webag` | `webag` / `POSTGRES_PASSWORD` do `.env` (aleatória no `.env` criado pelo setup) | Só abre em 127.0.0.1 |
 
-**Segundo fator do admin (TOTP) em desenvolvimento.** No primeiro login o painel mostra a tela "Configurar autenticador" com o **segredo em texto** (copie: botão "Copiar"). Duas opções:
+**Rede (SEC-190).** O docker compose publica Postgres, Redis, console do armazenamento e Mailpit só em 127.0.0.1 (a própria máquina). A porta 9000 do armazenamento (fotos) também, e só o `pnpm iphone` a abre na rede (`STORAGE_BIND=0.0.0.0`). O `.env` criado pelo `pnpm run setup` traz senhas aleatórias de Postgres, Redis, S3 e admin; um `.env` que já existia não é alterado (o setup avisa se ele ainda usa as senhas públicas).
+
+**Segundo fator do admin (TOTP) em desenvolvimento.** Cadastre-o **logo no primeiro uso**, antes de abrir o painel no Wi-Fi com `pnpm iphone` (SEC-192: quem entra primeiro cadastra o autenticador; a senha aleatória do setup já impede que outra pessoa entre antes de você). No primeiro login o painel mostra a tela "Configurar autenticador" com o **segredo em texto** (copie: botão "Copiar"). Duas opções:
 
 1. App autenticador no celular (Google Authenticator, Authy, 1Password): digite o segredo manualmente.
 2. Sem celular: `pnpm totp <SEGREDO>` imprime o código de 6 dígitos atual (vale ~30 s). Digite-o na tela. Guarde os 10 códigos de recuperação que aparecem uma única vez. Nos logins seguintes, repita `pnpm totp <SEGREDO>`.
@@ -76,6 +78,7 @@ Com `PAYMENT_PROVIDER=fake` (padrão em desenvolvimento) nada é cobrado. O flux
 
 `pnpm dev` já sobe o Metro (porta 8081). No terminal aparece o QR code.
 
+- **iPhone, pelo Safari (recomendado, sem conta e sem custo)**: `pnpm iphone` descobre o IP da máquina, ajusta o `.env`, sobe tudo e mostra o endereço para o Safari (e um QR). Guia passo a passo: `docs/guias/rodar-no-meu-computador.md`; início rápido: `LEIA-ME-INICIO-RAPIDO.txt` (ou duplo clique em `iniciar-webag.command`/`iniciar-webag.bat`). App instalado de verdade (IPA/TestFlight): `docs/guias/instalar-no-iphone.md`.
 - **Celular (Expo Go)**: instale o Expo Go, escaneie o QR (celular e computador na **mesma rede Wi-Fi**). O celular não enxerga o `localhost` do computador: no `.env` defina `EXPO_PUBLIC_API_URL=http://<IP-do-computador>:3000` e `EXPO_PUBLIC_WEB_URL=http://<IP-do-computador>:3001` (IP: `ipconfig` no Windows, `ipconfig getifaddr en0` no macOS, `hostname -I` no Linux) e reinicie o `pnpm dev`. Se o firewall bloquear, libere as portas 3000, 3001 e 8081 para a rede privada.
 - **Emulador Android / simulador iOS**: com o emulador aberto, `pnpm --filter @webag/mobile android` (ou `ios`, só macOS). O emulador Android alcança o computador em `10.0.2.2` (`EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`).
 - **Navegador** (DEC-058): com a API no ar (`pnpm dev` ou só a API), rode `pnpm web` e abra http://localhost:8081 (ou aperte `w` no terminal do Metro). É o mesmo app, via `react-native-web`; serve para ver e testar as telas sem celular. Limites: a sessão fica só na memória da aba (recarregar a página sai da conta; sem `expo-secure-store` na web), sem push e sem localização do aparelho (escolha a cidade ou digite o CEP). O app de verdade é o nativo. Roteiro automatizado: `pnpm web:smoke` (Playwright do workspace; cidade, login, loja, produto e sacola).

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Prepara o ambiente local do zero (Windows, macOS e Linux):
-//   1. copia infra/env.example para .env se o .env não existir (nunca sobrescreve);
+//   1. copia infra/env.example para .env se o .env não existir (nunca sobrescreve) e, nesse .env novo, troca as senhas de
+//      desenvolvimento por valores aleatórios (Postgres, Redis, chaves S3 e senha do admin; SEC-190/192). Mantém os valores fixos
+//      quando CI=true, WEBAG_FIXED_DEV_SECRETS=1, SKIP_DOCKER=1 (a infra não é nossa) ou quando já existe volume de dados do Postgres
+//      (a senha antiga está gravada nele);
 //   2. sobe a infra do docker compose (PostgreSQL+PostGIS, Redis, Mailpit, storage);
 //   3. aplica as migrações e roda o seed (idempotentes: pode rodar de novo sem medo).
 // Uso: `pnpm run setup` (o `pnpm setup` puro é um comando do próprio pnpm; veja o README).
@@ -10,6 +13,7 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applyDevSecrets, generateDevSecrets, useFixedDevSecrets } from './setup-secrets.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const isWindows = process.platform === 'win32';
@@ -55,17 +59,39 @@ async function nextFreePort(start) {
   return fail(`nenhuma porta livre perto de ${start}`);
 }
 
+// Por que este .env novo ficaria com os valores fixos do infra/env.example? (texto vazio = pode gerar senhas aleatórias)
+function fixedSecretsReason() {
+  if (useFixedDevSecrets()) return 'CI ou WEBAG_FIXED_DEV_SECRETS=1';
+  if (process.env.SKIP_DOCKER === '1') return 'SKIP_DOCKER=1: a infra já existente tem as próprias senhas';
+  // Volume do Postgres de uma instalação anterior: a senha antiga (e o admin já semeado) está gravada nele; trocar só o .env quebraria o login.
+  const volume = spawnSync('docker', ['volume', 'inspect', 'webag_postgres-data'], { stdio: 'ignore', shell: isWindows });
+  if (volume.status === 0) return 'já existe um banco local de uma instalação anterior; para recomeçar com senhas novas: pnpm infra:down -v, apague o .env e rode o setup de novo (apaga os dados locais)';
+  return '';
+}
+
 // 1. .env
 let envCreatedNow = false;
+let secretsGenerated = false;
 const envFile = resolve(root, '.env');
 const envExample = resolve(root, 'infra/env.example');
 if (existsSync(envFile)) {
   log('.env já existe: mantido como está');
+  const current = readEnv(envFile);
+  if (current.POSTGRES_PASSWORD === 'webag_dev_only' || current.S3_SECRET_KEY === 'webag-dev-secret-only') {
+    log('aviso: este .env usa as senhas de desenvolvimento públicas do repositório (Postgres/S3). As portas do banco, do Redis, do Mailpit e do console do storage só abrem em 127.0.0.1; a 9000 só abre na rede com `pnpm iphone`, então use-o só no Wi-Fi de casa (ou gere senhas novas: pnpm infra:down -v, apague o .env e rode o setup de novo; apaga os dados locais).');
+  }
 } else {
   if (!existsSync(envExample)) fail('infra/env.example não encontrado');
   copyFileSync(envExample, envFile);
   envCreatedNow = true;
-  log('.env criado a partir de infra/env.example (valores só de desenvolvimento)');
+  const fixedReason = fixedSecretsReason();
+  if (fixedReason) {
+    log(`.env criado a partir de infra/env.example (valores fixos de desenvolvimento: ${fixedReason})`);
+  } else {
+    writeFileSync(envFile, applyDevSecrets(readFileSync(envFile, 'utf8'), generateDevSecrets()));
+    secretsGenerated = true;
+    log('.env criado com senhas aleatórias (Postgres, Redis, chaves S3 e admin) só para este computador; o .env fica fora do git');
+  }
 }
 
 // 2. infra
@@ -137,8 +163,8 @@ Pronto. Próximos passos:
   pnpm dev                       sobe API (http://localhost:${env.API_PORT ?? 3000}) e apps em modo desenvolvimento
   http://localhost:${env.API_PORT ?? 3000}/docs        contrato da API (Swagger)
   http://localhost:8025          Mailpit (e-mails de código e convite)
-Admin inicial (DEV): ${env.SEED_ADMIN_EMAIL ?? '(não definido)'} / ${env.SEED_ADMIN_PASSWORD ?? '(não definido)'}
-  -> no primeiro login o painel exige configurar o app autenticador (TOTP).
+Admin inicial (DEV): ${env.SEED_ADMIN_EMAIL ?? '(não definido)'} / ${env.SEED_ADMIN_PASSWORD ?? '(não definido)'}${secretsGenerated ? '\n  (senha gerada só para este computador; está em SEED_ADMIN_PASSWORD no .env)' : ''}
+  -> no primeiro login o painel exige configurar o app autenticador (TOTP): cadastre-o LOGO, antes de abrir o Webag no Wi-Fi (SEC-192).
 Horário das lojas de demonstração: SEED_HOURS=${env.SEED_HOURS ?? 'always_open'} (always_open = abertas 24 h, a qualquer hora; realistic = horário real; veja o README).
 Pagamentos: PAYMENT_PROVIDER=${env.PAYMENT_PROVIDER ?? 'fake'} (simulado; sem chaves do Mercado Pago).
 `);

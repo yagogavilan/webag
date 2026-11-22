@@ -7,6 +7,8 @@
 // Uso (API :3000, Metro web :8081 e site :3001 no ar; ver docs/qa/relatorios/setup-do-zero.md):
 //   pnpm web:compra [entrega-pix|retirada-pix|cartao ...]   (na raiz; scripts/web-playwright.mjs resolve o Playwright de apps/web)
 // Variáveis: APP_URL, SMOKE_EMAIL, SMOKE_PASSWORD, SHOTS_DIR (padrão docs/qa/relatorios/compra-e2e, relativo à raiz do repositório), VIEWPORT (390x844 padrão).
+//   IPHONE=1: emula o Safari do iPhone 17 Pro (402x874, fator 3, toque, user-agent iOS) e abre o app pelo IP da rede local (use com APP_URL=http://<IP>:8081;
+//   serve para provar o caminho "Safari do iPhone", sem a localização do aparelho e fora de contexto seguro, como em http na rede local). CHROMIUM_PATH: navegador alternativo.
 // A confirmação do pagamento vem do servidor (rota de simulação da API, só dev); o app nunca marca como pago.
 const path = require('node:path');
 const fs = require('node:fs');
@@ -15,7 +17,10 @@ const { chromium } = require('playwright');
 const APP = (process.env.APP_URL || 'http://localhost:8081').replace(/\/+$/, '');
 const EMAIL = process.env.SMOKE_EMAIL || 'cliente.ana@seed.webag.local';
 const PASSWORD = process.env.SMOKE_PASSWORD || 'webag-seed-lojista-2026';
-const [W, H] = (process.env.VIEWPORT || '390x844').split('x').map(Number);
+const IPHONE = process.env.IPHONE === '1';
+const [W, H] = (process.env.VIEWPORT || (IPHONE ? '402x874' : '390x844')).split('x').map(Number);
+// user-agent aproximado do Safari do iOS 26 [HIPÓTESE: a versão exata do aparelho do fundador pode diferir]
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
 const SHOTS = process.env.SHOTS_DIR || path.resolve('docs/qa/relatorios/compra-e2e');
 const wanted = process.argv.slice(2);
 
@@ -23,7 +28,9 @@ const id = (testId) => `[data-testid="${testId}"]`;
 const log = (msg) => console.log(`[compra] ${msg}`);
 
 async function newSession(browser) {
-  const context = await browser.newContext({ viewport: { width: W, height: H } });
+  const context = await browser.newContext(
+    IPHONE ? { viewport: { width: W, height: H }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: IPHONE_UA, locale: 'pt-BR' } : { viewport: { width: W, height: H } },
+  );
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
@@ -238,7 +245,8 @@ const flows = {
 (async () => {
   fs.mkdirSync(SHOTS, { recursive: true });
   const names = wanted.length ? wanted : Object.keys(flows);
-  const browser = await chromium.launch();
+  // IPHONE=1: o IP da rede local nunca passa por proxy (em ambientes com HTTPS_PROXY o navegador tentaria sair por ele e receberia 403).
+  const browser = await chromium.launch({ ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}), ...(IPHONE ? { args: ['--no-proxy-server'] } : {}) });
   let failed = 0;
   for (const name of names) {
     const { context, page, problems } = await newSession(browser);

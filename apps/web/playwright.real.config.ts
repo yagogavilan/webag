@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  * (`pnpm run setup`), API no ar. Variáveis lidas pelos testes:
  *   REAL_API_URL   base da API              (padrão http://localhost:3000)
  *   MAILPIT_URL    API HTTP do Mailpit      (padrão http://localhost:8025) — os códigos de e-mail vêm daqui
- *   ADMIN_EMAIL / ADMIN_PASSWORD do super admin semeado (padrões admin@webag.local / Webag-Admin-Dev-2026)
+ *   ADMIN_EMAIL / ADMIN_PASSWORD do super admin semeado (padrões admin@webag.local / SEED_ADMIN_PASSWORD do .env da raiz, senão Webag-Admin-Dev-2026)
  * O primeiro uso matricula o TOTP do super admin pela API e guarda o segredo no diretório temporário do sistema (`webag-e2e-real/`)
  * (ambiente descartável: se o admin já tem TOTP e o arquivo não existe, recrie o banco).
  * Rodar: `PW_CHANNEL=chrome pnpm exec playwright test -c playwright.real.config.ts` (PW_CHANNEL só se os browsers do Playwright não baixarem).
