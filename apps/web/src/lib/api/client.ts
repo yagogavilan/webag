@@ -20,6 +20,8 @@ export interface RequestOptions {
   csv?: string;
   /** `Idempotency-Key` de uma escrita que o aparelho pode repetir (criar produto). */
   idempotencyKey?: string;
+  /** `If-Match` com a `version` lida do produto (409 `PRODUCT_VERSION_CONFLICT` se mudou em outro aparelho). */
+  ifMatch?: number;
 }
 
 function queryString(query: RequestOptions['query']): string {
@@ -56,6 +58,7 @@ async function request<T>(url: string, options: RequestOptions): Promise<T> {
         ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(options.csv !== undefined ? { 'content-type': 'text/csv; charset=utf-8' } : {}),
         ...(options.idempotencyKey ? { 'idempotency-key': options.idempotencyKey } : {}),
+        ...(options.ifMatch !== undefined ? { 'if-match': `"${options.ifMatch}"` } : {}),
       },
       body: options.csv !== undefined ? options.csv : options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: 'same-origin',

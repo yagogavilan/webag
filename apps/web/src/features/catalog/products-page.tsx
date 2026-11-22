@@ -1,11 +1,10 @@
 'use client';
 
-import { MagnifyingGlass, Package, Plus } from '@phosphor-icons/react';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { MagnifyingGlass, Package } from '@phosphor-icons/react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, ButtonLink, EmptyState, ErrorState, MessageState, SelectField, SkeletonRows, TextField, cx, ui } from '@/components/ui';
+import { Banner, Button, ButtonLink, ErrorState, MessageState, SelectField, SkeletonRows, TextField, cx, ui } from '@/components/ui';
 import { catalogApi, catalogKeys, type ProductFilter, type ProductQuery } from '@/lib/api/catalog';
 import { ApiError } from '@/lib/api/errors';
 import { asRoute } from '@/lib/routes';
@@ -15,7 +14,11 @@ import { BULK_MAX, BulkBar } from './bulk-bar';
 import { LojistaNoAccess } from '../loja/settings-screen';
 import { CatalogGate, isCatalogOwner } from './catalog-gate';
 import { ProductRow } from './product-row';
+import { DraftsPanel } from './quick/drafts-panel';
+import { NewProductLink } from './quick/new-product-link';
+import { missingText, savedAgo } from '@/lib/catalog/quick';
 import s from './catalog.module.css';
+import qs from './quick/quick.module.css';
 
 const T = (id: string) => ltid('produtos', id);
 
@@ -35,7 +38,6 @@ export function ProductsPage({ initialFilter = 'all' }: { initialFilter?: Produc
 
 /** K1: lista de produtos com busca, filtros, ajuste rápido de estoque, pausa com 1 toque e ação em massa. */
 function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner: boolean; initialFilter: ProductFilter }) {
-  const router = useRouter();
   const online = useOnline();
   const [filter, setFilter] = useState<ProductFilter>(initialFilter);
   const [input, setInput] = useState('');
@@ -56,11 +58,18 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
     };
   }, [input]);
 
+  const draftsView = filter === 'draft';
+  // Ponto de partida do cadastro rápido (WB-371 C1: "Continuar: ..."; RN-Q1: "X produtos sem descrição"). Falhar aqui nunca esconde a lista.
+  const start = useQuery({ queryKey: catalogKeys.quickStart(storeId), queryFn: () => catalogApi.quickStart(storeId), staleTime: 30_000 });
+  const latest = start.data?.latestDraft ?? null;
+  const withoutDescription = start.data?.withoutDescriptionCount ?? 0;
+
   const list = useInfiniteQuery({
     queryKey: [...catalogKeys.list(storeId, query), limit],
     queryFn: ({ pageParam }) => catalogApi.list(storeId, query, pageParam, limit),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !draftsView,
   });
 
   const products = useMemo(() => (list.data?.pages.flatMap((page) => page.data) ?? []).filter((product) => product.status !== 'archived'), [list.data]);
@@ -82,11 +91,7 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
   }
 
   const allSelected = products.length > 0 && products.every((product) => selected.has(product.id));
-  const addButton = (
-    <ButtonLink href={asRoute('/lojista/produtos/novo')} icon={<Plus size={20} aria-hidden="true" />} className={s.addButton} data-testid={T('add')}>
-      Adicionar produto
-    </ButtonLink>
-  );
+  const addButton = <NewProductLink className={s.addButton} />;
 
   return (
     <div className={ui.stack}>
@@ -95,12 +100,26 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
         description={list.data ? `${products.length.toLocaleString('pt-BR')}${list.hasNextPage ? '+' : ''} ${products.length === 1 && !list.hasNextPage ? 'produto' : 'produtos'}` : undefined}
         action={
           <div className={ui.row}>
-            <ButtonLink href={asRoute('/lojista/produtos/importar')} variant="secondary" data-testid={T('import-link')}>Importar planilha</ButtonLink>
+            <ButtonLink href={asRoute('/lojista/produtos/adicionar-varios')} variant="secondary" data-testid={T('paste-link')}>Adicionar vários</ButtonLink>
+            <ButtonLink href={asRoute('/lojista/produtos/precos')} variant="secondary" data-testid={T('prices-link')}>Preços e estoque</ButtonLink>
+            <ButtonLink href={asRoute('/lojista/produtos/importar')} variant="text" data-testid={T('import-link')}>Importar planilha</ButtonLink>
             <ButtonLink href={asRoute('/lojista/produtos/secoes')} variant="text" data-testid={T('sections-link')}>Seções da vitrine</ButtonLink>
           </div>
         }
       />
       {!online ? <Banner tone="warning" offline>Sem conexão. Mostrando o que já carregou.</Banner> : null}
+      {latest && !draftsView ? (
+        <div className={qs.continueCard} data-testid={T('continue')}>
+          <p className="wb-text-body-strong" style={{ margin: 0, overflowWrap: 'anywhere' }}>Continuar: {latest.name.trim() || 'produto sem nome'}</p>
+          <p className="wb-text-caption" style={{ margin: 0 }}>{missingText(latest.missing)} · {savedAgo(latest.updatedAt)}</p>
+          <ButtonLink href={asRoute(`/lojista/produtos/novo/${latest.id}`)} variant="secondary" size="sm" data-testid={T('continue-link')} aria-label={`Continuar ${latest.name.trim() || 'produto sem nome'}`}>Continuar</ButtonLink>
+        </div>
+      ) : null}
+      {withoutDescription > 0 && !draftsView ? (
+        <Banner tone="info" testId={T('without-description')}>
+          {withoutDescription} {withoutDescription === 1 ? 'produto sem descrição' : 'produtos sem descrição'}. Com descrição o cliente decide mais rápido.
+        </Banner>
+      ) : null}
       <div className={s.toolbar}>
         <div className={s.searchRow}>
           <TextField
@@ -140,6 +159,10 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
         </div>
       </div>
 
+      {draftsView ? (
+        <DraftsPanel storeId={storeId} />
+      ) : (
+        <>
       {list.isPending ? <SkeletonRows rows={6} height={72} label="Carregando os produtos" /> : null}
       {list.isError && !list.data && list.error instanceof ApiError && (list.error.status === 403 || list.error.status === 404) ? <LojistaNoAccess /> : null}
       {list.isError && !list.data && !(list.error instanceof ApiError && (list.error.status === 403 || list.error.status === 404)) ? (
@@ -152,10 +175,11 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
           </MessageState>
         ) : (
           <div className={ui.stack}>
-            <EmptyState icon={Package} title="Sua vitrine está vazia" text="Cadastre o primeiro produto ou importe uma planilha." actionLabel="Adicionar produto" onAction={() => router.push(asRoute('/lojista/produtos/novo'))} testId={T('empty')} />
-            <p style={{ margin: 0, textAlign: 'center' }}>
+            <MessageState icon={Package} title="Sua vitrine está vazia" text="Tire a foto de um produto para começar. Leva cerca de 1 minuto." testId={T('empty')}>
+              <NewProductLink testId={T('empty-add')} />
+              <ButtonLink href={asRoute('/lojista/produtos/adicionar-varios')} variant="text" data-testid={T('empty-paste')}>Colar lista do WhatsApp</ButtonLink>
               <ButtonLink href={asRoute('/lojista/produtos/importar')} variant="text">Importar planilha</ButtonLink>
-            </p>
+            </MessageState>
           </div>
         )
       ) : null}
@@ -221,7 +245,10 @@ function ProductList({ storeId, owner, initialFilter }: { storeId: string; owner
         </>
       ) : null}
 
-      <div className={s.addWrap}>{addButton}</div>
+        </>
+      )}
+
+      {!draftsView ? <div className={s.addWrap}>{addButton}</div> : null}
     </div>
   );
 }

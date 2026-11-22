@@ -8,6 +8,7 @@ import { OrderAlertHost } from '@/features/orders/order-alert';
 import { SoundBanner } from '@/features/orders/orders-chrome';
 import { OrdersRuntimeProvider, useOrdersRuntime } from '@/features/orders/orders-runtime';
 import { StoreProvider, useMerchant } from '@/features/lojista/store-context';
+import { hasUnsentCopies, purgeLocalCopies } from '@/lib/catalog/local-copy';
 import { ReauthProvider } from './reauth';
 import { PanelFrame, type AccountEntry, type FrameTestIds, type NavGroup } from './frame';
 import { Banner, SolarIcon, ToastProvider, cx, useToast } from '@/components/ui';
@@ -32,20 +33,23 @@ const TEST_IDS: FrameTestIds = {
 };
 
 /** Sessão perdida, sair e aviso de volta à rede: comportamento comum ao painel e ao fluxo de cadastro. */
-function useShellBehavior() {
+function useShellBehavior(userId: string) {
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
   const online = useOnline();
 
   const logout = useCallback(async () => {
+    // RN-Q2: produto digitado e ainda não enviado fica só neste aparelho; ao sair ele é apagado, e o lojista é avisado antes.
+    if (hasUnsentCopies(userId) && !window.confirm('Você tem produto ou lista ainda não enviados neste aparelho. Se sair, eles serão apagados. Sair mesmo?')) return;
     try {
       await sessionRequest('lojista', 'logout');
     } catch {
       /* os cookies são limpos pelo servidor; segue para o login mesmo assim */
     }
+    purgeLocalCopies();
     router.replace('/lojista/entrar');
-  }, [router]);
+  }, [router, userId]);
 
   useEffect(
     () =>
@@ -122,7 +126,7 @@ function HeaderActions({ user, onLogout }: { user: Me; onLogout: () => void }) {
 }
 
 function PanelShell({ user, flow, pendingCount, children }: { user: Me; flow?: boolean; pendingCount: number; children: ReactNode }) {
-  const { logout, online, pathname } = useShellBehavior();
+  const { logout, online, pathname } = useShellBehavior(user.id);
   const { store } = useMerchant();
 
   const groups = useMemo<NavGroup[]>(() => {

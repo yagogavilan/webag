@@ -12,6 +12,7 @@ import { isModeratedOff, moderationLabel, pickImage, stockLabel, MAX_STOCK } fro
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
+import { useDuplicate } from './quick/use-duplicate';
 import s from './catalog.module.css';
 
 const T = (id: string) => ltid('produtos', id);
@@ -50,6 +51,7 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
+  const dup = useDuplicate(storeId);
   const moderated = isModeratedOff(product.moderationStatus);
   const moderation = moderationLabel(product.moderationStatus);
   const isDraft = product.status === 'draft';
@@ -112,7 +114,7 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
       </td>
       <td data-label="Status" className={s.statusCell}>
         {isDraft ? (
-          <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={s.productName}>Continuar cadastro</Link>
+          <Link href={asRoute(`/lojista/produtos/novo/${product.id}`)} className={s.productName}>Continuar cadastro</Link>
         ) : (
           <Switch checked={selling} label={product.name} onText="Vendendo" offText="Pausado" busy={busy} disabled={moderated || product.status === 'archived'} onChange={(next) => void toggle(next)} testId={T(`row-${product.id}-switch`)} />
         )}
@@ -124,6 +126,12 @@ export function ProductRow({ storeId, product, selected, onSelect, updated }: Ro
       </td>
       <td className={s.actionsCell}>
         <Link href={asRoute(`/lojista/produtos/${product.id}`)} className={cx(s.productName, s.editLink)} aria-label={`Editar ${product.name}`}>Editar</Link>
+        {!isDraft ? (
+          <button type="button" className={s.linkButton} onClick={() => void dup.duplicate(product.id)} aria-label={`Duplicar ${product.name}`} aria-busy={dup.busyId === product.id || undefined} data-testid={T(`row-${product.id}-duplicate`)}>
+            {dup.busyId === product.id ? 'Duplicando…' : 'Duplicar'}
+          </button>
+        ) : null}
+        {dup.error ? <p className={cx('wb-text-caption', s.rowError)} role="alert" data-testid={T(`row-${product.id}-duplicate-error`)}>{dup.error}</p> : null}
         {sheet ? <StockSheet storeId={storeId} product={product} onClose={() => setSheet(false)} /> : null}
       </td>
     </tr>
