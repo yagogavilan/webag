@@ -1,6 +1,6 @@
 # PRD v1.1: Cupons e campanhas por fonte de custo
 
-Status: proposta | Dono: product-owner | Data: 2026-11-22 | Histórias: WB-340 a WB-349
+Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-CUP-* do threat model como critérios; DEC-103 D-01 e D-03; DEC-107; respostas em `v1-1-respostas-ao-time.md`) | Histórias: WB-340 a WB-349
 Base: `regras-de-negocio.md` RN-09 e RN-10; `v1-1-pesquisa.md` §1 e §2; DEC-016, DEC-060 (alvo do cupom da plataforma), SEC-155, SEC-170; WB-116 (cupons da plataforma, aceita com pendência); WB-073 (absorvida por WB-346).
 
 ## Problema
@@ -46,7 +46,7 @@ Dar ao admin autonomia para criar campanhas com **quem paga explícito**, orçam
 3. **Motor de aplicação** com o desconto dividido em `desconto_loja` e `desconto_webag` (RN-09 e RN-10 inalteradas; ver Regras).
 4. **Orçamento** com reserva atômica ao criar o pedido, confirmação ao pagar e devolução ao expirar ou cancelar.
 5. **Adesão da loja** por campanha (convite, aceite com teto próprio, saída).
-6. **Antifraude:** 1 uso de primeira compra por pessoa (CPF do pagador quando existir, celular confirmado), por aparelho (id de instalação opaco) e por endereço normalizado; sinais de velocidade; painel "Suspeitos".
+6. **Antifraude:** 1 uso de primeira compra por pessoa (CPF do pagador quando existir e conta; celular não entra, DEC-103 D-01), por aparelho (id de instalação opaco) e por endereço normalizado; sinais de velocidade; painel "Suspeitos".
 7. **Relatório de custo real** por campanha, por loja e por fonte, com exportação CSV.
 8. **Transparência ao cliente:** a vitrine e a sacola mostram a regra completa e a origem do desconto.
 9. **Controles do admin:** pausar e encerrar na hora, alertas de orçamento (80% e 100%), histórico de alterações com autor e motivo (auditoria).
@@ -78,13 +78,17 @@ Frete grátis: só Webag paga ou Autofinanciado (a loja não é dona do frete, D
 
 **RN-C5 Adesão da loja.** Campanha com `loja_pct > 0` só desconta de lojas com **aceite registrado** (usuário, hora, versão do texto, teto próprio). Convite por painel e e-mail; o texto mostra por pedido de exemplo "você recebe R$ X (sem o cupom: R$ Y)". Saída a qualquer momento vale para pedidos novos; pedido já criado mantém a regra. Nunca existe adesão automática, nem "padrão para novas campanhas" (lição do caso 99Food, `pesquisa` §1). Cláusula nos Termos do Lojista (J27).
 
-**RN-C6 Antifraude.** (a) Primeira compra: 1 por pessoa, medida por CPF do pagador (quando o provedor devolve) e celular confirmado; (b) 1 por id de instalação do app; (c) 1 por endereço normalizado (CEP + número + complemento sem acento e sem espaços; fecha SEC-170); (d) cupom da plataforma exige e-mail e celular confirmados; (e) recusa em autoconsumo (membro da loja, SEC-061); (f) sinal de velocidade: 3 ou mais contas no mesmo aparelho, endereço ou pagador em 24 h, ou 3 cancelamentos com cupom em 7 dias, tira o cupom do próximo pedido e abre "Suspeitos"; (g) loja com mais de 30% dos usos de uma campanha da plataforma gera alerta (antecipa o DT-059); (h) limite de tentativas de código: 10 por hora por conta. Identificadores guardados só como hash com segredo (HMAC); retenção 12 meses `[HIPÓTESE]`; base legal: prevenção à fraude (LGPD art. 7º IX, `[HIPÓTESE; encarregado]`). Decisão final sobre o que medir: Security.
+**RN-C6 Antifraude.** (a) Primeira compra: 1 por pessoa, medida por CPF do pagador (quando o provedor devolve), conta, aparelho e endereço, **nunca por celular** (o sistema não verifica celular: SEC-197, DEC-103 D-01); (b) 1 por id de instalação do app; (c) 1 por endereço normalizado (CEP + número + complemento sem acento e sem espaços; fecha SEC-170); (d) cupom da plataforma e "primeira compra" exigem **e-mail confirmado** (DEC-014); **sem OTP de celular no piloto**: o controle principal é o teto de orçamento por campanha, por dia e por cliente/aparelho (RN-C4, WB-344 C4); OTP só pelo gatilho da RN-C11; (e) recusa em autoconsumo (membro da loja, SEC-061); (f) sinal de velocidade: 3 ou mais contas no mesmo aparelho, endereço ou pagador em 24 h, ou 3 cancelamentos com cupom em 7 dias, tira o cupom do próximo pedido e abre "Suspeitos"; (g) loja com mais de 30% dos usos de uma campanha da plataforma gera alerta (antecipa o DT-059); (h) limite de tentativas de código: 10 por hora por conta, 30 por hora por IP e 10 por hora por aparelho; código de campanha segmentada ou privada é gerado pelo sistema com 8 ou mais caracteres aleatórios (código "vaidade" só em campanha pública). Identificadores guardados só como hash com segredo (HMAC); retenção 12 meses `[HIPÓTESE]`; base legal: prevenção à fraude (LGPD art. 7º IX, `[HIPÓTESE; encarregado]`). Decisão final sobre o que medir: Security.
 
 **RN-C7 Transparência.** Vitrine e sacola mostram: valor, condição ("pedido a partir de R$ 50", "primeira compra"), validade e "Desconto Webag" ou "Desconto da loja" (ou "Desconto Webag e loja"). O resumo do pedido discrimina: produtos, desconto (com origem), entrega, taxa de serviço, total (Decreto 7.962/2013; Portaria Senacon 61/2026, J22). Promessa da campanha = comportamento: mensagem e regra vêm da mesma configuração.
 
 **RN-C8 Preço de referência.** O selo "de R$ X por R$ Y" e o percentual de desconto da loja só aparecem se o preço "de" foi praticado de fato por **30 dias seguidos** nos últimos 60 `[HIPÓTESE; jurídico J23]`; senão mostra só o preço atual. O histórico de preço é guardado por produto.
 
 **RN-C9 Custo real** de uma campanha = soma de `desconto_webag` dos pedidos com pagamento aprovado, **menos** o devolvido em cancelamento e estorno. Custo por cliente novo = custo real / clientes cujo 1º pedido pago usou a campanha. Margem de contribuição dos pedidos com cupom = `receita_webag - custo_logistica - desconto_webag` (custo de logística quando lançado, RN-18).
+
+**RN-C10 Cupom próprio da loja (DEC-103 D-03).** Parâmetro `cupom_loja_pct_max` (padrão **30**, editável só pelo super admin, com auditoria). Cupom percentual acima dele é recusado no cadastro. Cupom de valor fixo exige pedido mínimo >= valor / (`cupom_loja_pct_max`/100), arredondado para cima ao centavo (desconto de R$ 20,00 exige mínimo de R$ 66,67). Alerta ao admin se 3 contas ou menos concentram mais de 50% dos usos em 7 dias (evasão de comissão: cupom alto e pagamento por fora). Parte da loja em campanha dividida segue a adesão (RN-C5), não este teto.
+
+**RN-C11 Antifraude: mensagens e escala (DEC-107).** (1) O cliente nunca vê qual identificador casou. Conta com pedido pago anterior: "Cupom válido só na primeira compra". Qualquer outro sinal (CPF de outra conta, aparelho, endereço, velocidade): "Não foi possível aplicar este cupom a este pedido", com "Falar com o suporte". Código inexistente ou fora do público-alvo: "Cupom inválido" (mesmo texto). Motivo detalhado só para regra pública (mínimo, validade, esgotado). (2) **Gatilho para pedir OTP de celular** (custo de SMS ou WhatsApp, regra 6, decisão do fundador): usos suspeitos acima de 20% por 7 dias (WB-349 C3) ou orçamento mensal de cupons Webag acima de R$ 1.000 `[HIPÓTESE]`. (3) Orçamento mensal global de cupons Webag = R$ 0 até o fundador definir (DEC-102 F2): sem ele, só "Loja paga" ativa.
 
 ## Requisitos não funcionais
 - Aplicar cupom: p95 <= 300 ms; reserva de orçamento atômica (duas compras simultâneas nunca passam o orçamento; teste de concorrência).
@@ -105,8 +109,12 @@ Como admin, quero criar uma campanha escolhendo quem paga, para controlar o cust
 - **C3** Dado tipo frete grátis, quando escolho "Loja paga" ou "Dividido", então o sistema recusa com "O frete é da Webag".
 - **C4** Dado campanha com custo Webag sem orçamento total ou diário, então o botão Ativar fica indisponível com o que falta.
 - **C5** Dado fonte "Webag paga" com margem prevista menor que o desconto, quando o admin não é super admin, então não pode ativar e vê o motivo.
-- **C6** Dado perfil operação, quando salvo, então a campanha fica em `RASCUNHO` e o super admin ou financeiro a ativa.
+- **C6** Dado perfil operação, quando salvo, então a campanha fica em `RASCUNHO`; ativar ou encerrar campanha com custo Webag exige super admin ou financeiro com 2º fator confirmado há até 5 minutos.
 - **C7** Dado qualquer alteração, então `audit_log` guarda autor, antes e depois e motivo.
+- **C8** (C-CUP-08) Dado perfil operação tentando ativar campanha com custo Webag, então 403; dado super admin ou financeiro sem 2º fator recente, então 401 com pedido do 2º fator.
+- **C9** (C-CUP-08) Dado `autofin_teto_pct` (global, padrão 50; não existe por campanha), o orçamento mensal global e "Webag paga acima da margem", quando alterados por quem não é super admin, então 403; quando pelo super admin, então `audit_log` guarda antes e depois.
+- **C10** (DEC-102 F2) Dado orçamento mensal global de cupons Webag igual a R$ 0 (padrão), quando tento ativar campanha com `desconto_webag > 0` (Webag paga, Dividido ou Autofinanciado), então "Ativar" fica indisponível com "Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações" e o rascunho continua salvável; campanha "Loja paga" não é afetada.
+- **C11** Dado a soma dos orçamentos das campanhas ativas maior que o orçamento mensal global, então "Ativar" recusa e mostra quanto falta.
 
 ### WB-341 Motor: dividir o desconto e aplicar os tetos — Must — dep: WB-340, WB-238
 Como Webag, quero que o desconto nunca passe do que o pedido rende, para não ter prejuízo por cupom.
@@ -118,37 +126,46 @@ Como Webag, quero que o desconto nunca passe do que o pedido rende, para não te
 - **C6** Dado o pedido criado, então o snapshot guarda campanha, fonte, `desconto_loja`, `desconto_webag`, `autofin_teto_pct` e `margem_prevista` do momento; mudança posterior de tabela não altera o pedido.
 - **C7** Dado estorno parcial, então o desconto é devolvido proporcionalmente (RN-08) e o orçamento recebe a devolução.
 - **C8** Dado `application_fee` insuficiente para o desconto da plataforma, então vale o corte da RN-09 (nunca negativa).
+- **C9** (C-CUP-01) Dado cotação ou pedido com campo extra (`discountCents`, fonte de custo ou `campaignId`), então 422 (Zod `.strict()`), a requisição aceita só `code` (até 32 caracteres, `[A-Z0-9-]`) e o total é o do oráculo de comissão.
+- **C10** (C-CUP-09) Dado um gerador de 10 mil carrinhos aleatórios (faixas, retirada, estorno parcial), então nenhum pedido tem `application_fee < 0` nem autofinanciado com margem negativa; os tetos são calculados no servidor com a tabela vigente e gravados no snapshot.
+- **C11** Dado o custo previsto do motoboy por faixa, então vem do parâmetro `entrega_custo_motoboy_faixa_cents` (RN-02, editável por super admin e financeiro com auditoria); enquanto o fundador não cotar (F4), vale a tabela do seed marcada `[HIPÓTESE]` e a tela de campanha mostra "custo previsto: tabela provisória".
 
 ### WB-342 Orçamento total, diário e usos — Must — dep: WB-341
 Como admin, quero um orçamento duro, para não gastar além do que decidi.
 - **C1** Dado orçamento diário de R$ 100 e R$ 96 reservados, quando um pedido exige R$ 8, então a resposta é "Cupom esgotado hoje" e o pedido segue sem cupom se o cliente confirmar.
-- **C2** Dado 20 pedidos simultâneos disputando os últimos R$ 40 de orçamento, então no máximo R$ 40 são reservados (teste de concorrência).
+- **C2** (C-CUP-02) Dado 20 pedidos simultâneos disputando os últimos R$ 40 de orçamento, então no máximo R$ 40 são reservados (teste de concorrência). A reserva ocorre **na mesma transação** do pedido, com trava na linha da **campanha** (não só do cupom) e, quando `loja_pct > 0`, na linha de adesão da loja; confere orçamento total, diário (data em `America/Sao_Paulo`), usos e teto mensal da loja antes do commit. Variantes obrigatórias do teste: 2 códigos da mesma campanha e a virada da meia-noite.
 - **C3** Dado pedido que expira sem pagamento, então a reserva volta ao orçamento e ao saldo de usos do cliente (RN-08).
 - **C4** Dado 80% e 100% do orçamento, então o admin recebe alerta no painel; ao esgotar, a campanha vira `ENCERRADA` com motivo "orçamento".
 - **C5** Dado meia-noite em `America/Sao_Paulo`, então o orçamento diário reinicia.
 - **C6** Dado campanha sem usos totais definidos, então a tela exige o limite ou o orçamento (um dos dois).
+- **C7** (C-CUP-03) Dado expiração e cancelamento do mesmo pedido em paralelo, então a reserva (estados `reservada`, `confirmada`, `devolvida`, transição condicional) é devolvida uma só vez; o estorno parcial devolve no máximo o valor confirmado.
 
 ### WB-343 Adesão da loja à campanha — Must — dep: WB-340, WB-192
 Como lojista, quero aceitar ou recusar o custo de uma campanha, para nunca pagar um desconto que não escolhi.
 - **C1** Dado campanha com parte da loja, quando o admin ativa, então a loja só entra se tiver aceite; sem aceite a campanha não aparece nem desconta naquela loja.
 - **C2** Dado o convite, então o lojista vê sua parte em %, um pedido de exemplo ("você recebe R$ 79,78; sem cupom, R$ 83,93"), validade e seu teto mensal, e aceita com um toque de confirmação.
-- **C3** Dado aceite, então o sistema grava usuário, hora e versão do texto.
+- **C3** Dado aceite, então o sistema grava usuário, hora, versão e hash do texto.
 - **C4** Dado que a loja sai da campanha, então pedidos novos não usam a campanha e os já criados mantêm o desconto.
 - **C5** Dado `teto_loja_mensal` atingido, então a campanha para naquela loja e o lojista é avisado.
 - **C6** Dado funcionário sem permissão de cupons, então não vê nem aceita convite.
 - **C7** Dado lojista que nunca respondeu em 7 dias, então o convite expira sem custo (sem aceite tácito).
+- **C8** (C-CUP-07) Dado admin (qualquer perfil), funcionário sem permissão `cupons` ou membro de outra loja, quando tenta criar cupom com `loja_pct > 0` ou registrar aceite em nome da loja (inclusive pela visão "Ver como"), então 403 ou 404 e nada é gravado; a loja vem da rota e da membership, nunca do corpo.
 
 ### WB-344 Antifraude de cupom e painel "Suspeitos" — Must — dep: WB-341, SEC-155, SEC-170
 Como admin, quero impedir uso repetido e multiconta, para o orçamento chegar a clientes novos de verdade.
 - **C1** Dado cupom de primeira compra e CPF do pagador que já pagou um pedido, quando tento usar com outra conta, então o cupom é recusado com "Cupom válido só na primeira compra".
 - **C2** Dado o mesmo id de instalação com 2 contas, quando a 2ª usa o cupom de primeira compra, então é recusado.
 - **C3** Dado o mesmo endereço normalizado (complemento "Apto 1" e "apto1"), então conta como o mesmo endereço.
-- **C4** Dado conta sem celular confirmado, então o cupom da plataforma é recusado com o passo que falta.
-- **C5** Dado membro da loja comprando na própria loja, então recusa (SEC-061).
+- **C4** (reescrito: DEC-103 D-01, sem OTP de celular no piloto) Dado conta sem e-mail confirmado (DEC-014), então o cupom da plataforma é recusado com o passo que falta; o celular do perfil **não** é critério, porque não é verificado. Dado campanha com orçamento total, orçamento do dia ou usos por cliente esgotados (teto por campanha, por dia e por cliente/aparelho), então o cupom não se aplica ("Cupom esgotado" ou "Cupom válido só na primeira compra"), mesmo que as demais regras passem.
+- **C5** Dado membro da loja comprando na própria loja, então recusa em campanha da plataforma, dividida, de loja e autofinanciada (SEC-061; C-CUP-13).
 - **C6** Dado 3 contas no mesmo aparelho em 24 h, então o sinal aparece em "Suspeitos" e o próximo pedido da conta não recebe cupom até o admin liberar.
 - **C7** Dado loja com mais de 30% dos usos da campanha, então alerta ao admin.
-- **C8** Dado 11 tentativas de código em 1 hora, então bloqueio de 1 hora com texto neutro.
+- **C8** (C-CUP-06) Dado 10 tentativas por hora por conta, 30 por hora por IP ou 10 por hora por aparelho, então a tentativa seguinte retorna 429 com texto neutro e bloqueio de 1 hora; código inexistente e código segmentado de outro público respondem o mesmo "Cupom inválido".
 - **C9** Dado cliente legítimo bloqueado por engano, então o admin libera com motivo e o evento fica na auditoria.
+- **C10** (C-CUP-04) Dado 2 contas do mesmo aparelho, 2 campanhas de primeira compra e pedidos simultâneos, então só 1 passa: a primeira compra é travada **por identificador** (HMAC de conta, aparelho, endereço normalizado e documento, em ordem fixa, `pg_advisory_xact_lock`), valendo entre campanhas, e a reconferência ocorre sob essa trava.
+- **C11** (C-CUP-05) Dado qualquer tabela nova do antifraude, então guarda só HMAC com chave dedicada (`COUPON_FRAUD_HMAC_KEY`, obrigatória no boot, rotacionável), sem CPF, endereço ou id de aparelho em claro, nem em log nem em exportação; o job de expurgo apaga o que passa de 12 meses (teste: 12 meses e 1 dia).
+- **C12** (C-CUP-12) Dado "Suspeitos", então a resposta traz só ids opacos (sem nome, telefone nem endereço) e revelar dado é pedido a pedido, com motivo e auditoria (SEC-144); CSV com o helper do SEC-156.
+- **C13** (RN-C11) Dado recusa por qualquer sinal que não seja a própria conta com pedido pago anterior (CPF de outra conta, aparelho, endereço, velocidade), então o texto é "Não foi possível aplicar este cupom a este pedido" com "Falar com o suporte"; o cliente nunca vê qual identificador casou (C9 libera o legítimo).
 
 ### WB-345 Relatório de custo real por campanha — Must — dep: WB-341, WB-114
 Como fundador, quero ver quanto cada campanha custou de fato e o que trouxe, para decidir manter ou parar.
@@ -159,6 +176,7 @@ Como fundador, quero ver quanto cada campanha custou de fato e o que trouxe, par
 - **C5** Dado o total do relatório, então bate com a soma dos resgates confirmados e com a conciliação do ledger (teste).
 - **C6** Dado exportação CSV, então valores em reais com vírgula, UTF-8 e células iniciadas por `=`, `+`, `-` ou `@` escapadas (SEC-156).
 - **C7** Dado campanha sem uso, então o relatório mostra estado vazio com "Nenhum pedido ainda".
+- **C8** (C-CUP-12) Dado o relatório e o CSV, então a resposta não traz nome, telefone nem endereço (teste de contrato); só ids opacos.
 
 ### WB-346 Lojista cria cupom próprio (absorve WB-073) — Should — dep: WB-341, WB-343
 Como lojista, quero criar um cupom da minha loja, para promover sem depender do admin.
@@ -168,6 +186,8 @@ Como lojista, quero criar um cupom da minha loja, para promover sem depender do 
 - **C4** Dado cupom da loja, então vale só na própria loja e não gera desconto Webag (`loja_pct` 100).
 - **C5** Dado teto mensal atingido, então o cupom pausa e o lojista é avisado.
 - **C6** Dado o admin, então pode pausar qualquer cupom de loja com motivo (auditoria) e o lojista é avisado.
+- **C7** (C-CUP-11, DEC-103 D-03) Dado `cupom_loja_pct_max` (padrão 30), quando o lojista configura cupom percentual acima dele, então 422 "O desconto máximo da loja é 30%"; cupom de valor fixo exige pedido mínimo >= valor / (teto/100) (desconto de R$ 20,00 exige mínimo de R$ 66,67).
+- **C8** (C-CUP-11) Dado 3 contas ou menos concentrando mais de 50% dos usos de um cupom da loja em 7 dias, então alerta ao admin (evasão de comissão).
 
 ### WB-347 Cliente: ver a origem e a composição do desconto — Must — dep: WB-341, WB-023
 Como cliente, quero ver o que o cupom vale, de quem é e quanto pago no total, para confiar no preço.
@@ -176,6 +196,10 @@ Como cliente, quero ver o que o cupom vale, de quem é e quanto pago no total, p
 - **C3** Dado o mesmo carrinho com e sem cupom, então produtos, entrega e taxa de serviço têm o mesmo valor (teste automatizado de RN-C1).
 - **C4** Dado cupom inválido, esgotado ou fora da validade, então a mensagem diz o motivo e o que fazer ("Cupom esgotado", "Faltam R$ 12", "Válido até 31/12").
 - **C5** Dado sem internet, então o app mantém o último resumo e não aplica cupom até reconectar.
+- **C6** (C-CUP-06) Dado cupom inexistente, de campanha segmentada ou de outro público-alvo, então a resposta é "Cupom inválido" (o mesmo texto); o motivo detalhado só aparece para regra pública (mínimo, validade, esgotado).
+- **C7** Dado a vitrine de cupons, então lista só cupons públicos aplicáveis agora ou aplicáveis com "Faltam R$ X"; nunca lista cupom segmentado, de outro público ou esgotado.
+- **C8** Dado cupom de frete grátis, então o resumo mostra "Entrega R$ 8,00" e, em linha separada, "Desconto Webag (frete) -R$ 8,00"; nunca "Entrega: Grátis" no lugar do valor (RN-C1; a rubrica final depende do J22).
+- **C9** Dado "Faltam R$ X", então a ação oferecida é "Ver mais da loja" (sem sugerir produto) e a validade aparece como "Válido até 31/12" (o dia final vale até 23:59 em `America/Sao_Paulo`).
 
 ### WB-348 Selo "de/por" só com preço de referência comprovado — Should — dep: WB-062
 Como cliente, quero que o desconto anunciado seja real, para não ser enganado.
@@ -190,6 +214,8 @@ Como admin, quero parar uma campanha na hora, para conter um erro ou abuso.
 - **C2** Dado "encerrar", então não reabre (duplicar cria rascunho).
 - **C3** Dado campanha com mais de 20% de usos marcados suspeitos, então alerta e sugestão de pausar.
 - **C4** Dado campanha ativa por mais de 30 dias sem uso, então aviso "Sem uso".
+- **C5** (C-CUP-10) Dado campanha pausada entre a cotação e a criação do pedido, então o pedido sai sem cupom: a transação reconfere `estado = ATIVA` sob a trava da campanha, sem confiar na cotação nem no cache.
+- **C6** Dado "Duplicar" em campanha encerrada, então cria `RASCUNHO` com as regras (tipo, valor, público, alvo, mínimo, fonte, usos por cliente) e **sem** orçamento, validade nem código.
 
 ## Eventos de analytics (servidor)
 `campaign_created`, `campaign_activated`, `coupon_applied` (campaign_id, funding_source, discount_cents, store_share_cents), `coupon_rejected` (reason_code: exhausted, min_order, not_first_purchase, fraud_signal, margin), `campaign_budget_threshold` (80, 100), `store_campaign_joined`, `store_campaign_left`. Sem nome, e-mail, CPF ou código digitado; só IDs opacos.
@@ -210,6 +236,8 @@ Como admin, quero parar uma campanha na hora, para conter um erro ou abuso.
 |---|---|
 | Como lançar o custo da campanha no ledger sem duplicar o desconto já refletido na `application_fee` (conta de memória ou despesa de marketing)? | backend-dev e tech-lead |
 | O CPF do pagador vem do Mercado Pago no PIX? Quais identificadores são proporcionais (LGPD)? | backend-dev e Security |
-| Campanha automática (sem código) entra agora ou só código? | designer (fluxo) e PO (recomendo só código na primeira entrega) |
-| `autofin_teto_pct` 50% e orçamento mensal em R$ | Fundador (F2, `v1-1-pesquisa.md` §11) |
-| O alerta de autoconsumo (30%) deixa de ser fase 2? | CEO (DEC-060 o cortou; recomendo trazer: custo baixo) |
+| ~~Campanha automática (sem código) entra agora ou só código?~~ **Resolvida:** só código (automática = Could) | PO, 2026-11-22 |
+| Valor do orçamento mensal global em R$ (enquanto R$ 0 só "Loja paga" ativa); `autofin_teto_pct` fica 50% e **só global** | Fundador (F2, `v1-1-pesquisa.md` §11) |
+| O alerta de autoconsumo (30%) deixa de ser fase 2? | CEO (DEC-060 o cortou; já está no critério WB-344 C7; recomendo manter) |
+| OTP de celular só pelo gatilho da RN-C11 | Fundador (custo, regra 6), se o gatilho disparar |
+| Texto do aceite da loja, rubrica do frete grátis e pedido mínimo | Jurídico: J27, J22, J23 |

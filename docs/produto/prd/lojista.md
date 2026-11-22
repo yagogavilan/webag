@@ -157,7 +157,7 @@ Como lojista, quero definir minhas regras de troca, para evitar conflito.
 
 ### WB-060 Criar e editar produto com fotos — Must — dep: WB-054, WB-106
 Como lojista, quero cadastrar produto com foto, preço e descrição, para vender.
-- **C1** Dado novo produto, então informo nome (até 80 caracteres), categoria (do admin), descrição (até 1.000), preço, foto principal e ao menos 1 variação (ou "sem variação", com estoque); salvar como rascunho é permitido **só com o nome preenchido**; o resto é obrigatório apenas ao publicar (R-38).
+- **C1** Dado novo produto, então informo nome (até 80 caracteres), categoria (do admin), preço, foto principal e ao menos 1 variação (ou "sem variação", com estoque); a **descrição (até 1.000) é opcional** (alterado em 2026-11-22: DEC-094 e DEC-106; o painel lembra "X produtos sem descrição"), **exceto** em categoria marcada `descricao_obrigatoria` (padrão não; no seed: Cosméticos e Eletrônicos, mínimo 20 caracteres), regra que vale na via rápida (WB-370) e neste formulário; salvar como rascunho é permitido **só com o nome preenchido**; o resto é obrigatório apenas ao publicar (R-38).
 - **C2** Dado fotos, então até 8 por produto, com recorte e compressão no navegador (origem até 5 MB, destino <= 300 KB, lado maior até 1.600 px); a 1ª é a capa; arrastar muda a ordem.
 - **C3** Dado campo obrigatório vazio ou preço inválido (RN-05), então erro no campo e não publica.
 - **C4** Dado publicar, então o produto fica ATIVO e visível se a loja estiver visível; "Pausar" tira da vitrine sem apagar.

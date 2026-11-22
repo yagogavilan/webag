@@ -1,6 +1,6 @@
 # PRD v1.1: Admin com mais autonomia e painel de gráficos
 
-Status: proposta | Dono: product-owner | Data: 2026-11-22 | Histórias: WB-350 a WB-359
+Status: pronta para sprint (lado do PO; ver `backlog.md` §10.7). **WB-359 cortada na DEC-104 (só o export); a proteção das consultas passou para a WB-356** | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-ADM-* e C-DSH-*, DEC-108, matriz métrica x dimensão) | Histórias: WB-350 a WB-358
 Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), RN-15 (métricas), RN-16 (estados da loja); DEC-073 e DEC-074 (menor privilégio, sem "revelar dado" na 1.0); ADR-014 (operação do admin); `docs/arquitetura/modelo-dados.md` (`audit_log`, `reports`).
 
 ## Problema
@@ -75,7 +75,10 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 
 **Regras de edição**
 - **Motivo obrigatório** em toda edição do admin em loja (lista: solicitado pelo lojista, correção de erro, moderação, decisão operacional, outro com texto). "Solicitado pelo lojista" exige canal e data em texto curto. Alteração de **preço** só aceita os motivos: solicitado pelo lojista, erro evidente, ordem de fiscalização ou do jurídico, campanha acordada.
-- Alteração de preço maior que `admin_preco_variacao_max_pct` (padrão 30, parâmetro) pede confirmação extra com o valor novo e o "Você recebe".
+- Alteração de preço maior que `admin_preco_variacao_max_pct` (padrão 30, parâmetro) pede confirmação extra com o valor novo e o "Você recebe". **Redução acima de 50% só pelo super admin** (DEC-103 D-04).
+- **Motivo por sessão (DEC-108):** o admin escolhe o motivo ao abrir a loja e a tela o pré-preenche; **cada alteração grava o motivo** no `audit_log` e mostra confirmação com antes e depois; o motivo da sessão vale por 30 min ou até trocar de loja; preço exige um dos 4 motivos permitidos a cada edição.
+- **Aviso ao lojista:** pausa, status e horário avisam na hora (painel e e-mail). Preço, estoque e catálogo: uma linha por alteração no painel e **um e-mail-resumo a cada 10 min** (até 20 itens e "+N"). Ação em massa: **1 aviso agregado** com o motivo (não 200).
+- **"Ver como o lojista":** credencial de visualização ligada a (admin, loja, motivo), válida por até 30 min e encerrada com a sessão do admin; grava abertura e encerramento no `audit_log`, **não** as telas navegadas.
 - **Concorrência:** cada produto tem versão; se o lojista alterou no meio da edição, o admin vê "O lojista alterou este produto agora" e escolhe recarregar. Nunca sobrescreve em silêncio.
 - Estoque nunca menor que o reservado (RN-06). Produto ativo exige foto, nome e preço (mesmas regras do lojista, WB-060).
 - O admin **não** edita: CPF/CNPJ, razão social, documentos, conta de recebimento, dados bancários, equipe da loja.
@@ -86,7 +89,34 @@ Base: `prd/admin.md` (WB-100 a WB-125), `regras-de-negocio.md` RN-13 (papéis), 
 - Só métricas do catálogo; definição única (RN-15). Parâmetros validados no servidor; nada de texto livre na consulta.
 - **Métricas v1.1:** GMV, GMV concluído, pedidos pagos, pedidos entregues, ticket médio, receita Webag (financeira), take rate = receita Webag / GMV concluído (financeira), novos clientes (1º pedido pago), clientes ativos, recompra em 30 dias (só mensal e agregada), cancelamentos (taxa e quantidade), tempo de aceite (mediana e p90), entregues na faixa prometida (%), tempo do pagamento à entrega (mediana e p90), custo de logística por entrega (financeira), lojas ativas, usos de cupom, desconto total, desconto Webag (financeira), custo por cliente novo (financeira). Com o analytics (`prd/v1-1-analises-lojista.md`): sessões, visitas à loja, visitas ao produto, adicionados à sacola e conversão.
 - **Dimensões:** tempo (dia, semana, mês), cidade, loja, categoria (da loja; para GMV por item, categoria do produto), modo (entrega ou retirada), meio de pagamento, campanha ou cupom, faixa de distância da entrega. **Fora:** cliente, motoboy individual, endereço, bairro (alvo muito pequeno).
-- Cada métrica declara as dimensões compatíveis (ex.: "novos clientes" não tem dimensão "loja de 2º pedido"); combinação incompatível é recusada com texto.
+- Cada métrica declara as dimensões compatíveis (ex.: "novos clientes" não tem dimensão "loja de 2º pedido"); combinação incompatível é recusada com texto (matriz abaixo).
+- **Baixa amostra (DEC-108):** taxa, ticket médio e comparação com o período anterior pedem **20 pedidos** no período; mediana e p90 pedem **5**; abaixo disso a tarja diz "Poucos dados" e some o percentual. Métricas de acesso: célula com menos de 5 é suprimida (análises RN-A2).
+- **Painéis prontos (5):** Visão geral, Vendas, Lojas, Entrega, Cupons; "Acessos" quando existir a WB-362. **"Enviar cópia a outro admin"** (no lugar de "Compartilhar"): leva só a definição, nunca dados; métrica sem permissão do destinatário aparece bloqueada e não é consultada.
+
+**Matriz métrica x dimensão** (T = tempo dia/semana/mês, CI = cidade, LO = loja, CA = categoria, MO = modo, PG = meio de pagamento, CP = campanha ou cupom, FD = faixa de distância, OR = origem; o registro do servidor espelha esta tabela e é a lista fechada da C-DSH-04):
+
+| Métrica (definição em uma frase) | Dimensões permitidas |
+|---|---|
+| GMV: soma do total pago pelo cliente dos pedidos recebidos, sem cancelados (RN-15) | T, CI, LO, CA, MO, PG, CP, FD |
+| GMV concluído: o mesmo, só pedidos entregues | T, CI, LO, CA, MO, PG, CP, FD |
+| Pedidos pagos: pedidos com pagamento aprovado | T, CI, LO, CA, MO, PG, CP, FD |
+| Pedidos entregues: pedidos que chegaram a "entregue" | T, CI, LO, CA, MO, FD |
+| Ticket médio: GMV concluído dividido por pedidos entregues (RN-15) | T, CI, LO, CA, MO, PG, CP |
+| Receita Webag (financeira): comissão, taxa de entrega e taxa de serviço, menos desconto Webag (RN-10) | T, CI, LO, CA, MO, PG, CP |
+| Take rate (financeira): receita Webag dividida pelo GMV concluído | T, CI, LO, CA |
+| Novos clientes: clientes cujo 1º pedido pago ocorreu no período | T, CI, LO, CP |
+| Clientes ativos: clientes com pedido pago no período | T, CI, LO |
+| Recompra em 30 dias: % de clientes com 2 ou mais pedidos entregues em 30 dias após o 1º (RN-15) | só T (mês) e CI, agregada |
+| Cancelamentos (taxa e quantidade): cancelados e recusados sobre pedidos recebidos (RN-15) | T, CI, LO, CA, MO, PG, FD |
+| Tempo de aceite (mediana e p90): do pedido recebido ao aceite (RN-15) | T, CI, LO, MO |
+| Entregues na faixa prometida (%): entregues até o fim da faixa aceita (RN-19) | T, CI, LO, FD |
+| Tempo do pagamento à entrega (mediana e p90) | T, CI, LO, FD |
+| Custo de logística por entrega (financeira): custo lançado da corrida (RN-18) | T, CI, LO, FD |
+| Lojas ativas: aprovadas com 1 ou mais pedido entregue nos últimos 30 dias (RN-15) | T, CI, CA |
+| Usos de cupom, desconto total, desconto Webag (financeira), custo por cliente novo (financeira) | T, CI, LO, CP |
+| Sessões, visitas à loja, visitas ao produto, adicionados à sacola, conversão (acessos; `analises` RN-A5) | T, CI, LO, OR (CA só em visitas ao produto); célula < 5 suprimida |
+| Tempo do OK da loja (mediana e p90), % de saídas por fonte (loja, sistema, admin) | T, CI, LO |
+| % de entregas com mapa, % de tempo sem sinal, erro mediano do ETA | T, CI (nunca motoboy individual) |
 - **Tipos de gráfico:** número (KPI), linha, barra, barra empilhada, rosca (até 6 fatias), tabela ordenável. Rosca e pizza só para parte do todo.
 - **Limites:** período máximo 400 dias; 1 métrica por widget (até 3 sem dimensão, como linhas); no máximo 2 dimensões e 10 categorias exibidas mais "Outros"; 12 widgets por painel; 20 painéis por usuário; 5 filtros por widget; resposta até 5.000 pontos.
 - **Painéis são privados** do usuário; duplicar cria cópia dele. Painéis prontos pertencem ao sistema (não editáveis; duplicáveis).
@@ -114,7 +144,8 @@ Como admin, quero ajustar horário, pausa e dados da loja, para resolver pedidos
 - **C3** Dado perfil financeiro tentando editar horário, então o servidor recusa (403) e a tela não mostra a ação.
 - **C4** Dado CPF/CNPJ ou conta de recebimento, então não existe campo de edição.
 - **C5** Dado alteração de status, então só as transições da RN-16.
-- **C6** Dado o lojista editando o mesmo campo em paralelo, então o admin vê o conflito e não sobrescreve.
+- **C6** (C-ADM-05) Dado o lojista editando o mesmo campo em paralelo, então o admin vê o conflito e não sobrescreve: a gravação é `UPDATE ... WHERE version = :v` e versão diferente retorna 409.
+- **C7** (C-ADM-03) Dado o corpo da edição, então o DTO é `.strict()` com lista fechada de campos; `cnpj`, `mpAccountId`, `members`, razão social, documentos ou status fora da RN-16 retornam 422; o motivo vem do catálogo, com texto de até 200 caracteres.
 
 ### WB-352 "Ver como o lojista vê" (somente leitura) — Must — dep: WB-350, WB-216
 Como suporte, quero ver o painel como o lojista vê, para ajudá-lo sem pedir senha.
@@ -123,6 +154,10 @@ Como suporte, quero ver o painel como o lojista vê, para ajudá-lo sem pedir se
 - **C3** Dado a abertura, então grava em `audit_log` quem, qual loja, quando e o motivo.
 - **C4** Dado tentativa de envio de formulário nessa visão por requisição direta, então o servidor recusa (403).
 - **C5** Dado a sessão do admin expirando, então a visão fecha.
+- **C6** (C-ADM-02) Dado a visão aberta, então a credencial de visualização é ligada a (admin, loja, motivo), vale até 30 minutos e encerra com a sessão do admin; o ator no `audit_log` continua sendo o admin.
+- **C7** (C-ADM-02) Dado qualquer método diferente de GET e HEAD, ou GET com efeito (marcar como lido, revelar contato, baixar documento ou exportação), então 403 na visão (guard global).
+- **C8** (C-ADM-02) Dado pedido fora de pedido ativo, então a **resposta da API** já vem mascarada (RN-14), não só a tela.
+- **C9** (C-ADM-02) Dado abrir sem motivo, então 422; dado a abertura, então a linha de `audit_log` existe antes de qualquer dado ser devolvido; o encerramento ou a expiração também é gravado; as telas navegadas não são gravadas.
 
 ### WB-353 Admin edita catálogo e preços da loja — Must — dep: WB-350, WB-060, WB-061, WB-066
 Como operação, quero cadastrar e corrigir produtos pela loja, para ativar o lojista que não consegue.
@@ -131,29 +166,40 @@ Como operação, quero cadastrar e corrigir produtos pela loja, para ativar o lo
 - **C3** Dado variação de preço acima de 30%, então a tela pede confirmação mostrando o novo "Você recebe".
 - **C4** Dado estoque menor que o reservado, então bloqueia com aviso (RN-06).
 - **C5** Dado que o lojista salvou o produto entre a abertura e o salvar do admin, então o admin vê "O lojista alterou este produto agora" e nada é sobrescrito.
-- **C6** Dado ação em massa (pausar, mudar estoque) sobre até 200 produtos, então mostra prévia, exige motivo e executa em uma auditoria por item.
+- **C6** (C-ADM-07) Dado ação em massa (pausar, mudar estoque) sobre até 200 produtos, então mostra prévia, exige motivo e executa em uma auditoria por item; 201 itens retornam 422; o limite é de 10 ações em massa por hora por admin.
 - **C7** Dado perfil sem permissão de catálogo, então 403.
 - **C8** Dado produto criado pelo admin, então nasce `ATIVO` só com foto, nome e preço, e a moderação (WB-107) vale igual.
+- **C9** (C-ADM-04, DEC-103 D-04) Dado redução de preço acima de 50% feita por perfil que não é super admin, então 403; dado variação acima de 30%, então a confirmação do C3.
+- **C10** (C-ADM-04) Dado produto com preço alterado pelo admin há menos de 24 h, quando é comprado por conta ligada a admin ou a membro da loja, então a operação recebe alerta.
+- **C11** Dado alterações de preço, estoque ou catálogo da mesma loja em até 10 minutos, então o lojista recebe 1 e-mail-resumo (até 20 itens e "+N") e uma linha por alteração no painel; pausa, status e horário avisam na hora; ação em massa gera 1 aviso agregado com o motivo.
 
 ### WB-354 Auditoria por loja e restaurar valor — Should — dep: WB-353, WB-123
 Como fundador, quero ver quem mudou o quê numa loja e desfazer, para corrigir erro rápido.
 - **C1** Dado uma alteração de preço, quando clico "Restaurar", então o preço anterior volta com novo registro (não apaga o histórico) e o lojista é avisado.
 - **C2** Dado o valor anterior já alterado depois por outra pessoa, então o sistema avisa e não restaura sem confirmação.
-- **C3** Dado exportação do histórico, então CSV com proteção de fórmula.
+- **C3** (C-ADM-09) Dado exportação do histórico, então CSV com proteção de fórmula, com permissão própria, até 10 mil linhas, sem dado pessoal e auditada; perfil suporte recebe 403.
+- **C4** (C-ADM-06, DEC-103 D-06) Dado o papel de banco da API, quando tenta `UPDATE audit_log` ou `ALTER TABLE audit_log DISABLE TRIGGER`, então erro: a API roda com papel que **não é dono** da tabela (migração com outro papel); o gatilho append-only continua valendo.
+- **C5** (C-ADM-08) Dado "Restaurar", então cria novo registro e a contagem de linhas do `audit_log` só aumenta; se o valor mudou depois, pede confirmação.
 
 ### WB-355 Permissões por perfil nas ações novas — Must — dep: WB-100, WB-350
 Como fundador, quero que cada perfil faça só o que lhe cabe, para limitar o dano de um erro.
-- **C1** Dado a matriz da seção Regras, então cada linha tem teste automatizado de permissão (4 perfis x ações).
+- **C1** (C-ADM-01) Dado a matriz da seção Regras, então cada linha tem teste automatizado de permissão (4 perfis x ações) e um teste de contrato percorre **todas** as rotas `/v1/admin/*` do `openapi.yaml` com os 4 perfis e um perfil sem permissão, comparando com a matriz; rota nova sem permissão declarada falha no CI; o perfil é lido do banco a cada requisição.
 - **C2** Dado perfil operação tentando alterar comissão, então 403 e tentativa registrada.
 - **C3** Dado perfil novo sem permissão explícita, então nega por padrão.
 
-### WB-356 Catálogo de métricas e dimensões — Must — dep: WB-122
+### WB-356 Catálogo de métricas e dimensões, e proteção das consultas — Must — dep: WB-122
 Como fundador, quero que cada número tenha uma definição única, para não discutir "qual GMV".
 - **C1** Dado a métrica GMV, então usa a definição RN-15 e a tela mostra a definição em uma frase.
 - **C2** Dado combinação métrica x dimensão incompatível, então a API devolve 422 com o motivo e a tela só oferece as compatíveis.
 - **C3** Dado métrica financeira e usuário sem permissão, então não aparece no construtor e a API devolve 403.
 - **C4** Dado conjunto de pedidos conhecido (seed), então cada métrica bate com um cálculo independente (teste contra oráculo).
 - **C5** Dado consulta com parâmetro fora da lista (métrica, dimensão ou filtro desconhecido), então 422, sem executar nada.
+- **C6** (C-DSH-01) Dado a requisição `{metricId, dimensionIds[], filters[{dimensionId, op: eq ou in, values}], period}`, então ids são validados contra o registro do servidor e o SQL vem **só** do registro, com valores como parâmetro (`sql.raw` com entrada é proibido por regra de lint no módulo); fuzz com `'; drop`, nome de coluna, `__proto__` e id desconhecido retorna 422 e executa **zero** consultas.
+- **C7** (C-DSH-04) Dado o registro, então não existe dimensão de cliente, motoboy, endereço ou bairro (teste da lista fechada = matriz da seção Regras); métricas de acesso herdam a supressão do `analises` RN-A2.
+- **C8** (C-DSH-02) Dado métrica financeira aquecida no cache pelo financeiro, quando o suporte pede a mesma, então 403: a permissão por sensibilidade é checada **antes** de ler o cache e a chave do cache traz métrica e parâmetros normalizados.
+- **C9** (C-DSH-03; vinda da WB-359 cortada) Dado qualquer consulta de painel, então roda em transação somente leitura com `statement_timeout` de 5 s, em pool separado de 2 conexões (ou réplica), só sobre agregados diários; 30 consultas por minuto e 2 simultâneas por usuário (a 31ª: 429); limites de 400 dias, 2 dimensões, 5 filtros e 5.000 pontos conferidos no servidor (401 dias: 422); consulta lenta forçada é cancelada com "Muito pesado: reduza o período ou o filtro".
+- **C10** (C-DSH-03) Dado carga de 20 painéis abertos com 10 mil clientes simulados, então p95 <= 2 s por widget e o p95 do checkout no teste de carga não muda; a mesma consulta repetida em 5 minutos vem do cache e indica "em cache".
+- **C11** Dado a resposta de uma consulta, então traz `atualizado_em`, `em_cache` e, por célula, `n` e `suprimida`; célula suprimida não traz valor nem `n`.
 
 ### WB-357 Painéis prontos com filtros globais — Should — dep: WB-356
 Como fundador, quero abrir painéis prontos, para ter resposta no primeiro dia.
@@ -162,6 +208,7 @@ Como fundador, quero abrir painéis prontos, para ter resposta no primeiro dia.
 - **C3** Dado período sem dados, então cada widget mostra "Sem dados no período" e não zero enganoso.
 - **C4** Dado o painel pronto, quando duplico, então ganho uma cópia editável.
 - **C5** Dado o rótulo "Atualizado às HH:MM", então reflete a última atualização dos agregados.
+- **C6** Dado a lista de painéis prontos, então traz Visão geral, Vendas, Lojas, Entrega e Cupons (Acessos só com a WB-362), todos duplicáveis e nenhum editável.
 
 ### WB-358 Construtor de widgets, salvar e duplicar painéis — Should — dep: WB-356
 Como fundador, quero montar meus gráficos, para responder minhas perguntas sem pedir ao dev.
@@ -171,16 +218,13 @@ Como fundador, quero montar meus gráficos, para responder minhas perguntas sem 
 - **C4** Dado dimensão com 25 lojas, então mostra as 10 maiores e "Outros".
 - **C5** Dado rosca com 8 categorias, então agrupa em 6 e "Outros".
 - **C6** Dado painel salvo, quando duplico e renomeio, então o original fica intacto.
-- **C7** Dado outro admin, então não vê meus painéis.
+- **C7** (C-DSH-05) Dado outro admin, então não vê meus painéis; ler, editar ou duplicar painel de outro admin retorna 404 (filtro `owner_admin_id = :me`).
 - **C8** Dado excluir painel, então pede confirmação e não afeta os prontos.
+- **C9** (C-DSH-06) Dado nome de painel ou widget com até 80 caracteres, então é exibido como texto (sem HTML) e escapado no CSV: `<img onerror>` e `=1+1` saem literais.
+- **C10** Dado "Enviar cópia a outro admin", então a cópia leva só a definição (nunca dados) e nasce no destinatário; widget de métrica sem permissão do destinatário aparece bloqueado e não é consultado.
 
-### WB-359 Exportar widget, desempenho e proteção — Should — dep: WB-358
-Como fundador, quero exportar o número que vejo, para levar ao contador, sem expor o sistema.
-- **C1** Dado exportar o widget, então baixa CSV com os mesmos valores, em reais e UTF-8, células com `=`, `+`, `-`, `@` escapadas; a exportação fica auditada.
-- **C2** Dado 31 consultas em 1 minuto por um usuário, então a 31ª recebe 429.
-- **C3** Dado consulta acima de 5 s, então é cancelada e a tela mostra "Muito pesado: reduza o período ou o filtro".
-- **C4** Dado a mesma consulta repetida em 5 minutos, então a resposta vem do cache e indica "em cache".
-- **C5** Dado carga de 20 painéis abertos simultâneos com 10 mil clientes simulados, então p95 <= 2 s por widget (teste de carga).
+### WB-359 Exportar widget — CORTADA na DEC-104 (2026-11-22); proteção das consultas movida para a WB-356 C9 a C11
+Só o **export de widget em CSV** foi cortado (gatilho de volta: o fundador pedir para levar um número ao contador; o export do histórico por loja segue na WB-354 C3). **Não cortar a proteção das consultas** (limite por minuto, tempo limite, cache, carga): é o controle do risco nº 3 do threat model (pontuação 9, C-DSH-03) e vale também para os painéis prontos da R2. Os antigos C2 a C5 desta história são hoje WB-356 C9 e C10.
 
 ## Eventos de analytics (servidor)
 `admin_store_edited` (store_id, field_group, reason_code), `admin_view_as_opened` (store_id), `dashboard_created`, `dashboard_duplicated`, `widget_saved` (metric, dimension, chart_type), `widget_exported`, `widget_query_slow`. Sem texto livre nem dado pessoal.
@@ -200,6 +244,8 @@ Como fundador, quero exportar o número que vejo, para levar ao contador, sem ex
 |---|---|
 | Agregar em tabela de resumo ou visão materializada? Atualização por hora basta? | backend-dev e tech-lead |
 | Biblioteca de gráficos acessível (resumo textual e tabela) | designer e mobile-dev |
-| "Ver como o lojista" reutiliza as telas do lojista com um modo somente leitura ou cria páginas espelho? | tech-lead |
-| Perfil "suporte" pode pausar loja numa emergência? | CEO (hoje não, RN-13) |
-| Quais painéis prontos o fundador quer logo (lista inicial acima é minha proposta) | Fundador |
+| "Ver como o lojista" reutiliza as telas do lojista com um modo somente leitura ou cria páginas espelho? (o guard global da C-ADM-02 vale nos dois casos) | tech-lead |
+| Perfil "suporte" pode pausar loja numa emergência? Resposta do PO: não (RN-13); a operação pausa | CEO, só se o piloto mostrar demora |
+| ~~Quais painéis prontos~~ **Resolvida:** os 5 da seção Regras; o fundador ajusta depois de usar | PO |
+| ~~Matriz métrica x dimensão, limiares, "Compartilhar", motivo por sessão, tempo do "Ver como"~~ **Resolvidas** (seção Regras e `v1-1-respostas-ao-time.md`); Security confirma o motivo por sessão | PO; Security |
+| Cláusula de edição pelo admin nos Termos do Lojista (J27): até lá, produção só com motivo "solicitado pelo lojista" | Jurídico |

@@ -1,6 +1,6 @@
 # PRD v1.1: Rastreio ao vivo, confirmação de saída pela loja e notificações
 
-Status: proposta | Dono: product-owner | Data: 2026-11-22 | Histórias: WB-390 a WB-399
+Status: pronta para sprint (lado do PO; flags desligadas; R4 bloqueada por SEC-193 e SEC-198 e liga só com J8 e J26; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-RT-*, C-NOT-*, C-MOT-08/10, DEC-110 e DEC-112) | Histórias: WB-390 a WB-399
 Base: `regras-de-negocio.md` RN-07, RN-08, RN-18, RN-19; `prd/logistica.md` WB-233, WB-235, WB-253 a WB-262; `prd/notificacoes.md` (catálogo de eventos); DEC-045 (ticket de tempo real), DEC-053, DEC-054, DEC-064 (`deliveredAt`), DEC-072, DEC-076 (promessa estável); ADR-004 (Socket.IO `/rt`); WB-303 (rastreio, absorvido); `v1-1-pesquisa.md` §8 e §9; app e despacho: `prd/v1-1-despacho-e-app-motoboy.md`.
 
 ## Problema
@@ -74,7 +74,10 @@ Mapeamento do **pedido** (RN-07) não muda: PRONTO_PARA_COLETA até a saída con
 | Caso | Regra |
 |---|---|
 | Motoboy "peguei", loja não confirma | Lembrete aos 3 min, automática aos 5 min (se a até 150 m), alerta admin aos 10 min |
-| Loja confirma, motoboy nunca marcou "cheguei" | A confirmação da loja vale; o rastreio mostra só a linha do tempo até o 1º ponto de GPS |
+| Loja confirma, motoboy nunca marcou "cheguei" | A confirmação da loja vale (fonte `loja`, marca `sem_chegada`); o botão aparece na linha do pedido desde MOTOBOY_A_CAMINHO, com "O motoboy já está com o pedido?"; a operação recebe aviso informativo e o motoboy vê "Não peguei este pedido"; o rastreio mostra só a linha do tempo até o 1º ponto de GPS (WB-390 C10) |
+| Loja toca "Ainda estou separando" | Silencia som e lembrete por 3 min, uma vez por pedido, sem mudar estado; se o motoboy já marcou "Peguei", a automática não dispara e o admin é alertado na hora |
+| Loja com vários pedidos do mesmo motoboy | Um toque confirma todos os pedidos com "Peguei" registrado e pré-marcados, cada um com sua transição e auditoria (WB-390 C9) |
+| Motoboy sem sinal ao entregar | "Entrega a conferir": o servidor confere o código quando a rede voltar; ENTREGUE só com código conferido (`prova = codigo`) ou fechamento da operação (RN-D6a) |
 | Loja confirma o pedido errado | "Desfazer" em até 2 min nas condições acima; depois, admin com motivo |
 | Motoboy sem app ou sem sinal | Modo WhatsApp: a operação marca as etapas; sem mapa ao cliente (`tracking_available = false`) |
 | "Entreguei" a mais de 300 m do endereço | Vale com o código; marca "entrega fora do ponto" para revisão da operação; sem bloquear |
@@ -105,6 +108,8 @@ Mapeamento do **pedido** (RN-07) não muda: PRONTO_PARA_COLETA até a saída con
 **RN-R8 Confirmação automática da saída `[HIPÓTESE; F12]`.** Só dispara se há "Peguei o pedido" do motoboy há `saida_auto_min` (5) minutos **e** o último ponto está a no máximo `saida_auto_raio_m` (150) da loja. Sem GPS, não dispara (vai ao admin). A loja é avisada e pode contestar em até 10 minutos ("Não saiu"): vira divergência para a operação. A fonte `sistema` fica registrada; % automático vira métrica.
 
 **RN-R9 Falha na entrega.** Cancelamento e estorno como RN-08 e RN-18; o rastreio termina em NAO_ENTREGUE final.
+
+**RN-R10 Avaliação, nome e código (DEC-112).** (a) **Um convite só:** o de 1 hora (WB-396 C6); a tela "Entregue" tem o link discreto "Avaliar" e o convite de 1 hora só sai se o pedido ainda não foi avaliado; avalia-se loja e pedido, **nunca o motoboy** (RN-D7; J8). (b) O **nome do motoboy** só aparece depois da saída confirmada, nunca em "a caminho da loja", e nunca no push. (c) "Você é o 2º": "O motoboy está entregando outro pedido antes do seu. Seu pedido é o 2º da rota, por volta de HH:MM." (d) O **código de entrega** fica visível ao cliente só depois de SAIU e deixa de aparecer ao fim da entrega; **risco de exibição na tela aceito** (o código só vale conferido pelo servidor, com 3 tentativas); backend confirma se a reentrega gera código novo; o Security pode pedir máscara ("Toque para mostrar") sem custo. (e) **Push "motoboy a caminho da loja": não** (fica no app). (f) Alerta sonoro de "OK pendente" só à operação e ao super admin; o suporte vê no painel, sem som. (g) Deduplicação de push por (evento, pedido) mais janela de 30 s por pedido.
 
 ## Notificações (acrescenta ao catálogo de `prd/notificacoes.md`)
 Regras do catálogo valem (transacional sempre enviado; título até 60 e corpo até 120 caracteres; sem emoji; sem dado pessoal sensível; deduplicação; push só depois do 1º pedido). **Código de entrega nunca vai no texto do push.**
@@ -145,6 +150,10 @@ Como loja, quero confirmar que entreguei o pedido ao motoboy, para o cliente aco
 - **C6** Dado pedido de retirada, então não existe o botão (continua o código de retirada, RN-07).
 - **C7** Dado o painel fechado, então o lembrete chega por Web Push (se ativo) e a regra automática de 5 min cobre o resto.
 - **C8** Dado a loja que confirma sem o motoboy ter marcado "Cheguei", então a confirmação vale e o app do motoboy mostra "A loja confirmou a saída".
+- **C9** Dado pedidos do mesmo motoboy em MOTOBOY_NA_LOJA com "Peguei" registrado, então o botão traz "Saiu com o motoboy: #1042, #1043, #1044" com os pedidos pré-marcados; 1 toque confirma todos, cada um com sua transição, fonte `loja` e auditoria; a loja pode desmarcar; nunca mistura motoboys.
+- **C10** Dado o pedido em MOTOBOY_A_CAMINHO (sem chegada registrada), quando a loja toca "Saiu com o motoboy", então aparece "O motoboy já está com o pedido?" e, ao confirmar, a saída vale com fonte `loja` e marca `sem_chegada`; a operação recebe aviso informativo e o app do motoboy mostra "A loja confirmou a saída" com "Não peguei este pedido" (chama a operação).
+- **C11** Dado "Ainda estou separando", então silencia o som e o lembrete por 3 minutos, uma vez por pedido, sem mudar o estado; se o motoboy já marcou "Peguei", a confirmação automática não dispara e o admin é alertado na hora.
+- **C12** Dado funcionário sem a permissão de pedidos, então o aviso de chegada aparece só como texto ("Carlos chegou para o pedido #1042. Avise quem cuida dos pedidos."), sem botão e sem Web Push.
 
 ### WB-391 Estados, timeouts e divergências da entrega — Must — dep: WB-233, WB-235
 Como operação, quero que cada passo tenha dono e prazo, para o pedido nunca ficar parado sem alerta.
@@ -152,25 +161,29 @@ Como operação, quero que cada passo tenha dono e prazo, para o pedido nunca fi
 - **C2** Dado MOTOBOY_NA_LOJA sem OK da loja por 3 minutos, então a loja recebe o lembrete; por 5 minutos após "Peguei" e com o motoboy a até 150 m, então a saída é confirmada pelo sistema, com fonte `sistema`.
 - **C3** Dado a mesma situação sem ponto de GPS recente, então a confirmação automática **não** ocorre e aos 10 minutos o admin é alertado.
 - **C4** Dado aceite de corrida sem resposta em 3 minutos, então volta a PRONTA_PARA_COLETA e alerta a operação.
-- **C5** Dado `deliveredAt` vindo do app, então vale a hora do aparelho se estiver entre 60 minutos antes do recebimento e agora; fora disso, a do servidor, e a fonte é gravada.
+- **C5** (C-MOT-08) Dado `deliveredAt` vindo do app, então vale a hora do aparelho só se estiver entre a confirmação de saída **registrada no servidor** e o recebimento, não passar de 60 minutos antes do recebimento e, se diferir do recebimento em mais de 2 minutos, vier marcada como fila offline com pontos que a expliquem; caso contrário vale a do servidor, a divergência é registrada e a fonte é gravada.
 - **C6** Dado a operação marcando ENTREGUE em nome do motoboy, então valem o recuo de até 60 minutos e o motivo da WB-262.
 - **C7** Dado a compensação por atraso, então usa o `deliveredAt` e o fim da faixa aceita no checkout (DEC-076), como antes.
 - **C8** Dado a loja contestando a saída automática em 10 minutos, então vira divergência na fila da operação.
 - **C9** Dado dois motoboys tentando assumir a mesma corrida em paralelo, então só um é aceito.
 - **C10** Dado cada transição, então grava ator, fonte, hora e motivo e dispara a notificação da matriz.
 - **C11** Dado os parâmetros de tempo e raio, então estão em RN-02, editáveis no admin com auditoria (`saida_lembrete_min`, `saida_auto_min`, `saida_auto_raio_m`, `saida_alerta_admin_min`).
+- **C12** (C-MOT-10, C-MOT-09) Dado a confirmação automática, então exige "Peguei", 5 minutos, ponto **não suspeito** de até 60 s e raio de 150 m; a loja contesta em 10 minutos; sem ponto recente não confirma e alerta aos 10 minutos; o % automático por loja e por motoboy vai ao relatório (WB-398).
+- **C13** (C-RT-07, C-MOT-03) Dado o gateway, então só o servidor publica em salas (sem handler de repasse); evento de etapa só nasce de transição validada; cliente que emite `position` no socket é ignorado.
+- **C14** (RN-D6a) Dado cada ENTREGUE, então grava `prova` (`codigo`, `operacao` ou `automatica`); o relatório de "não recebi" e o WB-398 mostram o % sem `codigo`.
 
 ### WB-392 Cliente: acompanhar o motoboy no mapa — Must — dep: WB-387, WB-390, WB-395
 Como cliente, quero ver o motoboy a caminho no mapa, para saber quando chega.
 - **C1** Dado o pedido em SAIU_PARA_ENTREGA e a loja ter confirmado, então a tela do pedido mostra o botão "Acompanhar no mapa" e o push abre o mapa.
 - **C2** Dado o mapa, então mostra o marcador do motoboy com o primeiro nome, o destino e "Chega por volta de HH:MM" ao lado da faixa prometida.
-- **C3** Dado novos pontos, então o marcador se move com animação, sem saltos e com no máximo 1 atualização por 5 s.
-- **C4** Dado lote com o pedido não sendo a próxima parada, então o mapa não aparece e a tela diz "O motoboy está entregando outro pedido antes do seu. Você é o 2º."
+- **C3** (C-RT-05) Dado novos pontos, então o marcador se move com animação, sem saltos, com no máximo 1 atualização por 5 s e posição com 4 casas decimais (cerca de 11 m).
+- **C4** (C-RT-02) Dado lote com o pedido não sendo a próxima parada, então o mapa não aparece e a tela diz "O motoboy está entregando outro pedido antes do seu. Seu pedido é o 2º da rota, por volta de HH:MM."; a emissão é filtrada no servidor e o payload traz só `{lat, lng, ts, eta, firstName}` (sem `courierId`, telefone, trilha, velocidade nem outro pedido): o cliente da 2ª parada não recebe posição.
 - **C5** Dado entrega sem app do motoboy (modo WhatsApp), então a linha do tempo aparece sem mapa e sem erro.
-- **C6** Dado outro usuário abrindo o link do mapa de um pedido que não é dele, então 404.
+- **C6** (C-RT-01, SEC-198) Dado outro usuário abrindo o link do mapa de um pedido que não é dele, então 404. A posição vai numa sala própria `track:{orderId}` (nunca `order:{id}`, que aceita membros da loja): a inscrição só vale se `orders.user_id = :me`, a entrega está em SAIU, o rastreio está disponível e o pedido é a próxima parada; senão `{ok:false}`, igual a "não existe"; membro da loja que tenta entrar em `track:` do pedido da loja é recusado.
 - **C7** Dado o mapa sem rede de tiles, então a tela mostra a distância e o ETA em texto.
 - **C8** Dado o rodapé do mapa, então mostra "© OpenStreetMap".
 - **C9** Dado leitor de tela, então a posição é lida em texto ("Motoboy a 1,2 km").
+- **C10** Dado o motoboy em "a caminho da loja", então o nome dele não aparece; só depois da saída confirmada (RN-R10 b).
 
 ### WB-393 ETA ao vivo sem mudar a promessa — Should — dep: WB-392
 Como cliente, quero uma previsão que acompanhe o trânsito real, sem a promessa mudar sob meus pés.
@@ -193,13 +206,15 @@ Como cliente, quero saber quando a localização está desatualizada, para não 
 ### WB-395 Privacidade e retenção do rastreio — Must — dep: WB-387
 Como cliente e como motoboy, quero que a posição só seja vista por quem deve e por pouco tempo, para a minha segurança.
 - **C1** Dado o pedido A, quando o cliente B pede o rastreio de A, então 404.
-- **C2** Dado o pedido ENTREGUE, quando o cliente pede o rastreio, então 410 "Entrega concluída" e o socket da sala é fechado.
+- **C2** (C-RT-03) Dado o pedido ENTREGUE (ou que deixou de ser a próxima parada), quando o cliente pede o rastreio, então 410 "Entrega concluída", o socket sai da sala (`socketsLeave('track:{id}')`) e há 0 eventos de posição nos 10 segundos seguintes.
 - **C3** Dado a resposta de rastreio, então não traz telefone, foto, sobrenome, placa, velocidade, trilha nem dados de outro pedido (teste de contrato).
 - **C4** Dado pontos com mais de 7 dias, então foram apagados e a corrida guarda só a distância total e o ponto e a hora da entrega (job testado).
-- **C5** Dado o ticket de tempo real (60 s, uso único), então a reutilização é recusada (DEC-045).
+- **C5** (C-RT-04) Dado o ticket de tempo real (60 s, uso único), então a reutilização é recusada (DEC-045).
 - **C6** Dado a exclusão da conta do cliente, então o rastreio de pedido ativo encerra e nenhum ponto fica ligado ao cliente.
 - **C7** Dado consulta do admin ao histórico de pontos, então exige motivo e grava auditoria (SEC-144).
 - **C8** Dado Data Safety e App Privacy do app do cliente, então não declaram localização em segundo plano (o app do cliente não coleta posição).
+- **C9** (C-RT-06) Dado a revisão do contrato, então não existe link público de rastreio nem trilha; o mapa existe só entre a saída confirmada e o fim; o motoboy não vê a posição do cliente e a do cliente não é coletada; o sinal "mesmo cliente com muitos pedidos ao mesmo motoboy" é registrado para a operação (risco residual de perseguição aceito como baixo).
+- **C10** (C-RT-08) Dado o job de retenção, então apaga ponto com mais de 7 dias e mantém só a distância total e o ponto e a hora da entrega.
 
 ### WB-396 Notificações do fluxo de saída e entrega — Must — dep: WB-390, WB-191, WB-192
 Como cada ator, quero ser avisado do que me cabe na hora certa, para agir sem abrir o painel o tempo todo.
@@ -210,8 +225,11 @@ Como cada ator, quero ser avisado do que me cabe na hora certa, para agir sem ab
 - **C5** Dado OK pendente há 10 minutos, então o admin vê alerta com som no painel.
 - **C6** Dado ENTREGUE, então o cliente recebe push "Pedido entregue às HH:MM" e a avaliação 1 hora depois (existente).
 - **C7** Dado o cliente com push desligado no sistema, então o estado aparece em tela ao abrir o app e o e-mail só nos eventos críticos já definidos.
-- **C8** Dado o texto de todo push, então tem até 60 caracteres no título e 120 no corpo, sem emoji e sem endereço.
+- **C8** (C-NOT-02) Dado o texto de todo push, então tem até 60 caracteres no título e 120 no corpo, sem emoji, sem endereço, nome completo, itens, valores nem código de entrega, nem nome do motoboy (teste de snapshot de todos os templates).
 - **C9** Dado falha de entrega de push, então registra e não reenvia em loop.
+- **C10** (C-NOT-01, SEC-196) Dado o envio pela API do Expo sem token, então é recusado (segurança avançada de push ligada no projeto); dado o boot de produção sem `EXPO_ACCESS_TOKEN`, então falha (a validação do env derruba o boot).
+- **C11** (C-NOT-03) Dado o payload `data`, então só traz `type` e `orderId`; o app abre rota interna de uma lista fechada e **relê o estado na API**; push com `url: https://x` é ignorado.
+- **C12** (C-NOT-04) Dado o reenvio do mesmo evento, então 1 push (deduplicação por evento e pedido, mais janela de 30 s por pedido), com 1 "saiu" e 1 "chegando" por entrega; push antigo abre o estado atual.
 
 ### WB-397 Web Push do painel do lojista — Should — dep: WB-396 (reabre WB-192 C2, cortado na DEC-071)
 Como lojista, quero ser avisado com o painel fechado ou no celular, para não deixar o motoboy esperando nem perder pedido.
@@ -221,6 +239,8 @@ Como lojista, quero ser avisado com o painel fechado ou no celular, para não de
 - **C4** Dado desligar nas preferências, então o alerta sonoro do painel e o e-mail de pedido novo nunca desligam (DEC-074a).
 - **C5** Dado a chave do servidor de push, então vem do `.env` (nenhum serviço pago).
 - **C6** Dado a decisão de ligar na produção, então depende do teste em aparelho real e do inventário de privacidade.
+- **C7** (C-NOT-05) Dado o endpoint informado pelo navegador, então só é aceito em HTTPS de serviços conhecidos (FCM, Mozilla, Apple, Microsoft), sem seguir redirecionamento e com timeout; endpoint `http://169.254.169.254/` ou de host interno retorna 422 **sem** chamada; a chave VAPID privada fica só no `.env`.
+- **C8** (C-NOT-05) Dado a inscrição de Web Push, então fica ligada a membro e loja e é apagada ao remover o membro, trocar a senha ou sair; o texto do push não traz dado do cliente.
 
 ### WB-398 Métricas do fluxo de saída e do rastreio — Should — dep: WB-391
 Como fundador, quero medir onde o fluxo trava, para ajustar prazos e decidir o que automatizar.
@@ -232,7 +252,7 @@ Como fundador, quero medir onde o fluxo trava, para ajustar prazos e decidir o q
 
 ### WB-399 Encerrar o rastreio e fechar a entrega — Must — dep: WB-386, WB-392
 Como cliente, quero que o mapa saia da tela ao receber, para não ser seguido depois.
-- **C1** Dado ENTREGUE (app ou operação), então o app do cliente fecha o mapa em até 10 s e mostra "Entregue às HH:MM" com o convite de avaliação 1 hora depois.
+- **C1** (C-RT-03) Dado ENTREGUE (app ou operação), então o app do cliente fecha o mapa em até 10 s e mostra "Entregue às HH:MM" com o link discreto "Avaliar" (sem estrelas abertas); o convite de 1 hora só sai se o pedido ainda não foi avaliado; avalia-se loja e pedido, nunca o motoboy; a rota REST de rastreio responde 410.
 - **C2** Dado NAO_ENTREGUE, então o mapa fecha, aparece o motivo e "Combinar nova tentativa" (WB-235 C6).
 - **C3** Dado o app fechado durante a entrega, então ao abrir o pedido vê o estado final, sem mapa.
 - **C4** Dado "não recebi" depois de ENTREGUE, então a operação vê as horas, o ponto de GPS da entrega e se houve código (evidência), sem dar ao cliente o histórico do motoboy.
@@ -261,8 +281,10 @@ Como cliente, quero que o mapa saia da tela ao receber, para não ser seguido de
 |---|---|
 | Geocerca e tempo de confirmação automática (100 m, 150 m, 5 min) fazem sentido na rua real? | Fundador (F12) e teste no piloto |
 | Confirmação estrita (sem automática) ou automática? | Fundador (F12) |
-| Mapa de lote só na próxima parada: o designer aceita o texto "Você é o 2º"? | designer, Security |
+| ~~Texto "Você é o 2º"~~ **Resolvida:** RN-R10 c (com horário); o designer testa a leitura com 5 pessoas | PO |
 | A janela do Wake Lock não é necessária no app nativo; o iPhone do cliente precisa de algo? | mobile-dev |
 | Onde guardar o ponto bruto (tabela particionada por dia) e o job de expurgo | backend-dev, tech-lead |
-| Hora do aparelho do motoboy: validação contra relógio errado | backend-dev, Security |
+| ~~Hora do aparelho do motoboy: validação contra relógio errado~~ **Resolvida:** WB-391 C5 (C-MOT-08) | PO |
 | Copy "Acompanhe no mapa" e do aviso de privacidade ao motoboy | designer, PO |
+| Código visível na tela durante o rastreio (RN-R10 d) e reentrega com código novo | Security, backend-dev |
+| ~~Avaliação imediata x convite de 1 h; nome do motoboy; push "a caminho da loja"; "Ainda estou separando"; "Saiu" sem chegada; vários pedidos com 1 toque~~ **Resolvidas** (RN-R10, WB-390 C9 a C12; `v1-1-respostas-ao-time.md` §A e §E) | PO |
