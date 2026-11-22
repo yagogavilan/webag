@@ -75,7 +75,7 @@ export const envSchema = z
      * Fecha a conexão de quem abriu transação e esqueceu (ms). 0 = desligado. O servidor MATA a conexão (SQLSTATE 25P03) e o pool só a descarta
      * (`database.module.ts` trata o erro: nunca derruba o processo). Nenhum código deve esperar rede com transação aberta (trabalho longo usa
      * `SessionLockService`, fora de transação). Padrão 60 s: o dobro do `statement_timeout` e acima da maior chamada ao Mercado Pago
-     * (8 s x 3 tentativas = 24 s), como margem de segurança; é rede de proteção, não parte do desenho. Não baixar de 15 s.
+     * (8 s x 3 tentativas = 24 s), como margem de segurança; é rede de proteção, não parte do desenho. Em produção o boot RECUSA valor entre 1 e 14999 (SEC-204).
      */
     DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(0).max(600_000).default(60_000),
     /**
@@ -206,6 +206,10 @@ export const envSchema = z
       const other = keys.slice(0, i).find(([, v]) => v === value);
       if (other) fail(name, `precisa ser diferente de ${other[0]} (uma chave por finalidade)`);
     }
+    // SEC-204: abaixo de 15 s o servidor pode matar a conexão do refresh OAuth (transação aberta durante a chamada de 8 s ao Mercado Pago) DEPOIS de o MP girar o token e
+    // ANTES da gravação do par novo: a loja perde a conta de recebimento. 0 (desligado) segue aceito; o valor de dev/teste é livre (o e2e usa 1 s).
+    if (env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS > 0 && env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS < 15_000)
+      fail('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', 'em produção use 0 (desligado) ou, no mínimo, 15000 (o refresh OAuth mantém transação aberta durante a chamada ao Mercado Pago)');
     if (env.TRUST_PROXY === undefined)
       fail('TRUST_PROXY', 'obrigatório em produção (nginx na frente = 1; sem proxy = 0). Sem ele o IP do cliente é perdido');
     // SEC-129: sem o segredo do BFF, todos os usuários do painel web compartilham o IP do BFF (limites por IP viram globais).
