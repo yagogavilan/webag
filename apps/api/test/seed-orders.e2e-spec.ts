@@ -41,7 +41,8 @@ describe('Seed de pedidos de demonstração (só dev e staging)', () => {
   it('o painel da loja e o financeiro leem os pedidos de demonstração; em produção o seed se recusa', async () => {
     const [sample] = await ctx.db.select().from(orders).where(and(eq(orders.status, 'received'), sql`${orders.number} ~ '^WB-DM[0-9]{3}$'`));
     expect(sample).toBeDefined();
-    const [owner] = await ctx.db.select({ email: users.email }).from(storeMembers).innerJoin(users, eq(users.id, storeMembers.userId)).where(eq(storeMembers.storeId, sample!.storeId));
+    // O DONO (o funcionário do seed não tem a permissão de financeiro); sem filtro, a linha devolvida dependia da ordem física da tabela.
+    const [owner] = await ctx.db.select({ email: users.email }).from(storeMembers).innerJoin(users, eq(users.id, storeMembers.userId)).where(and(eq(storeMembers.storeId, sample!.storeId), eq(storeMembers.role, 'owner')));
     const login = await ctx.http.post('/v1/auth/login').send({ email: owner!.email, password: PASSWORD });
     expect(login.status, JSON.stringify(login.body)).toBe(200);
     const token = (login.body as { tokens: { accessToken: string } }).tokens.accessToken;

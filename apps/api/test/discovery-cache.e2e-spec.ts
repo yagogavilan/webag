@@ -153,6 +153,23 @@ describe('Descoberta com cache em memória LIGADO (TTL real): isolamento, defasa
       expect((await shelf()).available).toBe(false);
     });
 
+    it('produto removido pela moderação depois de cacheado: a página mostra o produto até vencer (<= 10 s), mas a sacola recusa o item na hora', async () => {
+      const origin = isolatedPoint();
+      const store = await makeStore(ctx, { name: 'Loja Moderacao', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Produto Moderado', priceCents: 1000 }, { name: 'Produto Normal', priceCents: 1000 }] });
+      const [moderated] = store.productIds as [string, string];
+      const variantId = await variantOf(ctx, moderated);
+      expect((await page(moderated)).available).toBe(true); // esquenta
+      await ctx.db.update(products).set({ moderationStatus: 'removed' }).where(eq(products.id, moderated));
+      expect((await page(moderated)).available).toBe(true); // defasagem esperada
+      const { user } = await customerAt(ctx, origin);
+      const refused = await addToCart(ctx, user, variantId, 1);
+      expect(refused.status).toBeGreaterThanOrEqual(400); // sacola: estado do banco, não da página
+      expect(refused.status).toBeLessThan(500);
+      advance(11);
+      const after = await page(moderated);
+      expect(after).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+    });
+
     it('loja suspensa ou pausada depois de cacheada: a página dura até 10 s, mas sacola e pedido bloqueiam na hora; some da home depois do cache de 30 s da posição', async () => {
       const origin = isolatedPoint();
       const store = await makeStore(ctx, { name: 'Loja Suspensa', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Item Suspensa', priceCents: 1000 }] });
