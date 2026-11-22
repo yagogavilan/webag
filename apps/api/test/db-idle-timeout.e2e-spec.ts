@@ -4,6 +4,7 @@ import pg from 'pg';
 import { vi } from 'vitest';
 import { PaymentsService } from '../src/modules/payments/payments.service.js';
 import { FakePaymentProvider } from '../src/modules/payments/providers/fake.provider.js';
+import { SessionLockService } from '../src/platform/database/database.module.js';
 import { paymentAttempts } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { ensureLegalDocs, reconcileFirst, registerUser } from './helpers/fixtures.js';
@@ -83,6 +84,34 @@ describe('Timeout de transação ociosa: a API não cai e a conciliação segue 
     await sleep(300);
     expect(uncaught).toEqual([]);
     for (let n = 0; n < 3; n += 1) expect((await ctx.pool.query<{ ok: number }>('select 1 as ok')).rows[0]!.ok).toBe(1); // o pool se recompõe
+  });
+
+  it('SEC-199: o servidor mata a conexão da trava (pg_terminate_backend) no meio do trabalho: lost() vira true, ninguém derruba o processo, a conexão é descartada e a trava não fica presa', async () => {
+    const locks = ctx.app.get(SessionLockService);
+    const key = `lost-${randomUUID()}`;
+    const seen: boolean[] = [];
+    const run = await locks.tryRun(key, async (handle) => {
+      seen.push(handle.lost());
+      // `pg_try_advisory_lock(bigint)`: classid = 32 bits altos e objid = 32 bits baixos de hashtext(chave) (inteiro de 32 bits com sinal, estendido para 64).
+      const { rows } = await ctx.pool.query<{ pid: number }>(
+        `select pid from pg_locks where locktype = 'advisory' and granted and objsubid = 1 and ((classid::bigint << 32) | objid::bigint) = hashtext($1)::bigint`,
+        [key],
+      );
+      expect(rows).toHaveLength(1); // a conexão dedicada da trava, e só ela
+      await ctx.pool.query('select pg_terminate_backend($1)', [rows[0]!.pid]); // o servidor derruba a sessão (failover, reinício, kill)
+      await vi.waitFor(() => expect(handle.lost()).toBe(true), { timeout: 5_000 }); // o `pg` emite 'error' no client; a trava avisa quem trabalha
+      seen.push(handle.lost());
+      return 'terminou';
+    });
+    expect(run).toEqual({ acquired: true, value: 'terminou' });
+    expect(seen).toEqual([false, true]);
+    expect(uncaught).toEqual([]);
+    // a conexão morta foi destruída (não devolvida ao pool): o pool segue servindo e a mesma trava pode ser obtida de novo
+    for (let n = 0; n < 3; n += 1) expect((await ctx.pool.query<{ ok: number }>('select 1 as ok')).rows[0]!.ok).toBe(1);
+    const again = await locks.tryRun(key, () => Promise.resolve('de novo'));
+    expect(again).toEqual({ acquired: true, value: 'de novo' });
+    const { rows } = await ctx.pool.query<{ held: number }>(`select count(*)::int as held from pg_locks where locktype = 'advisory' and granted and database = (select oid from pg_database where datname = current_database())`);
+    expect(rows[0]!.held).toBe(0);
   });
 
   it('a conciliação com provedor lento (várias vezes o timeout) termina, o processo vive e a trava segue válida até o fim', async () => {

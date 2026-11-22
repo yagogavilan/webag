@@ -50,7 +50,15 @@ export class SessionLockService {
     client.on('error', onError);
     let held = false;
     try {
-      const got = await client.query<{ ok: boolean }>('select pg_try_advisory_lock(hashtext($1)) as ok', [key]);
+      let got: { rows: { ok: boolean }[] };
+      try {
+        got = await client.query<{ ok: boolean }>('select pg_try_advisory_lock(hashtext($1)) as ok', [key]);
+      } catch (error) {
+        // A consulta falhou (timeout, rede): o servidor pode ter concedido a trava sem a resposta chegar. Devolver a conexão ao pool a deixaria com a trava de
+        // sessão presa (ninguém mais a obtém até o processo cair). Destruir a conexão faz o PostgreSQL soltá-la.
+        broken = true;
+        throw error;
+      }
       held = got.rows[0]?.ok === true;
       if (!held) return { acquired: false };
       return { acquired: true, value: await work({ lost: () => broken }) };
