@@ -1,6 +1,7 @@
 # Pendências das apresentações v2 (lojista e cliente)
 
-Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 de guia) e `src/apresentacao-cliente.html` (8 slides). Autor: product-designer. Data: 2026-11-22. Revisão por slide: `revisao-decks-v2.md`.
+Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 de guia) e `src/apresentacao-cliente.html` (**5 slides na v2.1**; eram 8). Autor: product-designer. Data: 2026-11-22. Revisão por slide: `revisao-decks-v2.md`.
+**v2.1 (2026-11-22, aplica a avaliação da estrategista): ver "V2.4" no fim desta seção. Onde a tabela V2.1/V2.2 abaixo fala de slides do cliente, a numeração é a da v2 (s4 = "Ela está no app", s5 = acompanhamento, s6 e s7 cortados, s8 = contato; hoje s3, s4 e s5).**
 `[HIPÓTESE]` = não validado. As seções "v1" mais abaixo estão obsoletas (história); o que continua valendo foi trazido para cá.
 
 ## V2.1 Confirmar antes de imprimir
@@ -31,6 +32,19 @@ Fonte: `docs/telas/` (2026-11-20, 1x: 390x844 e 1440x900). **`docs/marketing/src
 | K4 | Horário estimado de captura de madrugada ("03:06 – 03:31", "03:31 – 04:01") lê como prazo prometido (regra 7 da direção criativa) | Cobri com "Veja no app" (cliente s4 e s5). Remover os `.patch` quando a captura vier em horário comercial **e** o jurídico aceitar faixa de tempo em imagem |
 | K5 | Pedido novo da captura 20 mostra "há 19 min" e "Som desligado" (BFF sem tempo real no ambiente de captura) | Recortei só o cartão, cobri a idade com "Novo". "Pago no app" aparece pequeno no cartão (fato, não argumento) |
 | K6 | Captura 25 (financeiro) mostra "Vendas R$ 59,90" e "Você recebe R$ 50,90" de seed | Rotulado só pelo contexto; se imprimir, vale um selo "exemplo" ou captura com valores redondos |
+
+## V2.4 Mudanças da v2.1 e o que o fundador liga (2026-11-22)
+
+| # | O que mudou / o que fica pendente | Onde |
+|---|---|---|
+| V12 | **Flags em `src/config.json`** (`"flags": {"semMensalidade": false, "trocaNoPainel": false}`; o HTML tem o mesmo fallback embutido). Com `false` o PDF **não** mostra "Sem mensalidade" (lojista s5) nem "Troca? Organizada no painel" (lojista s6; no lugar entra "Como vejo o que ganhei? Extrato no painel."). **O fundador liga cada flag para `true` quando confirmar por escrito** (V1: mensalidade; a troca só quando o painel tratar troca, J2). Regerar o PDF depois | `config.json`; lojista s5 e s6 |
+| V13 | Cliente: **cortados** "Compre com tranquilidade" (troca + cartão), os cartões de lojas de aplicativos "Em breve" e toda menção a pagamento/cartão. V6 (J2, J3) deixa de valer para o cliente; vale só para a flag `trocaNoPainel` do lojista | Cliente |
+| V14 | Ganchos reordenados: lojista abre pelo WhatsApp ("Só retirando, tá?") e a capa "Venda além da sua rua." é o slide 2; cliente abre por "Aquela loja que você adora. Não entrega." e vira em "Agora ela entrega." (slide 2). **As frases que dependem do parecer jurídico J8/DEC-039 continuam e continuam bloqueando a impressão e o envio**: lojista s3 ("Você separa. O Webag leva.") e s13 ("O motoboy do Webag busca na loja"); cliente s2 ("Agora ela entrega.", "No app, até a sua porta.") e s4 ("Saiu para entrega", "Aviso a cada etapa."); o cartão do slide 3 do cliente mostra "Taxa de entrega R$ 8,00" (exemplo). A marcação não vai impressa: segurar a impressão até o parecer | Lojista s3, s13; cliente s2 a s4 |
+| V15 | **Cartões desenhados (rótulo "Exemplo")** no lugar das capturas com seed: lojista s4 (pedido novo), s11 (produtos), s13 (pronto para coleta), s14 (financeiro); cliente s3 (loja) e s4 (linha do tempo). Loja de moda e casa, valores redondos (R$ 59,00, R$ 129,00, R$ 188,00; financeiro R$ 1.000, comissão 15%, tarifa até R$ 50, recebe cerca de R$ 800, coerente com o slide 5). Sem código de pedido, sem horário, sem "Pago no app", sem comida, sem nota. **São réplicas do layout real, não capturas: quando o mobile-dev entregar `src/capturas/` em 2x (ainda não existe), trocar** (`CAP_BASE` no fim de cada HTML continua pronto; o histórico do git guarda os recortes e `.ring` calibrados). Só o slide 9 do lojista (cadastro, sem seed) ainda usa captura de `docs/telas` | Lojista s4, s9, s11, s13, s14; cliente s3, s4 |
+| V16 | CTA: lojista s7 e s14 com uma ação. **Com `whatsapp` preenchido**: "Mande “quero entrar” no WhatsApp." (s7) e "Pronto para começar? Mande “quero entrar” no WhatsApp:" + número (s14). **Sem número**: "Escreva ao lado. O Yago chama você." (s7), linhas para escrever à mão mantidas e `(__) _____-____` no s14. E-mail só aparece se preenchido. Cliente s5: ação única "Siga @webag no Instagram." (o handle é o provisório do config; IF1/V9: confirmar o usuário real antes de enviar); WhatsApp fica como linha à mão se vazio; site e e-mail só se preenchidos | Lojista s7, s14; cliente s5 |
+| V17 | Nova frase no s7 do lojista: **"Estou montando o Webag."** sob "Fale com o Yago" (responde "quem são vocês?"). É afirmação do próprio fundador: confirmar que ele concorda. Foto dele no slide continua opcional (IF6) | Lojista s7 |
+| V18 | Nenhum texto abaixo de 32 px agora (as notas legais de 24 px subiram para 32; a do exemplo de venda foi encurtada). "Cerca de 10 min" (cadastro, `[HIPÓTESE]`) e "10 minutos para aceitar" (V4) seguem | Todos |
+| V19 | **Não renderizado** (sem Bash). Riscos de quebra de linha para o primeiro render: lojista s6 (quadrante "O cliente / retira / na loja." a 104 px, 3 linhas), s7 (coluna da direita em fluxo, 2 linhas a 56 px em cada bloco), s13 (botão "Pronto para coleta" 40 px em 450 px), s14 (linhas do extrato a 36 px em 692 px); cliente s3 (nome a 48 px) e s4 ("Saiu para entrega" a 72 px, nowrap, em 741 px). Se estourar, devolver o quadro | Todos |
 
 ## V2.3 Foto real (opcional) e técnico
 

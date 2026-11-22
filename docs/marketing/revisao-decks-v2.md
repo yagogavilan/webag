@@ -1,60 +1,62 @@
-# Autocrítica das apresentações v2 (antes do render)
+# Autocrítica das apresentações v2.1 (após a avaliação da estrategista)
 
-Autor: product-designer | Data: 2026-11-22 | Critério (direção criativa §5): "o dono da loja / o cliente continuaria lendo?". Nota de interesse de 1 a 5. Regra: nota abaixo de 4 foi reescrita antes de entregar (a nota final já é a da versão entregue; a nota inicial aparece quando mudou).
-Limite desta revisão: **não renderizei** (sem Bash). Notas são de leitura do layout calculado; o CEO deve refazer a nota com o PDF na mão. Captura 1x ampliada pode derrubar os slides 4 e 14 do lojista e 4 e 5 do cliente em meio ponto.
+Autor: product-designer | Data: 2026-11-22 | Critério: rubrica `avaliar-post` (gancho 25%, ideia 15%, identificação 15%, prova 15%, miniatura 10%, CTA 10%, autenticidade 10%). Parecer de origem: `avaliacoes/2026-11-22-apresentacao-lojista.md` (Parte 1 = 3,9) e `...-cliente.md` (3,4).
+**Limite que não some:** não renderizei (sem Bash) e a v2 foi reprovada justamente porque as minhas notas eram otimistas. As notas abaixo são **estimativas minhas, sem render e sem público**: a estrategista refaz. Onde o ponto é frágil, está dito. Pendências e riscos de quebra de linha: `pendencias.md` V2.4.
 
-## Lojista, parte 1 "A conversa" (palavras por slide entre parênteses; meta: até 25)
+## O que mudou (por pedido do parecer)
 
-| # | O que o dono da loja sente em 3 segundos | Nota |
-|---|---|---|
-| 1 Capa "Venda além da sua rua." (9) | "Isso é pra mim: minha loja, minha rua." Gancho de alcance; a fachada ilustrada ajuda, com foto da própria rua do dono seria 5 | 4 |
-| 2 Dor "Só retirando, tá?" (17) | "Eu falo isso todo dia." Reconhecimento imediato; a frase final ("já custou?") cutuca sem acusar | 5 |
-| 3 Virada "Você separa. O Webag leva." (5) | "Então eu só separo?" Alívio e curiosidade; ilustrações pequenas, o peso está na tipografia | 4 |
-| 4 Pedido "Chegou pedido." (13 + UI) | "É isso que vai aparecer no meu celular, e é um botão só." Tela real grande; ressalva: captura 1x ampliada 2,5x | 4 |
-| 5 Dinheiro "Vendeu R$ 100? cerca de R$ 80, cai na sua conta" (25 com os números) | "Entendi a conta sem calculadora, e não tem mensalidade." Honesto sobre comissão e tarifa; o 15% [HIPÓTESE] está rotulado | 4 |
-| 6 Dúvidas (quatro respostas de 1 a 2 palavras) (26) | "Minhas quatro desculpas já estão respondidas." Quadrantes de cor, resposta gigante | 4 |
-| 7 Próximo passo "Seu nome na lista de abertura." (24 + campos) | "Eu entro na lista e já anoto aqui." **Nota inicial 3**: cinco blocos (título, linhas, cartão com 4 contatos, nota legal, adesivo) competiam. Reescrito: contato caiu de 4 para 3 linhas (sai "Site"), nota legal subiu para perto do cartão. Ainda é o slide mais denso | 4 |
-
-Contagem: 9, 17, 5, 13, 25, 26, 24 palavras. O slide 6 passa 1 palavra da meta e o 7 tem rótulos de campo; mantive porque cortar mais tira a resposta ou o contato.
-
-## Lojista, divisor e parte 2 "Guia de início" (visual, consulta depois)
-
-| # | O que o dono da loja sente em 3 segundos | Nota |
-|---|---|---|
-| 8 Divisor "2 / Guia de início." | "Acabou a conversa, agora é o passo a passo." Um "2" gigante lima separa as partes sem precisar ler | 4 |
-| 9 Cadastrar | "Cadastro curto, já sei que documentos levar." Captura grande do cadastro com "leva cerca de 10 minutos" e dois cartões de documento; é o slide mais cheio da parte 2 | 4 |
-| 10 Aprovação | "Alguém confere e me avisa o que falta." Três estágios em cartões de cor, sem captura (a tela de revisão existente mostra CPF e endereço) | 4 |
-| 11 Produtos | "Só foto, nome e preço; dá pra pausar." Captura com o botão "Vendendo" destacado. Mostra produtos de alimento do seed (K2 em `pendencias.md`) | 4 |
-| 12 "10 minutos para aceitar" | "Tenho que olhar o painel, mas é rápido." Número gigante; [HIPÓTESE] do prazo (V4) | 4 |
-| 13 "Pronto? Marque." | "Aperto um botão e o motoboy vem." Botão real em destaque; 2,95x de ampliação é o ponto mais macio do deck | 4 |
-| 14 "Veja quanto você recebe." | "Consigo conferir o que entrou." Financeiro real com "Você recebe" em destaque; fecha com o WhatsApp do Yago | 4 |
-
-## Cliente (8 slides)
-
-| # | O que o cliente sente em 3 segundos | Nota |
-|---|---|---|
-| 1 Capa "Aquela loja que você gosta agora entrega." | "Qual loja? Ah, aquela." Promessa no primeiro olhar; símbolo da marca como único ornamento | 4 |
-| 2 "Não entrega." | "É verdade, a loja que eu gosto nunca entregou." Reconhecimento em 2 palavras gigantes; fachada ilustrada com adesivo "Só no balcão." | 4 |
-| 3 "Agora ela entrega." | "Então agora eu peço?" Bloco lima, resposta curta; sacola na porta como prova | 4 |
-| 4 "Ela está no app." | "É a loja de verdade, com a taxa visível." Tela real grande da loja; é uma farmácia de seed (K3) e a faixa de tempo está coberta | 4 |
-| 5 "Acompanhe até a sua porta." | "Vou saber onde está meu pedido." Cartão real do acompanhamento; o "Veja no app" no lugar do horário é o ponto fraco | 4 |
-| 6 "Compre com tranquilidade" | "Troca e cartão protegido, ok." **Nota inicial 3**: dois cartões com ícone pequeno e texto médio, sem energia. Reescrito em duas metades de cor cheia, ícone de 320 px e frase de 80 a 100 px; segue discreto de propósito (troca e segurança são uma linha cada, regra do posicionamento) | 4 |
-| 7 "Em breve no seu celular." | "Quando eu baixo?" Tela de início real e as duas lojas de aplicativos com "em breve", sem data | 4 |
-| 8 "Acompanhe a abertura." | "Onde eu sigo?" Contato; o cartão lima "Tem uma loja?" aproveita a visita para recrutar lojista | 4 |
-
-## O que a v2 corrige do diagnóstico da v1 (direção criativa §1)
-
-| Falha da v1 | Como a v2 responde |
+| Parecer | Aplicado |
 |---|---|
-| Catálogo de funções | Conversa em 7 passos (dor, virada, prova, dinheiro, dúvidas, ação) e história em 8 para o cliente |
-| Método de pagamento como diferencial | Nenhum título nem destaque fala de PIX, cartão ou Mercado Pago. Aparecem só: "tarifa de pagamento" como desconto do exemplo, "conecte sua conta Mercado Pago" como passo do cadastro, "não guarda os dados do seu cartão" como segurança |
-| Texto pequeno, celular minúsculo | Menor texto: 32 px (notas legais 24 px); títulos de 112 a 760 px; capturas recortadas em 2x a 3x |
-| Manual | 7 slides de conversa antes de qualquer tela; guia só na parte 2 |
-| Sem gancho emocional | Frase real do dono ("Só retirando, tá?"), alívio ("Você separa. O Webag leva."), reconhecimento do cliente ("Não entrega.") |
+| Lojista: a conversa "Só retirando, tá?" é o melhor slide e estava enterrada | Agora é o **slide 1** (gancho); "Venda além da sua rua." virou o slide 2 (capa com tese) |
+| Lojista: cartão do pedido com "WB-DM002", "Pago no app", seed; Parte 2 com Bolo/Pão/Suco, R$ 59,90 de seed | Cartões **desenhados** em HTML/CSS na marca, rótulo "Exemplo", loja de moda e casa, valores redondos (s4, s11, s13, s14). Sem código, sem horário, sem pagamento, sem comida. Cartão do s4 ocupa 890x640 de 1920x1080 |
+| Lojista: "Sem mensalidade" e "Troca? Organizada no painel" sem confirmação | Atrás de `flags` em `config.json` (padrão `false`); troca sai e entra "Como vejo o que ganhei? Extrato no painel." (existe no painel) |
+| Lojista: "Retire na loja." lê como ordem | "O cliente retira na loja." |
+| Lojista s7: contato vazio, sem pessoa, ação dupla | Uma ação (com WhatsApp: "Mande “quero entrar” no WhatsApp."; sem: "Escreva ao lado. O Yago chama você."), "Fale com o Yago. Estou montando o Webag.", linhas à mão mantidas, e-mail só se preenchido. A coluna estava com texto branco sobre o cartão branco (sobreposição); agora é em fluxo |
+| Cliente: abrir pela dor e virar | Slide 1 "Aquela loja que você adora. Não entrega." (uniformiza "adora"); slide 2 "Agora ela entrega." (a capa antiga e a virada eram redundantes e foram fundidas) |
+| Cliente: s4 e s5 com farmácia de seed, 3,8 estrelas, "Veja no app" cobrindo horário | Cartão da loja ("Sua loja favorita", moda e casa, taxa R$ 8,00, 3 produtos) e linha do tempo desenhados; sem nota, sem avaliações, sem previsão, sem remendo |
+| Cliente: s6 "Compre com tranquilidade" e menções a cartão/troca | Cortado, junto com os dois cartões "Em breve" das lojas de aplicativos. Nenhuma palavra sobre pagamento no cliente |
+| Cliente: CTA com contatos vazios e duas ações | Uma ação: "Siga @webag no Instagram."; "Tem uma loja? Fale com o Yago." virou rodapé; WhatsApp à mão se vazio; site e e-mail só se preenchidos |
+| Texto abaixo de 32 px | Zerado: notas legais de 24 px subiram para 32; a nota do exemplo de venda foi encurtada para caber em 2 linhas |
+
+## Lojista, Parte 1 "A conversa" (estimativa por slide, 1 a 5)
+
+| # | O que o dono sente em 3 s | Nota | Ponto frágil |
+|---|---|---|---|
+| 1 WhatsApp "Tem no 38? / Só retirando, tá?" | "Eu falo isso todo dia." Gancho de 1 s, na voz dele, com a dor em venda perdida | 5 | Nenhum visual de produto, e não precisa |
+| 2 "Venda além da sua rua." (capa com tese) | A resposta à pergunta do slide 1; alcance | 4 | Fachada vetorial é genérica; com foto da rua do dono (IF6) vira 5 |
+| 3 "Você separa. O Webag leva." | Alívio; é a oferta | 4 | Frase depende do parecer J8 (V14): bloqueia impressão |
+| 4 "Chegou pedido." | "É isso que vai aparecer, e é um toque." Cartão escuro grande, texto de 38 a 68 px, "Aceitar pedido" em lima | 4 | É réplica desenhada e rotulada "Exemplo", não captura real: a "prova do produto" fica em 3 na rubrica até existir captura 2x neutra |
+| 5 "Vendeu R$ 100? cerca de R$ 80" | Entendeu a conta sem calculadora | 4 | 15% e 4,98% seguem `[HIPÓTESE]` (nota de 32 px); sem a tag "Sem mensalidade" o slide fica mais vazio embaixo, mas honesto |
+| 6 Quatro dúvidas | "Minhas desculpas estão respondidas." Respostas confirmadas | 4 | O 4º quadrante é "Extrato no painel", menos forte que "Troca?"; o dono pode perguntar de troca (anotar na visita) |
+| 7 "Seu nome na lista de abertura." | Uma ação e uma pessoa ("Estou montando o Webag.") | 4 | **Condicional**: com WhatsApp do Yago vazio o slide ainda funciona na porta (escrever ao lado), mas por WhatsApp/PDF enviado seria 3. Preencher V9 |
+
+Deck, Parte 1 (estimativa): gancho 5 · ideia 4 · identificação 5 · prova 3 · miniatura 4 · CTA 4 · autenticidade 4 = **4,25**. Sem trava: sem pagamento como argumento, sem prazo/superlativo novo, sem emoji/degradê, sem seed nem horário, J8 registrado em V5 e V14. O que o derruba: prova 3 (réplica) e s7 sem contato.
+
+## Lojista, divisor e Parte 2 (consulta; fora da nota)
+
+| # | Estado |
+|---|---|
+| 8 Divisor, 9 Cadastrar, 10 Aprovação | Sem mudança. O s9 mantém a captura do cadastro (sem seed) |
+| 11 Produtos | Cartão desenhado com camiseta, vaso, calça; chips "Vendendo"/"Pausado" (texto, não só cor); anel no "Pausado" |
+| 12 "10 minutos" | Sem mudança; número `[HIPÓTESE]` (V4) |
+| 13 "Pronto? Marque." | Cartão "Em separação, 2 itens · R$ 188,00" com botão "Pronto para coleta"; "O motoboy do Webag busca" segue em V5 |
+| 14 Financeiro | Cartão "exemplo" coerente com o s5; fecha com "Mande “quero entrar” no WhatsApp:" e o número (ou linha à mão) |
+
+## Cliente (5 slides, estimativa)
+
+| # | O que o cliente sente em 3 s | Nota | Ponto frágil |
+|---|---|---|---|
+| 1 "Aquela loja que você adora. Não entrega." | "É verdade." Dor em duas palavras gigantes | 5 | Fachada vetorial genérica |
+| 2 "Agora ela entrega." | Resposta limpa, tag "Em breve" | 4 | J8 (V14) |
+| 3 "Ela está no app." | "A loja, o preço e a taxa, claros." Sem seed | 4 | Réplica desenhada ("Exemplo"); "Taxa de entrega R$ 8,00" também depende de J8 |
+| 4 "Acompanhe até a sua porta." | Linha do tempo com etapa atual em destaque e "Falar com a loja"; sem horário | 4 | Réplica; "Saiu para entrega" depende de J8 |
+| 5 "Saiba quando abre." | Uma ação: seguir | 3 a 4 | Handle `@webag` é provisório (IF1); sem contato validado, o CTA é o ponto mais fraco do deck |
+
+Deck (estimativa): gancho 5 · ideia 5 · identificação 4 · prova 3 · miniatura 4 · CTA 3 · autenticidade 3 = **4,05**. Está na margem: se a estrategista pontuar CTA ou autenticidade um ponto abaixo, volta para 3,9. O que mais subiria a nota é fora do meu alcance: fotos reais (IF6), o usuário real do Instagram e capturas 2x neutras.
 
 ## Riscos que a revisão não resolve
 
-1. Sem render: quebras de linha e alinhamento fino podem exigir uma rodada (lista em `pendencias.md` V2.3).
-2. Captura 1x e dados de seed de alimento (K1, K2): a maior queda de qualidade está aqui, não no layout.
-3. "Entrega pelo Webag" depende do parecer jurídico (V5); as duas ideias centrais assumem isso.
-4. O deck vende a promessa, mas não há loja real nem foto real: com foto de fachada do dono (slide 1) e captura com produto de moda, as notas 4 viram 5.
+1. Sem render: quebras de linha e alinhamento fino podem pedir uma rodada (`pendencias.md` V19).
+2. Os cartões desenhados são réplicas fiéis ao layout, não prova de produto real; troca por captura 2x quando `src/capturas/` existir (não existia em 2026-11-22).
+3. J8 (entrega pelo Webag) sustenta o slide 3 do lojista e os slides 2 a 4 do cliente; nada imprime nem sai antes do parecer e do G5.
+4. Contatos: WhatsApp, usuário real do Instagram e e-mail vazios; sem eles os CTAs perdem metade da força.

@@ -7,8 +7,12 @@
 <title>Webag para lojistas</title>
 <link rel="stylesheet" href="base.css">
 <!--
-  APRESENTAÇÃO DO LOJISTA, v2 (refeita do zero; a v1 foi reprovada: "não gera interesse").
+  APRESENTAÇÃO DO LOJISTA, v2.1 (aplica a avaliação da estrategista de 2026-11-22; a v1 foi reprovada: "não gera interesse").
   Parte 1 "A conversa" = slides 1 a 7 (vende, lida em 3 minutos na porta da loja). Slide 8 = divisor. Parte 2 "Guia de início" = slides 9 a 14.
+  v2.1: (1) o WhatsApp "Só retirando, tá?" é o slide 1 (gancho) e "Venda além da sua rua." o 2 (capa com tese);
+  (2) "Sem mensalidade" e "Troca? Organizada no painel" só aparecem com flags true em config.json (padrão false; o fundador liga ao confirmar);
+  (3) cartões de pedido, produtos, coleta e financeiro são DESENHADOS em HTML/CSS (loja de moda/casa, valores redondos, rótulo "Exemplo"):
+      sem seed de comida, sem "WB-DM002", sem "Pago no app", sem horário; (4) CTA com instrução de uma ação; (5) nenhum texto abaixo de 32 px.
 
   OPÇÕES DE TÍTULO PARA A CAPA (escolhida: 1; as outras 5 foram descartadas)
    1. "Venda além da sua rua."        ESCOLHIDA. 5 palavras, lê em 2 s, promete resultado (alcance) e não função; "rua" é o mundo dele.
@@ -23,8 +27,9 @@
   <img id="foto-slot" src="assets/foto-fachada.jpg" alt="Fachada de uma loja parceira" style="width:100%;height:100%;object-fit:cover">
   e apague o estilo "left/top/width/height" do img (a foto passa a preencher o bloco inteiro). A foto precisa de autorização de uso de imagem do dono da loja.
 
-  CAPTURAS: as telas vêm de docs/telas (captura de 2026-11-20, 1x). Quando existir docs/marketing/src/capturas/ em alta resolução, troque só CAP_BASE
-  no script do fim do arquivo (mesmos nomes de arquivo). Os blocos .patch cobrem dado de demonstração e foram calibrados para as capturas atuais.
+  CAPTURAS: só o slide 9 (cadastro, sem dado de seed) ainda usa captura de docs/telas (2026-11-20, 1x). Os slides 4, 11, 13 e 14 usam cartões
+  desenhados (.xcard). Quando existir docs/marketing/src/capturas/ em 2x com loja de moda/casa, troque CAP_BASE no script do fim do arquivo e,
+  se quiser, substitua cada .xcard por um .shotwrap com <img data-cap="..."> (recortes anteriores no histórico do git).
 -->
 </head>
 <body>
@@ -53,8 +58,17 @@
 
 <!-- ============ PARTE 1: A CONVERSA ============ -->
 
-<!-- 1. CAPA-GANCHO -->
-<section class="slide roxo" id="s01" aria-label="Capa">
+<!-- 1. A DOR, NA VOZ DELE (gancho: abre o deck, avaliação 2026-11-22) -->
+<section class="slide noite" id="s01" aria-label="A dor do lojista: a conversa de WhatsApp">
+  <div class="bub in" style="left:120px;top:100px">Tem no 38?</div>
+  <div class="bub in" style="left:120px;top:262px">Moro longe. Dá pra entregar?</div>
+  <div class="bub out" style="right:120px;top:464px">Só retirando, tá?</div>
+  <h1 class="d" style="left:120px;top:812px;font-size:80px;width:1680px;letter-spacing:-.03em">Quantas vendas essa frase <span class="mark">já custou?</span></h1>
+  <div class="foot"><img src="assets/webag-logo-branca.svg" alt="Webag"></div>
+</section>
+
+<!-- 2. CAPA COM TESE (vem depois do gancho) -->
+<section class="slide roxo" id="s02" aria-label="Capa: venda além da sua rua">
   <div class="clip">
     <!-- Bloco diagonal (inclinação da marca, 8 graus) = espaço da foto -->
     <div class="abs" style="left:1108px;top:0;width:812px;height:1080px;background:var(--noite);clip-path:polygon(152px 0,812px 0,812px 1080px,0 1080px)">
@@ -65,15 +79,6 @@
   <h1 class="d" style="left:120px;top:236px;width:1000px;font-size:196px;line-height:.98">Venda<br><span class="mark">além</span> da<br>sua rua.</h1>
   <span class="tag" style="left:120px;top:896px">Em breve</span>
   <p class="kick" style="left:400px;top:911px">Para lojistas</p>
-</section>
-
-<!-- 2. A DOR, NA VOZ DELE -->
-<section class="slide noite" id="s02" aria-label="A dor do lojista">
-  <div class="bub in" style="left:120px;top:100px">Tem no 38?</div>
-  <div class="bub in" style="left:120px;top:262px">Moro longe. Dá pra entregar?</div>
-  <div class="bub out" style="right:120px;top:464px">Só retirando, tá?</div>
-  <h1 class="d" style="left:120px;top:812px;font-size:80px;width:1680px;letter-spacing:-.03em">Quantas vendas essa frase <span class="mark">já custou?</span></h1>
-  <div class="foot"><img src="assets/webag-logo-branca.svg" alt="Webag"></div>
 </section>
 
 <!-- 3. A VIRADA -->
@@ -92,14 +97,22 @@
   <h1 class="d" style="left:120px;top:190px;width:760px;font-size:168px;line-height:1.02">Chegou<br>pedido.</h1>
   <p class="d" style="left:120px;top:590px;width:700px;font-size:80px;line-height:1.05;letter-spacing:-.03em">Aceite com<br>um toque.</p>
   <span class="pill" style="left:120px;top:800px">O painel avisa com som</span>
-  <!-- Recorte: card do pedido novo (painel no celular, 20-lojista-pedidos-novos-mobile). Origem 17,314 (1x), 356x268, escala 2,5 -->
-  <div class="shotwrap" style="left:900px;top:190px;width:890px;height:670px;border-radius:50px">
-    <div class="shot">
-      <img data-cap="20-lojista-pedidos-novos-mobile" alt="Painel do lojista: pedido novo com os botões Aceitar pedido e Recusar" style="width:975px;left:-42.5px;top:-785px">
-      <!-- cobre a idade do pedido (dado de demonstração: "há 19 min" contradiz o prazo de aceite) -->
-      <div class="patch" style="left:520px;top:118px;width:370px;height:68px;background:var(--noite);justify-content:flex-end;padding-right:42px;font:800 36px/1 var(--txt);color:var(--lima)">Novo</div>
-      <!-- cobre o nome do produto de demonstração (alimento do seed) -->
-      <div class="patch" style="left:32px;top:298px;width:640px;height:74px;background:var(--noite);padding-left:8px;font:400 38px/1 var(--txt);color:#fff">1 item</div>
+  <!-- Cartão ILUSTRATIVO do pedido novo, desenhado na marca a partir do painel real (cartão escuro, "Aceitar pedido" em lima, "Recusar" vazado).
+       Sem código de pedido, sem horário, sem forma de pagamento. Rótulo "Exemplo" obrigatório. -->
+  <div class="xcard dk" role="group" aria-label="Exemplo de pedido novo no painel: Camiseta básica M, R$ 59,00, e Calça jeans 40, R$ 129,00, total R$ 188,00, com os botões Aceitar pedido e Recusar" style="left:900px;top:190px;width:890px;height:640px">
+    <span class="xtag">Exemplo</span>
+    <div>
+      <p class="dd" style="font-size:68px">Pedido novo</p>
+      <p style="font:600 38px/1.2 var(--txt);color:var(--n300);margin-top:8px">2 itens</p>
+    </div>
+    <div>
+      <div class="xline"><span>Camiseta básica M</span><b>R$ 59,00</b></div>
+      <div class="xline" style="margin-top:20px"><span>Calça jeans 40</span><b>R$ 129,00</b></div>
+      <div class="xline" style="margin-top:26px;padding-top:24px;border-top:3px solid var(--n700)"><span style="font-weight:800">Total</span><b style="font-size:56px">R$ 188,00</b></div>
+    </div>
+    <div style="display:flex;gap:20px">
+      <span class="xbtn pri" style="flex:1.35">Aceitar pedido</span>
+      <span class="xbtn sec" style="flex:1">Recusar</span>
     </div>
   </div>
   <span class="stk" style="left:1560px;top:104px;transform:rotate(6deg)">Um toque.</span>
@@ -119,8 +132,9 @@
     <li><i class="mk" style="background:var(--noite)"></i><span class="lb">comissão do Webag</span><span class="vl">− R$ 15</span></li>
     <li><i class="mk" style="background:var(--lima)"></i><span class="lb">tarifa de pagamento</span><span class="vl">− até R$ 5</span></li>
   </ul>
-  <span class="tag" style="left:120px;top:866px">Sem mensalidade</span>
-  <p style="position:absolute;left:120px;top:962px;width:820px;font:600 24px/1.35 var(--txt);color:var(--n600)">Exemplo ilustrativo: comissão de 15% e tarifa de pagamento de até 4,98%. Condições finais definidas no cadastro.</p>
+  <!-- Só aparece com flags.semMensalidade = true em config.json (o fundador confirma por escrito: V1) -->
+  <span class="tag off" data-flag="semMensalidade" style="left:120px;top:846px">Sem mensalidade</span>
+  <p style="position:absolute;left:120px;top:940px;width:840px;font:600 32px/1.3 var(--txt);color:var(--n600)">Exemplo: comissão de 15% e tarifa de pagamento de até 4,98%. Condições finais no cadastro.</p>
   <p style="position:absolute;left:1170px;top:206px;font:700 56px/1 var(--txt);color:#fff">cerca de</p>
   <p class="dd nw" style="position:absolute;left:1170px;top:282px;font-size:204px;color:#fff">R$ 80</p>
   <div class="stk" style="left:1170px;top:600px;font-size:84px;line-height:1.02;padding:28px 40px;transform:rotate(-3deg);white-space:normal;width:560px;box-shadow:8px 8px 0 var(--noite)">cai na sua conta.</div>
@@ -135,16 +149,21 @@
   </div>
   <div class="quad" style="left:960px;top:0;background:var(--noite);color:#fff">
     <p class="qq">Não quero entregar.</p>
-    <h2 class="aa lima-t">Retire<br>na loja.</h2>
+    <h2 class="aa lima-t" style="font-size:104px">O cliente<br>retira<br>na loja.</h2>
   </div>
   <div class="quad" style="left:0;top:540px;background:var(--lima);color:var(--noite)">
     <p class="qq">Não entendo de sistema.</p>
     <h2 class="aa">Guiado.</h2>
     <p class="ss">Cerca de 10 min.</p>
   </div>
-  <div class="quad" style="left:960px;top:540px;background:var(--papel);color:var(--noite)">
+  <!-- 4º quadrante: só com flags.trocaNoPainel = true entra "Troca?"; senão, a resposta que o painel já faz (Financeiro com extrato) -->
+  <div class="quad off" data-flag="trocaNoPainel" style="left:960px;top:540px;background:var(--papel);color:var(--noite)">
     <p class="qq">Troca?</p>
     <h2 class="aa acao-t">Organizada<br>no painel.</h2>
+  </div>
+  <div class="quad" data-noflag="trocaNoPainel" style="left:960px;top:540px;background:var(--papel);color:var(--noite)">
+    <p class="qq">Como vejo o que ganhei?</p>
+    <h2 class="aa acao-t" style="font-size:120px">Extrato<br>no painel.</h2>
   </div>
 </section>
 
@@ -156,15 +175,26 @@
   <div class="abs" style="left:120px;top:690px;width:900px;background:var(--lima);border-radius:32px;padding:44px 48px">
     <div class="fill"><span>Seu nome</span><i></i></div>
     <div class="fill"><span>Sua loja</span><i></i></div>
-    <div class="fill"><span>WhatsApp</span><i></i></div>
+    <div class="fill"><span>Seu WhatsApp</span><i></i></div>
   </div>
-  <div class="contact" style="left:1100px;top:110px;width:700px">
-    <h3>Fale com o Yago</h3>
-    <div class="crow" data-cfg="whatsapp"><span class="lbl">WhatsApp</span><span class="val"></span></div>
-    <div class="crow" data-cfg="instagram"><span class="lbl">Instagram</span><span class="val"></span></div>
-    <div class="crow" data-cfg="email"><span class="lbl">E-mail</span><span class="val"></span></div>
+  <!-- Coluna da direita em fluxo (sem sobreposição): uma ação, quem é o Yago, contatos, nota de uso do contato -->
+  <div class="abs" style="left:1100px;top:96px;width:700px;display:flex;flex-direction:column;gap:28px">
+    <!-- Uma ação. Com WhatsApp no config.json: "Mande quero entrar". Sem: escrever à mão na lista ao lado -->
+    <div data-show-if="whatsapp" class="off" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:36px 44px">
+      <p class="dd" style="font-size:56px;line-height:1.06">Mande “quero entrar” no WhatsApp.</p>
+    </div>
+    <div data-hide-if="whatsapp" style="background:var(--lima);color:var(--noite);border-radius:32px;padding:36px 44px">
+      <p class="dd" style="font-size:56px;line-height:1.06">Escreva ao lado. O Yago chama você.</p>
+    </div>
+    <div class="contact" style="position:static;padding:44px 52px">
+      <h3>Fale com o Yago</h3>
+      <p class="sub">Estou montando o Webag.</p>
+      <div class="crow" data-cfg="whatsapp"><span class="lbl">WhatsApp</span><span class="val"></span></div>
+      <div class="crow" data-cfg="instagram"><span class="lbl">Instagram</span><span class="val"></span></div>
+      <div class="crow off" data-cfg="email" data-opt><span class="lbl">E-mail</span><span class="val"></span></div>
+    </div>
+    <p style="font:600 32px/1.3 var(--txt);color:#fff">Usamos seu contato só para avisar da abertura do cadastro.</p>
   </div>
-  <p style="position:absolute;left:1100px;top:610px;width:700px;font:600 24px/1.35 var(--txt);color:#fff">Usamos seu contato só para avisar da abertura do cadastro.</p>
 </section>
 
 <!-- ============ DIVISOR ============ -->
@@ -234,11 +264,23 @@
     <li>Muitos? Importe por planilha.</li>
     <li>Preço final: a comissão já está dentro.</li>
   </ul>
-  <!-- Recorte: lista de produtos no celular (21-lojista-produtos-mobile). Origem 0,383 (1x), 390x300, escala 2,2. Sangra pela direita -->
-  <div class="shotwrap nosh" style="left:1062px;top:190px;width:858px;height:660px;border-radius:48px 0 0 48px">
-    <div class="shot" style="background:var(--papel)">
-      <img data-cap="21-lojista-produtos-mobile" alt="Lista de produtos do painel com o botão Vendendo para pausar cada item" style="width:858px;left:0;top:-842.6px">
-      <div class="ring" style="left:526px;top:10px;width:312px;height:92px"></div>
+  <!-- Cartão ILUSTRATIVO da lista de produtos (loja de moda e casa, preços redondos). Sangra pela direita. Chip "Vendendo"/"Pausado": texto + ícone, não só cor -->
+  <div class="xcard nosh" role="group" aria-label="Exemplo de lista de produtos: Camiseta básica M, R$ 59,00, vendendo; Vaso de cerâmica, R$ 45,00, vendendo; Calça jeans 40, R$ 129,00, pausado" style="left:1062px;top:190px;width:858px;height:660px;border-radius:48px 0 0 48px;border-right:0;padding:56px 48px 40px 52px;justify-content:space-between">
+    <span class="xtag" style="top:-30px;left:52px">Exemplo</span>
+    <div class="xrow">
+      <span class="xsw" style="background:var(--lima)"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 8 6 14l4 8 4-2v20h20V20l4 2 4-8-8-6q-10 6-20 0Z" fill="#1C1721"/></svg></span>
+      <div class="xnm"><b>Camiseta básica M</b><span>R$ 59,00</span></div>
+      <span class="xchip on">Vendendo</span>
+    </div>
+    <div class="xrow">
+      <span class="xsw" style="background:var(--n200)"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 6h12l-2 9q10 6 8 17-2 10-12 10T12 32q-2-11 8-17Z" fill="#1C1721"/></svg></span>
+      <div class="xnm"><b>Vaso de cerâmica</b><span>R$ 45,00</span></div>
+      <span class="xchip on">Vendendo</span>
+    </div>
+    <div class="xrow">
+      <span class="xsw" style="background:var(--n200)"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 6h20l2 36h-9l-3-22-3 22h-9Z" fill="#1C1721"/></svg></span>
+      <div class="xnm"><b>Calça jeans 40</b><span>R$ 129,00</span></div>
+      <span class="xchip off2" style="position:relative">Pausado<span class="ring" style="left:-16px;top:-14px;right:-16px;bottom:-14px;border-radius:44px"></span></span>
     </div>
   </div>
   <span class="stk" style="left:1010px;top:800px;transform:rotate(-4deg)">Pause com um toque.</span>
@@ -272,12 +314,14 @@
   <h1 class="d" style="left:120px;top:176px;width:780px;font-size:190px;line-height:1.02">Pronto?<br>Marque.</h1>
   <p class="l" style="left:120px;top:640px;width:620px;font-size:48px">O motoboy do Webag busca na loja.</p>
   <div class="tile" style="left:1380px;top:120px;width:380px;height:380px;transform:rotate(4deg)"><img src="assets/etapa-a-caminho.svg" alt="Ilustração: moto do Webag com a sacola"></div>
-  <!-- Recorte: preço e botão "Pronto para coleta" (20-lojista-pedidos-novos-desktop, card Em separação). Origem 688,603 (1x), 337x107, escala 2,95 -->
-  <div class="shotwrap" style="left:820px;top:600px;width:994px;height:316px;border-radius:40px">
-    <div class="shot" style="background:#EFECF2">
-      <img data-cap="20-lojista-pedidos-novos-desktop" alt="Pedido em separação com o botão Pronto para coleta" style="width:4248px;left:-2029.6px;top:-1778.9px">
-      <div class="ring" style="left:30px;top:128px;width:930px;height:182px"></div>
+  <!-- Cartão ILUSTRATIVO "em separação" com o botão Pronto para coleta (valores redondos, sem código, sem horário) -->
+  <div class="xcard" role="group" aria-label="Exemplo de pedido em separação, 2 itens, R$ 188,00, com o botão Pronto para coleta" style="left:820px;top:600px;width:994px;height:316px;border-radius:40px;flex-direction:row;align-items:center;gap:36px;padding:40px 48px">
+    <span class="xtag">Exemplo</span>
+    <div style="flex:1">
+      <p class="dd" style="font-size:56px">Em separação</p>
+      <p style="font:600 40px/1.2 var(--txt);color:var(--n700);margin-top:10px;font-variant-numeric:tabular-nums">2 itens · R$ 188,00</p>
     </div>
+    <span class="xbtn acao" style="flex:none;width:450px;font-size:40px;position:relative">Pronto para coleta<span class="ring" style="left:-14px;top:-14px;right:-14px;bottom:-14px"></span></span>
   </div>
   <div class="foot"><img src="assets/webag-logo.svg" alt="Webag"></div>
 </section>
@@ -288,30 +332,45 @@
   <div class="prog" style="left:120px;top:116px"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
   <h1 class="d" style="left:120px;top:186px;width:900px;font-size:130px;line-height:1.02">Veja quanto<br>você recebe.</h1>
   <p class="l" style="left:120px;top:490px;width:820px">Vendas, comissão e o que cai na sua conta, com extrato.</p>
-  <p class="l" style="left:120px;top:800px;width:820px;font-size:40px">Dúvidas? WhatsApp do Yago</p>
-  <p class="d lima-t" style="left:120px;top:864px;width:820px;font-size:64px;letter-spacing:-.02em" data-cfg-text="whatsapp" data-fallback="(__) _____-____">(__) _____-____</p>
-  <!-- Recorte: Financeiro no celular (25-lojista-financeiro-mobile). Origem 16,366 (1x), 358x410, escala 2,2 -->
-  <div class="shotwrap" style="left:1040px;top:90px;width:788px;height:902px;border-radius:48px">
-    <div class="shot">
-      <img data-cap="25-lojista-financeiro-mobile" alt="Financeiro: vendas, ticket médio e o valor que o lojista recebe" style="width:858px;left:-35.2px;top:-805.2px">
-      <div class="ring" style="left:6px;top:612px;width:776px;height:282px"></div>
+  <!-- Uma ação: com WhatsApp no config.json, "Mande quero entrar"; sem, linha para escrever à mão -->
+  <p class="l off" data-show-if="whatsapp" style="left:120px;top:780px;width:820px;font-size:40px">Pronto para começar? Mande “quero entrar” no WhatsApp:</p>
+  <p class="l" data-hide-if="whatsapp" style="left:120px;top:780px;width:820px;font-size:40px">Pronto para começar? Chame o Yago no WhatsApp:</p>
+  <p class="d lima-t" style="left:120px;top:896px;width:820px;font-size:64px;letter-spacing:-.02em" data-cfg-text="whatsapp" data-fallback="(__) _____-____">(__) _____-____</p>
+  <!-- Cartão ILUSTRATIVO do Financeiro: valores redondos, coerentes com o exemplo do slide 5 (R$ 1.000: comissão 15%, tarifa até 5%) -->
+  <div class="xcard" role="group" aria-label="Exemplo de financeiro: vendas R$ 1.000,00, comissão menos R$ 150,00, tarifa de pagamento menos até R$ 50,00, você recebe cerca de R$ 800,00" style="left:1040px;top:90px;width:788px;height:902px;border-radius:48px;padding:64px 48px 48px">
+    <span class="xtag">Exemplo</span>
+    <p class="dd" style="font-size:56px">Financeiro</p>
+    <div>
+      <p style="font:600 36px/1.2 var(--txt);color:var(--n600)">Vendas</p>
+      <p class="dd" style="font-size:80px;margin-top:6px">R$ 1.000,00</p>
+    </div>
+    <div>
+      <div class="xline" style="height:88px;border-bottom:3px solid var(--n200);align-items:center;font-size:36px"><span>Comissão do Webag</span><b style="font-size:36px">− R$ 150,00</b></div>
+      <div class="xline" style="height:88px;border-bottom:3px solid var(--n200);align-items:center;font-size:36px"><span>Tarifa de pagamento</span><b style="font-size:36px">− até R$ 50,00</b></div>
+    </div>
+    <div style="position:relative;background:var(--lima);border-radius:28px;padding:30px 36px">
+      <p style="font:800 36px/1.1 var(--txt)">Você recebe cerca de</p>
+      <p class="dd" style="font-size:96px;margin-top:8px">R$ 800,00</p>
+      <span class="ring" style="left:-14px;top:-14px;right:-14px;bottom:-14px;border-radius:38px"></span>
     </div>
   </div>
 </section>
 
 <script>
-/* Capturas: docs/telas hoje; trocar CAP_BASE quando as capturas em alta resolução existirem. */
+/* Capturas: só o slide 9 usa captura (docs/telas, sem dado de seed). Trocar CAP_BASE quando existir src/capturas/ em 2x. */
 var CAP_BASE = "../../telas/", CAP_EXT = ".png";
 
-/* Contato: lê config.json (ou window.__CONFIG injetado pelo render). Campo vazio = linha para escrever à mão. */
+/* Contato e flags: lê config.json (ou window.__CONFIG injetado pelo render). Campo vazio = linha para escrever à mão.
+   flags: itens ainda não confirmados pelo fundador (padrão false = não aparecem no PDF). Mesmos valores de config.json. */
 (function () {
-  var DEFAULTS = { nome: "Yago", whatsapp: "", instagram: "@webag", site: "", email: "" };
+  var DEFAULTS = { nome: "Yago", whatsapp: "", instagram: "@webag", site: "", email: "", flags: { semMensalidade: false, trocaNoPainel: false } };
   var injected = !!window.__CONFIG;
   var cfg = {};
   Object.keys(DEFAULTS).forEach(function (k) { cfg[k] = DEFAULTS[k]; });
   if (injected) Object.keys(window.__CONFIG).forEach(function (k) { cfg[k] = window.__CONFIG[k]; });
 
   function apply(c) {
+    var f = c.flags || {};
     var rows = document.querySelectorAll("[data-cfg]");
     for (var i = 0; i < rows.length; i++) {
       var v = String(c[rows[i].getAttribute("data-cfg")] || "").trim();
@@ -319,12 +378,24 @@ var CAP_BASE = "../../telas/", CAP_EXT = ".png";
       if (!el) continue;
       el.textContent = v;
       if (v) el.classList.remove("blank"); else el.classList.add("blank");
+      /* linha opcional (data-opt): some se o campo estiver vazio */
+      if (rows[i].hasAttribute("data-opt")) { if (v) rows[i].classList.remove("off"); else rows[i].classList.add("off"); }
     }
     var txt = document.querySelectorAll("[data-cfg-text]");
     for (var j = 0; j < txt.length; j++) {
       var t = String(c[txt[j].getAttribute("data-cfg-text")] || "").trim();
       txt[j].textContent = t || txt[j].getAttribute("data-fallback") || "";
     }
+    /* flags: aparece só se true (data-flag) ou só se false (data-noflag) */
+    var fl = document.querySelectorAll("[data-flag]");
+    for (var a = 0; a < fl.length; a++) { if (f[fl[a].getAttribute("data-flag")] === true) fl[a].classList.remove("off"); else fl[a].classList.add("off"); }
+    var nf = document.querySelectorAll("[data-noflag]");
+    for (var b = 0; b < nf.length; b++) { if (f[nf[b].getAttribute("data-noflag")] === true) nf[b].classList.add("off"); else nf[b].classList.remove("off"); }
+    /* contato presente (data-show-if) ou ausente (data-hide-if) */
+    var si = document.querySelectorAll("[data-show-if]");
+    for (var s = 0; s < si.length; s++) { if (String(c[si[s].getAttribute("data-show-if")] || "").trim()) si[s].classList.remove("off"); else si[s].classList.add("off"); }
+    var hi = document.querySelectorAll("[data-hide-if]");
+    for (var h = 0; h < hi.length; h++) { if (String(c[hi[h].getAttribute("data-hide-if")] || "").trim()) hi[h].classList.add("off"); else hi[h].classList.remove("off"); }
     window.__CONFIG = c;
   }
   apply(cfg);
