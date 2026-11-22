@@ -166,6 +166,11 @@ export const envSchema = z
      * `pinVerified=false`. Nunca aponte para o Nominatim público: a política dele proíbe o volume de endereços de clientes.
      */
     GEOCODER_URL: z.preprocess((v) => (v === '' ? undefined : v), z.url().optional()),
+    /**
+     * SEC-221: a API não emite cookies (quem emite é o BFF do web), mas o arquivo de ambiente costuma ser compartilhado. Existe só para o
+     * boot recusar, em produção, qualquer valor diferente de "true" (false, 0, vazio...). Sem o valor, não há o que recusar.
+     */
+    COOKIE_SECURE: z.string().optional(),
     /** Chave do provedor, enviada como `key=` na consulta (estilo LocationIQ). Vazio = sem chave. */
     GEOCODER_API_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(8).optional()),
   })
@@ -210,6 +215,8 @@ export const envSchema = z
     // ANTES da gravação do par novo: a loja perde a conta de recebimento. 0 (desligado) segue aceito; o valor de dev/teste é livre (o e2e usa 1 s).
     if (env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS > 0 && env.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS < 15_000)
       fail('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', 'em produção use 0 (desligado) ou, no mínimo, 15000 (o refresh OAuth mantém transação aberta durante a chamada ao Mercado Pago)');
+    // SEC-221: o web só liga Secure/`__Host-` com o texto exato "true"; falha aberta por variável copiada do ambiente local.
+    if (env.COOKIE_SECURE !== undefined && env.COOKIE_SECURE !== 'true') fail('COOKIE_SECURE', 'em produção não pode ser diferente de "true" (cookies de sessão perderiam Secure); remova a variável');
     if (env.TRUST_PROXY === undefined)
       fail('TRUST_PROXY', 'obrigatório em produção (nginx na frente = 1; sem proxy = 0). Sem ele o IP do cliente é perdido');
     // SEC-129: sem o segredo do BFF, todos os usuários do painel web compartilham o IP do BFF (limites por IP viram globais).

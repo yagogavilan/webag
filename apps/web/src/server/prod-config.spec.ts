@@ -16,6 +16,20 @@ describe('configuração de produção do web (SEC-172)', () => {
     expect(text).not.toContain('http://');
   });
 
+  it('SEC-221: recusa COOKIE_SECURE diferente de "true" em produção (false, 0, vazio, maiúsculas) e aceita ausente ou "true"', () => {
+    for (const value of ['false', 'FALSE', '0', '', ' ', 'no', 'off', 'True', 'true ']) {
+      const problems = productionConfigProblems({ ...good, COOKIE_SECURE: value });
+      expect(problems.join('\n')).toContain('COOKIE_SECURE');
+    }
+    expect(productionConfigProblems({ ...good, COOKIE_SECURE: 'true' })).toEqual([]);
+    expect(productionConfigProblems(good)).toEqual([]);
+    expect(productionConfigProblems({ NODE_ENV: 'development', COOKIE_SECURE: 'false' })).toEqual([]);
+  });
+
+  it('SEC-221: o escape de teste local (Playwright) continua valendo para COOKIE_SECURE=false', () => {
+    expect(productionConfigProblems({ NODE_ENV: 'production', WEBAG_ALLOW_LOCAL_ORIGINS: 'true', COOKIE_SECURE: 'false' })).toEqual([]);
+  });
+
   it('o escape de teste local só vale com a variável explícita', () => {
     expect(productionConfigProblems({ NODE_ENV: 'production', WEBAG_ALLOW_LOCAL_ORIGINS: 'true' })).toEqual([]);
   });

@@ -320,7 +320,7 @@ O modelo comentado é `infra/env.prod.example`. A API valida tudo no boot e **n�
 | `WEB_CLIENT_IP_HEADER` | web | Uma das duas | `x-real-ip`, que o nginx sobrescreve | Compose: já definida |
 | `WEB_TRUSTED_PROXY_HOPS` | web | Uma das duas | N-ésimo IP da direita do `X-Forwarded-For` (sem nginx; Caminho B) | Nº de proxies do provedor |
 | `STORAGE_ORIGIN` | web | Sim | Liberar o armazenamento no CSP para envio de fotos | = `S3_ENDPOINT` |
-| `COOKIE_SECURE` | web | Não | Padrão `true` em produção; não desligue | |
+| `COOKIE_SECURE` | web e API | Não | Deixe **sem definir** (padrão `true` em produção). Em produção, qualquer valor diferente de `true` (`false`, `0`, vazio, `True`) derruba o boot do web e da API (SEC-221). Só o teste local em modo produção usa `WEBAG_ALLOW_LOCAL_ORIGINS=true` no web | |
 | `WEB_TRUST_FORWARDED_HOST` | web | Não | Só `true` se um proxy sobrescrever `X-Forwarded-Host`. O nginx deste repositório não precisa | |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | web (build) | Não | WhatsApp de suporte exibido nos painéis; entra no JavaScript do navegador, então **muda só com novo build** | Número com DDI |
 | `API_HOST`, `FILES_HOST`, `LETSENCRYPT_EMAIL` | nginx, certbot | Sim (VPS) | Nomes e e-mail do certificado | |
