@@ -1,0 +1,14 @@
+  [info] 1500 requisições em 30.0 s (50/s): {"valid":{"200":1261},"invalid":{"401":87},"unknown":{"200":75},"expired":{"401":77}}
+PASS  S5-1 | nenhum 5xx nem erro de transporte na rajada  [{"valid":{"200":1261},"invalid":{"401":87},"unknown":{"200":75},"expired":{"401":77}}]
+PASS  S5-2 | assinatura inválida e notificação vencida = 401 sempre  [inválidas {"401":87}; vencidas {"401":77}]
+PASS  S5-3 | válida duplicada = 200 (idempotente)  [{"200":1261}]
+PASS  S5-4 | o ledger NÃO mudou com o reenvio (mesma contagem e mesma soma)  [antes 779|1831812; depois 779|1831812]
+PASS  S5-5 | cada pedido do lote segue com exatamente 1 tentativa aprovada  [aprovadas 20 -> 20 de 20]
+PASS  S5-6 | todos os pedidos do lote continuam em estado pago (received)  [received:20]
+PASS  S5-7 | corrida (30 notificações válidas + aprovação juntas): pedido vira received uma só vez, 1 tentativa aprovada, lançamentos únicos  [received=true; aprovadas=1; transições para received=1; transações do ledger do pedido=2; HTTP 200; ledger total 779 -> 784]
+
+RESUMO: 7 passaram, 0 falharam, 0 não testadas
+
+real	0m44.815s
+user	0m3.385s
+sys	0m0.766s

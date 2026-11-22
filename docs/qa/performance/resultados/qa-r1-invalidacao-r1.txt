@@ -1,0 +1,15 @@
+PASS  R1-A | admin PAUSA a loja: a página da loja mostra fechada em até 5 s  [HTTP 200 em 42 ms; refletiu em 26 ms]
+PASS  R1-A2 | admin REABRE a loja: volta a aparecer aberta em até 5 s  [HTTP 200; 24 ms]
+PASS  R1-B | admin renomeia a loja: o nome novo aparece na página em até 5 s  [HTTP 200; 34 ms]
+PASS  R1-C | lojista reajusta +10% em massa (R$ 5.99 -> 6.59): página e vitrine mostram o preço novo em até 5 s  [HTTP 200 em 46 ms; página 11 ms, vitrine 9 ms]
+PASS  R1-C2 | edição normal volta o preço: refletido em até 5 s  [HTTP 200; 6 ms]
+PASS  R1-D | lojista PAUSA o produto em massa: some da vitrine e a página fica indisponível em até 5 s  [HTTP 200; vitrine 4 ms, página 4 ms]
+PASS  R1-D2 | lojista REATIVA em massa: volta à vitrine em até 5 s  [HTTP 200; 13 ms]
+PASS  R1-E0 | importação CSV (update) respondeu 200 com 1 atualizado  [HTTP 200 {"totalLines":1,"valid":1,"invalid":0,"errors":[],"productsToCreate":0,"alreadyExist":1,"committed":true,"created":0,"updated":1,"skipped":0}]
+PASS  R1-E | importação CSV muda o preço: página e vitrine refletem em até 5 s  [em 33 ms; página 6 ms, vitrine 7 ms]
+
+RESUMO: 9 passaram, 0 falharam, 0 não testadas
+
+real	0m0.807s
+user	0m0.238s
+sys	0m0.067s

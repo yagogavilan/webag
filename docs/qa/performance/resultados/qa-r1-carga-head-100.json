@@ -1,0 +1,357 @@
+{
+ "label": "head-100",
+ "vus": 100,
+ "durationS": 60,
+ "rampS": 20,
+ "thinkMs": [
+  1500,
+  4500
+ ],
+ "requests": 3248,
+ "rps": 54.13333333333333,
+ "errPct": 0,
+ "journeys": {
+  "journeys": 545,
+  "orders": 23,
+  "orderFail": 0,
+  "empty": 0
+ },
+ "cpu": {
+  "sysAvg": 17.541414494354385,
+  "apiAvg": 32.63021893981414,
+  "apiMax": 47.5,
+  "pgAvg": 26.397643411061704,
+  "pgMax": 39,
+  "redisAvg": 1.0332334082708894,
+  "generatorAvg": 6.313589291863392
+ },
+ "ramMb": {
+  "apiMax": 328.04296875,
+  "pgMax": 1138.2822265625
+ },
+ "routes": [
+  {
+   "label": "GET /v1/cart",
+   "n": 418,
+   "rps": 6.966666666666667,
+   "p50": 16.20295,
+   "p95": 29.743775,
+   "p99": 42.566107,
+   "max": 68.021502,
+   "errPct": 0,
+   "status": {
+    "200": 418
+   },
+   "avgBytes": 1829.7344497607655,
+   "avgGzBytes": 799.4
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products",
+   "n": 417,
+   "rps": 6.95,
+   "p50": 7.321487,
+   "p95": 15.862475,
+   "p99": 29.351656,
+   "max": 54.386714,
+   "errPct": 0,
+   "status": {
+    "200": 417
+   },
+   "avgBytes": 10149.028776978417,
+   "avgGzBytes": 1702.2333333333333
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}",
+   "n": 417,
+   "rps": 6.95,
+   "p50": 9.023256,
+   "p95": 21.4483,
+   "p99": 44.123412,
+   "max": 79.142511,
+   "errPct": 0,
+   "status": {
+    "200": 417
+   },
+   "avgBytes": 1142.3213429256596,
+   "avgGzBytes": 657.5666666666667
+  },
+  {
+   "label": "GET /v1/browse/products/{id}",
+   "n": 417,
+   "rps": 6.95,
+   "p50": 9.020238,
+   "p95": 18.007671,
+   "p99": 29.813497,
+   "max": 64.412959,
+   "errPct": 0,
+   "status": {
+    "200": 417
+   },
+   "avgBytes": 1707.7961630695443,
+   "avgGzBytes": 705.9333333333333
+  },
+  {
+   "label": "GET /v1/home",
+   "n": 417,
+   "rps": 6.95,
+   "p50": 2.730369,
+   "p95": 25.587396,
+   "p99": 42.885154,
+   "max": 139.009691,
+   "errPct": 0,
+   "status": {
+    "200": 417
+   },
+   "avgBytes": 29409.978417266186,
+   "avgGzBytes": 4852.566666666667
+  },
+  {
+   "label": "PUT /v1/cart/items/{variantId}",
+   "n": 413,
+   "rps": 6.883333333333334,
+   "p50": 20.885853,
+   "p95": 40.442135,
+   "p99": 51.858886,
+   "max": 67.099803,
+   "errPct": 0,
+   "status": {
+    "200": 413
+   },
+   "avgBytes": 1887.4237288135594,
+   "avgGzBytes": 822.6666666666666
+  },
+  {
+   "label": "GET /v1/search/suggestions",
+   "n": 203,
+   "rps": 3.3833333333333333,
+   "p50": 18.04664,
+   "p95": 44.596482,
+   "p99": 87.536095,
+   "max": 120.235443,
+   "errPct": 0,
+   "status": {
+    "200": 203
+   },
+   "avgBytes": 818.7586206896551,
+   "avgGzBytes": 437.5
+  },
+  {
+   "label": "GET /v1/search/products",
+   "n": 203,
+   "rps": 3.3833333333333333,
+   "p50": 18.933086,
+   "p95": 31.361595,
+   "p99": 55.412163,
+   "max": 79.680812,
+   "errPct": 0,
+   "status": {
+    "200": 203
+   },
+   "avgBytes": 16422.50738916256,
+   "avgGzBytes": 2037.9
+  },
+  {
+   "label": "GET /v1/me/addresses",
+   "n": 132,
+   "rps": 2.2,
+   "p50": 3.090323,
+   "p95": 7.56995,
+   "p99": 11.587707,
+   "max": 12.77799,
+   "errPct": 0,
+   "status": {
+    "200": 132
+   },
+   "avgBytes": 423.34090909090907,
+   "avgGzBytes": 307.7
+  },
+  {
+   "label": "GET /v1/search/stores",
+   "n": 71,
+   "rps": 1.1833333333333333,
+   "p50": 4.741143,
+   "p95": 10.432806,
+   "p99": 42.834335,
+   "max": 42.834335,
+   "errPct": 0,
+   "status": {
+    "200": 71
+   },
+   "avgBytes": 4009.4225352112676,
+   "avgGzBytes": 767.6666666666666
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products (pág. 2)",
+   "n": 57,
+   "rps": 0.95,
+   "p50": 7.317288,
+   "p95": 13.557549,
+   "p99": 43.604607,
+   "max": 43.604607,
+   "errPct": 0,
+   "status": {
+    "200": 57
+   },
+   "avgBytes": 10583.982456140351,
+   "avgGzBytes": 1789.8666666666666
+  },
+  {
+   "label": "GET /v1/orders/{id}",
+   "n": 41,
+   "rps": 0.6833333333333333,
+   "p50": 7.983245,
+   "p95": 18.149875,
+   "p99": 91.919287,
+   "max": 91.919287,
+   "errPct": 0,
+   "status": {
+    "200": 41
+   },
+   "avgBytes": 2369.829268292683,
+   "avgGzBytes": 1084.2333333333333
+  },
+  {
+   "label": "POST /v1/orders",
+   "n": 14,
+   "rps": 0.23333333333333334,
+   "p50": 34.474031,
+   "p95": 91.356857,
+   "p99": 91.356857,
+   "max": 91.356857,
+   "errPct": 0,
+   "status": {
+    "201": 14
+   },
+   "avgBytes": 2368.5,
+   "avgGzBytes": 1079.857142857143
+  },
+  {
+   "label": "GET /v1/orders/{id}/payment",
+   "n": 14,
+   "rps": 0.23333333333333334,
+   "p50": 4.014578,
+   "p95": 8.763973,
+   "p99": 8.763973,
+   "max": 8.763973,
+   "errPct": 0,
+   "status": {
+    "200": 14
+   },
+   "avgBytes": 389.64285714285717,
+   "avgGzBytes": 304.07142857142856
+  },
+  {
+   "label": "GET /v1/orders",
+   "n": 14,
+   "rps": 0.23333333333333334,
+   "p50": 4.593703,
+   "p95": 23.853565,
+   "p99": 23.853565,
+   "max": 23.853565,
+   "errPct": 0,
+   "status": {
+    "200": 14
+   },
+   "avgBytes": 989.9285714285714,
+   "avgGzBytes": 490.2857142857143
+  }
+ ],
+ "topStatements": [
+  {
+   "query": "with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p",
+   "calls": "271",
+   "total_ms": "3810",
+   "mean_ms": "14.06",
+   "max_ms": "112.4",
+   "rows": "1547"
+  },
+  {
+   "query": "with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p",
+   "calls": "247",
+   "total_ms": "3370",
+   "mean_ms": "13.64",
+   "max_ms": "45.5",
+   "rows": "5187"
+  },
+  {
+   "query": "select count(*) from \"orders\" where (\"orders\".\"store_id\" = $1 and \"orders\".\"status\" = $2)",
+   "calls": "1113",
+   "total_ms": "979",
+   "mean_ms": "0.88",
+   "max_ms": "9.1",
+   "rows": "1113"
+  },
+  {
+   "query": "SELECT lower(public.unaccent($2, $1))",
+   "calls": "1184007",
+   "total_ms": "823",
+   "mean_ms": "0.00",
+   "max_ms": "6.5",
+   "rows": "1184007"
+  },
+  {
+   "query": "select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by ",
+   "calls": "2",
+   "total_ms": "278",
+   "mean_ms": "138.89",
+   "max_ms": "176.0",
+   "rows": "4786"
+  },
+  {
+   "query": "select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv",
+   "calls": "404",
+   "total_ms": "245",
+   "mean_ms": "0.61",
+   "max_ms": "2.0",
+   "rows": "8242"
+  },
+  {
+   "query": "select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null",
+   "calls": "2203",
+   "total_ms": "147",
+   "mean_ms": "0.07",
+   "max_ms": "9.5",
+   "rows": "2203"
+  },
+  {
+   "query": "select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location",
+   "calls": "253",
+   "total_ms": "145",
+   "mean_ms": "0.57",
+   "max_ms": "10.1",
+   "rows": "47052"
+  },
+  {
+   "query": "select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a",
+   "calls": "1400",
+   "total_ms": "106",
+   "mean_ms": "0.08",
+   "max_ms": "0.4",
+   "rows": "1400"
+  },
+  {
+   "query": "select \"product_images\".\"product_id\", \"media_assets\".\"id\", \"media_assets\".\"owner_user_id\", \"media_assets\".\"store_id\", \"media_assets\".\"purpose\", \"media_assets\".\"",
+   "calls": "389",
+   "total_ms": "99",
+   "mean_ms": "0.25",
+   "max_ms": "1.2",
+   "rows": "7780"
+  },
+  {
+   "query": "select s.id, s.name, s.description, s.main_category_id, s.logo_asset_id, s.approved_at, s.address_city_id, ss.accepts_delivery, ss.prep_minutes, ss.pickup_enabl",
+   "calls": "6",
+   "total_ms": "99",
+   "mean_ms": "16.47",
+   "max_ms": "18.5",
+   "rows": "1200"
+  },
+  {
+   "query": "select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid",
+   "calls": "224",
+   "total_ms": "86",
+   "mean_ms": "0.38",
+   "max_ms": "1.0",
+   "rows": "6720"
+  }
+ ]
+}

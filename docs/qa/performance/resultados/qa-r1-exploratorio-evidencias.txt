@@ -1,0 +1,14 @@
+[QA] 12 prévias (dryRun) seguidas: 200,200,200,200,200,200,200,200,200,200,200,200
+[QA] CSV hostil: 200 {"totalLines":6,"valid":3,"invalid":3,"errors":[{"line":5,"message":"Preço inválido (de R$ 0,01 a R$ 99.999,99, até 2 casas decimais)."},{"line":6,"message":"Estoque inválido (inteiro de 0 a 99.999)."},{"line":7,"message":"Categoria não encontrada ou inativa."}],"productsToCreate":3,"alreadyExist":0,"committed":true,"created":3,"updated":0,"skipped":0}
+[QA] CSV limites: 501 linhas=422, 1MB+1=413, vazio=422, só cabeçalho=422, json=400, BOM=200 ({"totalLines":2,"valid":2,"invalid":0,"errors":[],"productsToCreate":2,"alreadyExist":0,"committed":false,"created":0,"updated":0,"skipped":0})
+[QA] CSV update em removido/arquivado: 200 {"totalLines":2,"valid":2,"invalid":0,"errors":[],"productsToCreate":0,"alreadyExist":2,"committed":true,"created":0,"updated":2,"skipped":0}
+[QA] edição sem mudança real: HTTP 200, versão 1 -> 2, e-mails ao lojista: 1
+[QA] visão vencida e não varrida, ao abrir outra: close_cause = replaced
+[QA] HEAD na visão: 200
+[QA] NUL sweep: busca pública q=200 | v1.0 criar produto name=500 | v1.0 listar produtos q=500 | R1.2 tabela q=500 | R1.2 rascunho name=201 | R1.1 admin perfil name=500
+[QA] funcionário sem catalog: {"POST product-drafts":403,"POST product-drafts/batch":403,"GET product-drafts":403,"GET catalog/quick-start":403,"POST duplicate":403,"POST quick-publish":403,"POST products/bulk":403,"POST products/import":403,"POST stock delta":403}
+[QA] comissão efetiva após taxa própria: {"pct":7,"source":"store","sourceLabel":"Taxa própria da loja: 7%"}
+[QA] histórico (autor lojista, catálogo): ["catalog/merchant","catalog/merchant","price/merchant","catalog/merchant"]
+[QA] histórico (autor lojista, config): linhas em hours/pause/profile = 0; todas = []
+[QA] filtro por autor: total=2 (pause,profile), só do 2º admin=1 (pause)
+[QA] iscas conferidas: 9 (colunas de código no pedido: nenhuma); chaves do pedido na visão: id,number,status,mode,createdAt,paidAt,acceptedAt,acceptDeadlineAt,readyByAt,customer,items,delivery,pickup,values,couponCode,timeline,cancellation,logistics,allowedActions

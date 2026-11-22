@@ -1,0 +1,33 @@
+
+== head3-300: 300 VUs, 60 s medidos, 9576 req, 160 req/s, erros 0.00% | jornadas 1582, pedidos 93, falhas 1
+CPU% (100 = 1 vCPU): API 70.9 (pico 96.0), PG 67.8 (pico 86.5), Redis 1.7, gerador 9.0, máquina 39.6% | RAM máx: API 406 MB, PG 1375 MB
+rota                                                 n   req/s      p50      p95      p99  erro%    bytes    gzip
+PUT /v1/cart/items/{variantId}                    1227    20.4     24.9     84.6      128    0.0     1876     817
+GET /v1/browse/stores/{id}/products               1219    20.3      5.5     18.9     36.1    0.0    10291    1784
+GET /v1/browse/stores/{id}                        1219    20.3      9.0     31.7     58.4    0.0     1138     649
+GET /v1/browse/products/{id}                      1218    20.3     10.7     43.0     63.9    0.0     1732     702
+GET /v1/cart                                      1198    20.0     20.1     72.8      104    0.0     1824     791
+GET /v1/home                                      1189    19.8      5.6     42.5     68.1    0.0    29400    4868
+GET /v1/search/suggestions                         614    10.2     20.0     60.3     90.1    0.0      799     427
+GET /v1/search/products                            614    10.2     19.8     44.2     62.6    0.0    16417    2023
+GET /v1/me/addresses                               354     5.9      3.8     13.3     20.0    0.0      424     308
+GET /v1/orders/{id}                                187     3.1      9.5     29.2     51.4    0.0     2402    1071
+GET /v1/search/stores                              175     2.9      5.0     21.2     48.4    0.0     3681     751
+GET /v1/browse/stores/{id}/products (pág. 2)       167     2.8      6.2     26.6     57.0    0.0    10566    1793
+POST /v1/orders                                     68     1.1     47.1      107      159    0.0     2413    1084
+GET /v1/orders/{id}/payment                         68     1.1      4.4     15.0     50.6    0.0      390     303
+GET /v1/orders                                      59     1.0      5.9     19.6     63.5    0.0      940     456
+
+Top consultas por tempo total (pg_stat_statements):
+   10495 ms      835x  média   12.57  with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p
+    9349 ms      741x  média   12.62  with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p
+    2820 ms     3260x  média    0.86  select count(*) from "orders" where ("orders"."store_id" = $1 and "orders"."status" = $2)
+    2308 ms  3454898x  média    0.00  SELECT lower(public.unaccent($2, $1))
+     463 ms      839x  média    0.55  select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv
+     361 ms      756x  média    0.48  select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location
+     240 ms        2x  média  120.21  select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by 
+     240 ms     4194x  média    0.06  select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a
+     231 ms      673x  média    0.34  select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid
+     223 ms     6426x  média    0.03  select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null
+     211 ms     1583x  média    0.13  insert into "cart_items" ("id", "cart_id", "variant_id", "product_id", "quantity", "seen_price_cents", "created_at") values (default, $1, $2, $3, $4, $5, defaul
+     205 ms      673x  média    0.30  select "product_images"."product_id", "media_assets"."id", "media_assets"."owner_user_id", "media_assets"."store_id", "media_assets"."purpose", "media_assets"."

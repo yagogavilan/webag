@@ -1,0 +1,357 @@
+{
+ "label": "head3-300",
+ "vus": 300,
+ "durationS": 60,
+ "rampS": 20,
+ "thinkMs": [
+  1500,
+  4500
+ ],
+ "requests": 9576,
+ "rps": 159.6,
+ "errPct": 0,
+ "journeys": {
+  "journeys": 1582,
+  "orders": 93,
+  "orderFail": 1,
+  "empty": 0
+ },
+ "cpu": {
+  "sysAvg": 39.627854094909466,
+  "apiAvg": 70.86079592571348,
+  "apiMax": 96,
+  "pgAvg": 67.79447900924663,
+  "pgMax": 86.5,
+  "redisAvg": 1.7498500999250626,
+  "generatorAvg": 9.014713205114061
+ },
+ "ramMb": {
+  "apiMax": 405.64453125,
+  "pgMax": 1375.0810546875
+ },
+ "routes": [
+  {
+   "label": "PUT /v1/cart/items/{variantId}",
+   "n": 1227,
+   "rps": 20.45,
+   "p50": 24.89837,
+   "p95": 84.596766,
+   "p99": 127.784972,
+   "max": 214.319604,
+   "errPct": 0,
+   "status": {
+    "200": 1227
+   },
+   "avgBytes": 1876.0896495517522,
+   "avgGzBytes": 817.0333333333333
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products",
+   "n": 1219,
+   "rps": 20.316666666666666,
+   "p50": 5.517166,
+   "p95": 18.877622,
+   "p99": 36.119164,
+   "max": 78.200905,
+   "errPct": 0,
+   "status": {
+    "200": 1219
+   },
+   "avgBytes": 10290.802296964725,
+   "avgGzBytes": 1783.5333333333333
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}",
+   "n": 1219,
+   "rps": 20.316666666666666,
+   "p50": 8.965555,
+   "p95": 31.749829,
+   "p99": 58.424797,
+   "max": 114.658,
+   "errPct": 0,
+   "status": {
+    "200": 1219
+   },
+   "avgBytes": 1137.7342083675144,
+   "avgGzBytes": 648.9
+  },
+  {
+   "label": "GET /v1/browse/products/{id}",
+   "n": 1218,
+   "rps": 20.3,
+   "p50": 10.675334,
+   "p95": 42.965765,
+   "p99": 63.875267,
+   "max": 121.152703,
+   "errPct": 0,
+   "status": {
+    "200": 1218
+   },
+   "avgBytes": 1731.7922824302134,
+   "avgGzBytes": 702.3333333333334
+  },
+  {
+   "label": "GET /v1/cart",
+   "n": 1198,
+   "rps": 19.966666666666665,
+   "p50": 20.055961,
+   "p95": 72.753315,
+   "p99": 104.072138,
+   "max": 173.656451,
+   "errPct": 0,
+   "status": {
+    "200": 1198
+   },
+   "avgBytes": 1823.9557595993322,
+   "avgGzBytes": 791.0333333333333
+  },
+  {
+   "label": "GET /v1/home",
+   "n": 1189,
+   "rps": 19.816666666666666,
+   "p50": 5.6129,
+   "p95": 42.549651,
+   "p99": 68.124469,
+   "max": 135.540793,
+   "errPct": 0,
+   "status": {
+    "200": 1189
+   },
+   "avgBytes": 29400.194280908327,
+   "avgGzBytes": 4867.833333333333
+  },
+  {
+   "label": "GET /v1/search/suggestions",
+   "n": 614,
+   "rps": 10.233333333333333,
+   "p50": 19.979466,
+   "p95": 60.308876,
+   "p99": 90.075308,
+   "max": 107.807476,
+   "errPct": 0,
+   "status": {
+    "200": 614
+   },
+   "avgBytes": 799.1205211726384,
+   "avgGzBytes": 426.6666666666667
+  },
+  {
+   "label": "GET /v1/search/products",
+   "n": 614,
+   "rps": 10.233333333333333,
+   "p50": 19.833554,
+   "p95": 44.224493,
+   "p99": 62.555379,
+   "max": 111.702657,
+   "errPct": 0,
+   "status": {
+    "200": 614
+   },
+   "avgBytes": 16416.701954397395,
+   "avgGzBytes": 2023.3333333333333
+  },
+  {
+   "label": "GET /v1/me/addresses",
+   "n": 354,
+   "rps": 5.9,
+   "p50": 3.750276,
+   "p95": 13.321292,
+   "p99": 20.033864,
+   "max": 30.108352,
+   "errPct": 0,
+   "status": {
+    "200": 354
+   },
+   "avgBytes": 423.6694915254237,
+   "avgGzBytes": 307.7
+  },
+  {
+   "label": "GET /v1/orders/{id}",
+   "n": 187,
+   "rps": 3.1166666666666667,
+   "p50": 9.545373,
+   "p95": 29.243801,
+   "p99": 51.433674,
+   "max": 52.312847,
+   "errPct": 0,
+   "status": {
+    "200": 187
+   },
+   "avgBytes": 2402.3262032085563,
+   "avgGzBytes": 1070.5666666666666
+  },
+  {
+   "label": "GET /v1/search/stores",
+   "n": 175,
+   "rps": 2.9166666666666665,
+   "p50": 5.041382,
+   "p95": 21.244448,
+   "p99": 48.377958,
+   "max": 53.389364,
+   "errPct": 0,
+   "status": {
+    "200": 175
+   },
+   "avgBytes": 3680.7028571428573,
+   "avgGzBytes": 751
+  },
+  {
+   "label": "GET /v1/browse/stores/{id}/products (pág. 2)",
+   "n": 167,
+   "rps": 2.783333333333333,
+   "p50": 6.207219,
+   "p95": 26.579991,
+   "p99": 57.016472,
+   "max": 64.746415,
+   "errPct": 0,
+   "status": {
+    "200": 167
+   },
+   "avgBytes": 10566.37125748503,
+   "avgGzBytes": 1792.7
+  },
+  {
+   "label": "POST /v1/orders",
+   "n": 68,
+   "rps": 1.1333333333333333,
+   "p50": 47.096958,
+   "p95": 106.774994,
+   "p99": 159.105635,
+   "max": 159.105635,
+   "errPct": 0,
+   "status": {
+    "201": 68
+   },
+   "avgBytes": 2413.426470588235,
+   "avgGzBytes": 1083.7666666666667
+  },
+  {
+   "label": "GET /v1/orders/{id}/payment",
+   "n": 68,
+   "rps": 1.1333333333333333,
+   "p50": 4.353298,
+   "p95": 14.99313,
+   "p99": 50.566153,
+   "max": 50.566153,
+   "errPct": 0,
+   "status": {
+    "200": 68
+   },
+   "avgBytes": 389.63235294117646,
+   "avgGzBytes": 302.53333333333336
+  },
+  {
+   "label": "GET /v1/orders",
+   "n": 59,
+   "rps": 0.9833333333333333,
+   "p50": 5.932098,
+   "p95": 19.580113,
+   "p99": 63.525346,
+   "max": 63.525346,
+   "errPct": 0,
+   "status": {
+    "200": 59
+   },
+   "avgBytes": 939.8983050847457,
+   "avgGzBytes": 455.5
+  }
+ ],
+ "topStatements": [
+  {
+   "query": "with hit as materialized (select p.* from products p where p.status = $12 and p.moderation_status in ($13, $14) and p.base_price_cents is not null and (f_norm(p",
+   "calls": "835",
+   "total_ms": "10495",
+   "mean_ms": "12.57",
+   "max_ms": "111.2",
+   "rows": "4927"
+  },
+  {
+   "query": "with hit as materialized (select p.* from products p where p.status = $14 and p.moderation_status in ($15, $16) and p.base_price_cents is not null and (f_norm(p",
+   "calls": "741",
+   "total_ms": "9349",
+   "mean_ms": "12.62",
+   "max_ms": "30.1",
+   "rows": "15561"
+  },
+  {
+   "query": "select count(*) from \"orders\" where (\"orders\".\"store_id\" = $1 and \"orders\".\"status\" = $2)",
+   "calls": "3260",
+   "total_ms": "2820",
+   "mean_ms": "0.86",
+   "max_ms": "10.1",
+   "rows": "3260"
+  },
+  {
+   "query": "SELECT lower(public.unaccent($2, $1))",
+   "calls": "3454898",
+   "total_ms": "2308",
+   "mean_ms": "0.00",
+   "max_ms": "5.7",
+   "rows": "3454898"
+  },
+  {
+   "query": "select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at, coalesce((select sum(greatest(v.stock - v.reserv",
+   "calls": "839",
+   "total_ms": "463",
+   "mean_ms": "0.55",
+   "max_ms": "2.8",
+   "rows": "17173"
+  },
+  {
+   "query": "select s.id, round(ST_Distance(s.location, ST_SetSRID(ST_MakePoint($1, $2), $6)::geography))::int as distance_m from stores s where s.status = $7 and s.location",
+   "calls": "756",
+   "total_ms": "361",
+   "mean_ms": "0.48",
+   "max_ms": "9.6",
+   "rows": "138298"
+  },
+  {
+   "query": "select store_id, product_id, units from ( select o.store_id, oi.product_id, sum(oi.quantity)::int as units, row_number() over (partition by o.store_id order by ",
+   "calls": "2",
+   "total_ms": "240",
+   "mean_ms": "120.21",
+   "max_ms": "128.0",
+   "rows": "4786"
+  },
+  {
+   "query": "select s.last_used_at, s.revoked_at, s.absolute_expires_at, s.mfa_verified_at, s.mfa_factor, s.reauth_at, u.email, u.email_verified_at, u.status, a.profile as a",
+   "calls": "4194",
+   "total_ms": "240",
+   "mean_ms": "0.06",
+   "max_ms": "1.6",
+   "rows": "4194"
+  },
+  {
+   "query": "select p.id, p.name, p.store_id, p.category_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at from products p join unnest($1::uuid",
+   "calls": "673",
+   "total_ms": "231",
+   "mean_ms": "0.34",
+   "max_ms": "2.0",
+   "rows": "20190"
+  },
+  {
+   "query": "select ST_Distance(location, ST_SetSRID(ST_MakePoint($1, $2), $4)::geography) as d from stores where id = $3 and location is not null",
+   "calls": "6426",
+   "total_ms": "223",
+   "mean_ms": "0.03",
+   "max_ms": "8.4",
+   "rows": "6426"
+  },
+  {
+   "query": "insert into \"cart_items\" (\"id\", \"cart_id\", \"variant_id\", \"product_id\", \"quantity\", \"seen_price_cents\", \"created_at\") values (default, $1, $2, $3, $4, $5, defaul",
+   "calls": "1583",
+   "total_ms": "211",
+   "mean_ms": "0.13",
+   "max_ms": "0.7",
+   "rows": "1583"
+  },
+  {
+   "query": "select \"product_images\".\"product_id\", \"media_assets\".\"id\", \"media_assets\".\"owner_user_id\", \"media_assets\".\"store_id\", \"media_assets\".\"purpose\", \"media_assets\".\"",
+   "calls": "673",
+   "total_ms": "205",
+   "mean_ms": "0.30",
+   "max_ms": "1.1",
+   "rows": "20190"
+  }
+ ]
+}
