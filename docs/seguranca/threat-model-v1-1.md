@@ -1,6 +1,6 @@
 # Threat model: v1.1 (releases R1 a R5)
 
-- **Autor:** security-engineer | **Data:** 2026-11-22 | **Status:** v1, insumo para G2 e G3 da v1.1 | **Branch:** `claude/admiring-lamport-62tq1a`
+- **Autor:** security-engineer | **Data:** 2026-11-22 | **Status:** v1, insumo para G2 e G3 da v1.1; acréscimo de 2026-11-22: §14 "Ver como" (B3 do contrato R1), SEC-206 a 208 | **Branch:** `claude/admiring-lamport-62tq1a`
 - **Base:** PRDs `docs/produto/prd/v1-1-cupons.md` (WB-340 a 349), `v1-1-admin-e-paineis.md` (WB-350 a 359), `v1-1-analises-lojista.md` (WB-360 a 369), `v1-1-cadastro-rapido.md` (WB-370 a 379), `v1-1-despacho-e-app-motoboy.md` (WB-380 a 389), `v1-1-rastreio-e-notificacoes.md` (WB-390 a 399); `docs/produto/v1-1-pesquisa.md`; DEC-092, 095, 097, 100, 101, 102.
 - **Relação com outros documentos:** o `threat-model-auth-pagamento.md` (v1.0) continua valendo: autenticação, sessão, pagamento, webhook e upload não são repetidos aqui. Este documento só **acrescenta** o que a v1.1 traz. Requisitos v1.0: `requisitos-seguranca.md` (SEC-001 a 099).
 - **Fatos e hipóteses:** linhas com `arquivo:linha` foram conferidas no código em 2026-11-22. O resto descreve funcionalidade **que ainda não existe** (é desenho). Bases legais e prazos são recomendação técnica `[validar com o jurídico]`.
@@ -219,7 +219,7 @@ Formato: ID | controle | teste que prova | história.
 | ID | Controle | Teste | História |
 |---|---|---|---|
 | C-ADM-01 | Matriz da RN-13 ampliada aplicada no servidor, negando por padrão: toda rota nova declara permissão; perfil lido do banco a cada requisição (DT-017) | Teste de contrato percorre **todas** as rotas `/v1/admin/*` do `openapi.yaml` com os 4 perfis e um perfil sem permissão, comparando com a matriz | WB-355 C1 a C3 |
-| C-ADM-02 | "Ver como" é escopo próprio, não sessão do lojista: credencial de visualização ligada a (admin, loja, motivo), válida por até 30 min e encerrada com a sessão do admin. Guard global recusa qualquer método diferente de GET e HEAD **e** os GET com efeito (marcar como lido, revelar contato, baixar documento ou exportação). O ator continua sendo o admin. Máscara da RN-14 aplicada **na resposta da API**, não na tela. Abertura gravada no `audit_log` antes de devolver dado | POST, PATCH e DELETE na visão: 403; resposta de pedido fora do ativo vem mascarada; abrir sem motivo: 422; linha de auditoria existe | WB-352 C1 a C5 |
+| C-ADM-02 | **Forma decidida em §14 (SEC-206, SEC-207), que prevalece sobre o texto abaixo onde divergir.** "Ver como" é escopo próprio, não sessão do lojista: credencial de visualização ligada a (admin, loja, motivo), válida por até 30 min e encerrada com a sessão do admin. Guard global recusa qualquer método diferente de GET e HEAD **e** os GET com efeito (marcar como lido, revelar contato, baixar documento ou exportação). O ator continua sendo o admin. Máscara da RN-14 aplicada **na resposta da API**, não na tela. Abertura gravada no `audit_log` antes de devolver dado | POST, PATCH e DELETE na visão: 403; resposta de pedido fora do ativo vem mascarada; abrir sem motivo: 422; linha de auditoria existe | WB-352 C1 a C5 |
 | C-ADM-03 | DTO de edição com `.strict()` e lista fechada de campos; CPF/CNPJ, razão social, documentos, conta MP, membros e status fora da RN-16 rejeitados (422). Motivo do catálogo obrigatório, texto de até 200 caracteres | Enviar `cnpj`, `mpAccountId` ou `members`: 422 | WB-351 C2 e C4 |
 | C-ADM-04 | Preço: só os motivos permitidos. Variação acima de 30% pede confirmação; **redução acima de 50% exige super admin** (recomendação, ver D-04). Lojista avisado no painel e por e-mail. Alerta à operação quando produto com preço alterado pelo admin há menos de 24 h é comprado por conta ligada a admin ou a membro da loja | Operação reduz 60%: 403; compra por conta de admin gera alerta | WB-353 C1 a C3 |
 | C-ADM-05 | Concorrência otimista: `UPDATE ... WHERE version = :v`; diferente retorna 409 | Lojista salva entre abrir e salvar do admin: 409 e nada sobrescrito | WB-351 C6, WB-353 C5 |
@@ -359,7 +359,7 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 
 | Release | Escopo (DEC-100) | Controles que viram teste obrigatório | Achados que precisam estar fechados |
 |---|---|---|---|
-| **R1** | Cadastro rápido, admin de lojas, coleta em **staging** | C-ADM-01 a 09; C-CAD-01, 02, 04 a 08, 10; C-ANA-01 a 03 e 08 (em staging); C-GEN-01 e 02 | SEC-195 (Baixa, pode ficar com dono) |
+| **R1** | Cadastro rápido, admin de lojas, coleta em **staging** | C-ADM-01 a 09; C-CAD-01, 02, 04 a 08, 10; C-ANA-01 a 03 e 08 (em staging); C-GEN-01 e 02; **VA-01 a VA-24 (§14.9)** | **SEC-206 bloqueia** (Ver como); SEC-207 e SEC-208 (Média, corrigir na onda); SEC-195 (Baixa, pode ficar com dono) |
 | **R2** | Cupons, painéis prontos, acessos | C-CUP-01 a 13; C-DSH-01 a 05; C-ANA-04 a 06 (admin) | SEC-197 (decisão D-01 registrada); SEC-194 (texto e acesso ao bruto) |
 | **R3** | Rota e link, OK da loja, notificações, construtor | C-MOT-13 e 14; matriz de transições (WB-391 C1); C-NOT-01 a 05; C-DSH-06 e 07 | SEC-196 |
 | **R4** | App do motoboy e rastreio | C-MOT-01 a 12; C-RT-01 a 08; teste em aparelho real (revogação, perda de rede, GPS falso) | **SEC-193 e SEC-198 bloqueiam** |
@@ -422,6 +422,27 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 - **Correção recomendada:** C-RT-01 a C-RT-03 (sala `track:{orderId}` só do dono, emissão filtrada pela próxima parada, saída da sala no fim).
 - **Como verificar:** teste de gateway: membro da loja inscrito em `order:{id}` não recebe nenhum evento de posição; inscrição em `track:{id}` recusada.
 
+### SEC-206 | Severidade: Alta (desenho, antes da implementação) | Status: Aberto (fecha quando ADR-018 D8, o contrato e o código seguirem a §14 e VA-01 a VA-24 passarem)
+- **Onde:** ADR-018 D8; `openapi.yaml` `securitySchemes.viewAsAuth` e `openViewAs` (credencial em `Authorization: Bearer`); `apps/api/src/modules/identity/auth.guard.ts:54-60` (só JWT) e `:99-100`, `:112-118` (`checkStore` por `principal.userId`); `apps/api/src/modules/stores/stores.controllers.ts:130-134` (não dono recebe `presentStore` `staff`, com `legalName`, telefone e endereço completo, `:44-80`); `apps/api/src/modules/orders/store-orders.controller.ts:48-51` (handler refaz a autorização por `storeMembership(p.userId)`).
+- **Problema:** o "Ver como" não tem nível de acesso próprio. Para passar pelo `checkStore` seria preciso um "membro virtual" ou trocar o `userId` pelo do dono; nos dois casos a visão herda o que o dono vê (CNPJ/CPF, razão social, configurações, financeiro) e os handlers que decidem por `principal.userId` passam a decidir errado.
+- **Cenário de ataque:** perfil suporte (os 4 perfis têm `view-as:open`) ou um admin com Bearer roubado abre a visão de qualquer loja e lê CPF e razão social do MEI e o endereço completo dos clientes de pedidos ativos, sem trilha por pedido; um handler sem opt-in explícito aceita POST com a credencial e grava em nome da loja.
+- **Correção recomendada:** §14 (cabeçalho `X-View-As` somado ao Bearer do admin, nível "visualizador" fixo, opt-in por rota, apresentador `view_as`).
+- **Como verificar:** VA-01 a VA-24 (§14.9) no e2e.
+
+### SEC-207 | Severidade: Média | Status: Aberto (PRD)
+- **Onde:** `docs/produto/prd/v1-1-admin-e-paineis.md` WB-352 C2 e C8 (dado do cliente na visão "segue a RN-14": sem máscara em pedido ativo).
+- **Problema:** a visão do admin entrega nome completo, telefone e endereço dos clientes de todos os pedidos ativos da loja a qualquer perfil, sem registro por pedido. O admin já tem rotas próprias de pedido, com permissão e auditoria, para o caso real.
+- **Cenário:** um funcionário de suporte usa o "Ver como" de lojas diferentes para colher endereço e telefone de clientes (golpe do falso entregador, perseguição), com motivo genérico.
+- **Correção recomendada:** máscara estrita no apresentador `view_as` (§14.3): só primeiro nome e bairro, mesmo em pedido ativo. PO reescreve C2 e C8 (D-09).
+- **Como verificar:** VA-12 e VA-13.
+
+### SEC-208 | Severidade: Média (sobe para Alta se `price_adjust` em massa usar o serviço como está) | Status: Aberto (código existente)
+- **Onde:** `apps/api/src/modules/idempotency/idempotency.service.ts:85-86` (a resposta é gravada em comando separado, depois do efeito de `fn`) e `:74-77` (reivindicação sem resposta há mais de 120 s é apagada e a repetição executa de novo).
+- **Problema:** se o processo cai entre o commit de `fn` e a gravação da resposta, a repetição depois de 120 s reaplica o efeito. Para escrita com chave natural (pedido) há proteção própria; para reajuste relativo em massa (B2 do tech-lead) não há.
+- **Cenário:** deploy ou queda no meio de "+10% em 80 produtos"; o painel repete com a mesma chave após o timeout e o preço sobe 21%. Dinheiro do cliente e reputação da loja.
+- **Correção recomendada:** ver §14.11 (idempotência em massa). O contrato em revisão (backend-dev, B2) já acrescenta `expectedVersions` por item: se a conferência e o incremento de `version` ficarem na transação do lote, a repetição vira 409 e o lote deixa de depender do serviço (fica Baixa para ele); a fragilidade continua para qualquer escrita relativa futura sem versão.
+- **Como verificar:** e2e que faz a gravação da resposta falhar depois do commit do lote, avança o relógio 121 s e repete: nenhum preço muda de novo.
+
 ## 12. Decisões e encaminhamentos
 
 | ID | Pergunta | Recomendação | Quem decide |
@@ -434,9 +455,127 @@ Bases e prazos `[HIPÓTESE; validar com o jurídico]`. Os pareceres J8, J22 a J2
 | D-06 | Papel de banco da API sem posse do `audit_log` (C-ADM-06 b) | Fazer na R1 | tech-lead e backend-dev |
 | D-07 | Exigir bloqueio de tela no aparelho do motoboy | Recomendo exigir; o designer avalia o atrito | designer |
 | D-08 | Período livre de datas no módulo do lojista | Não: só períodos fechados (C-ANA-05 c) | PO |
+| D-09 | "Ver como": dado de cliente mascarado mesmo em pedido ativo (SEC-207) e aviso ao lojista de que a Webag visualizou o painel | Máscara estrita: sim (requisito de segurança; PO reescreve WB-352 C2 e C8). Aviso ao lojista: Should, custo baixo, aumenta a confiança | PO |
 
 ## 13. Limites deste documento
 - É desenho sobre PRDs; quase nada da v1.1 existe em código. Cada release precisa de revisão diferencial do código quando ficar pronta (skill `revisao-diferencial-de-mudancas`).
 - Não li o painel do Expo, a configuração do EAS nem o `.env`; SEC-196 e a C-MOT-06 dependem disso.
 - Não substitui pentest do app do motoboy e do rastreio antes de escalar, nem teste em aparelho real (bateria, GPS falso, revogação).
 - Bases legais, prazos e a pergunta "o bruto é anônimo?" são do jurídico (J8, J22 a J27). Não sou advogado.
+
+## 14. Ver como: decisão de segurança (B3 do parecer do contrato R1, 2026-11-22)
+
+Resolve o B3 de `docs/arquitetura/reviews/contrato-v1-1-r1-2026-11-22.md` e o SEC-206. **Substitui a D8 do ADR-018 e a descrição de `openViewAs`/`viewAsAuth`**; o backend-dev incorpora no ADR e no contrato, o tech-lead re-revisa. Fatos de código conferidos em 2026-11-22 sobre `9eabe41`.
+
+### 14.1 Forma escolhida e alternativas
+**Escolhida:** cabeçalho próprio `X-View-As: vas_<43 caracteres base64url>` **somado** ao `Authorization: Bearer` do admin. A credencial não autentica ninguém: só **qualifica** uma requisição já autenticada como do admin que abriu a visão.
+
+| Alternativa | Por que foi descartada |
+|---|---|
+| Credencial opaca no `Authorization: Bearer` (D8 atual) | Obriga a ramificar `verifyAccess`/`principals.load` (`auth.guard.ts:54-61`), o código da DEC-117; a credencial sozinha vale como acesso (roubo de 1 segredo basta); o handshake do Socket.IO também lê Bearer; e o `checkStore` exigiria "membro virtual" ou o `userId` do dono (SEC-206) |
+| JWT com `scope=view_as` | Mesma ramificação do pipeline; não cai com a sessão do admin sem consulta ao banco |
+| Sessão do lojista (personificação) | Ator vira o lojista, escrita possível, trilha apagada; fora do escopo do PRD |
+| Rotas espelho em `/v1/admin/view-as/...` | Duplica 13 handlers e apresentadores, diverge do que o lojista vê (o objetivo da história) e aumenta a superfície. Se o web optar por páginas espelho (pergunta aberta do PRD), elas chamam as **mesmas** rotas com `X-View-As` |
+| Guard separado com decorador novo que o `AuthGuard` ignora (zero diff no `auth.guard.ts`) | **Falha aberta:** se o guard novo não estiver registrado ou mudar de ordem, as 13 rotas ficam sem checagem de loja (IDOR). Aceitável só se o CEO/tech-lead vetarem qualquer linha no `AuthGuard`, e então com teste de boot que derruba a API se o guard faltar |
+
+**Mudança no `AuthGuard`: mínima e inevitável, fora do código da DEC-117.** `checkStore` mora dentro do `AuthGuard` (`:99-100`, `:112-118`) e responde 404 a quem não é membro antes de qualquer guard posterior rodar. Então um `ViewAsGuard` só "depois do AuthGuard" não basta. `verifyAccess`, `principals.load`, inatividade, MFA e permissão de admin **não mudam**; muda só o passo de loja:
+```ts
+if (storePermission) {
+  if (req.headers['x-view-as'] !== undefined) await this.viewAs.authorize(req, principal, context.getHandler()); // identity/view-as.service.ts
+  else await this.checkStore(req, principal.userId, storePermission);
+}
+```
+Mais um `ViewAsGuard` global **depois** do `AuthGuard`, de uma linha de regra: cabeçalho `x-view-as` presente (inclusive vazio ou repetido) e `req.viewAs` não preenchido = 403 `VIEW_AS_READ_ONLY`. Ele cobre rota pública (o `AuthGuard` sai cedo em `:50`), rota de admin, de cliente e rota de loja sem `@StorePermission`.
+
+### 14.2 Principal resultante
+- `req.principal` é **o do admin, inalterado** (`userId`, `sessionId`, `adminProfile`, `mfaVerified`). Nunca o do dono, nunca `kind: 'merchant'`. Toda auditoria sai com o admin como ator.
+- Acrescenta `req.viewAs = { id, storeId, adminUserId, adminSessionId, reasonCode, expiresAt, level: 'viewer' }` e `req.storeAccess = VIEWER` (conjunto fixo, constante no código, não vem do banco).
+- **Pertencer à loja não conta na visão:** admin que por acaso é membro da loja continua "visualizador" quando manda o cabeçalho.
+- Handlers com `@ViewAs()` decidem a apresentação por `req.viewAs`, **nunca** por `principal.userId` (`stores.controllers.ts:133` e `store-orders.controller.ts:48-51` hoje fazem isso: na visão dão o resultado mais restrito, mas não podem ser a regra).
+
+### 14.3 O que o visualizador NÃO enxerga (apresentador `view_as`, na resposta da API)
+| Recurso | Some ou vem nulo | Continua visível |
+|---|---|---|
+| Loja (`getStore`) | `document`, `legalName`, `settings` embutido, `commissionPct`, `commissionSource`, `commissionCategories`, `providerFeePct`, conta de recebimento; endereço além do que a vitrine pública mostra | nome, status, `live`, categorias, logo/capa, itens de revisão, motivo de recusa/suspensão |
+| Configurações (`getStoreSettings`) | qualquer destino de contato (e-mail ou telefone de notificação, se existir) | horários, pausa, entrega, retirada, política de troca, limiar de estoque |
+| Produtos (`listProducts`, `getProduct`, `listProductTable`, `listSections`) | `youReceiveCents` e qualquer campo de comissão ou tarifa | preço, estoque, status, fotos públicas |
+| Pedidos (`listStoreOrders`, `getStoreOrder`, `countStoreOrders`) | **mesmo em pedido ativo (SEC-207):** sobrenome, telefone, e-mail, CPF, rua, número, complemento, CEP, coordenadas, observação livre do cliente, código de entrega | primeiro nome, bairro, itens, preços, totais, status, linha do tempo |
+| Trocas (`listStoreExchanges`, `getStoreExchange`) | texto livre e fotos do cliente, dados de reembolso | motivo (código), status, prazos, itens |
+| Avaliações | o mesmo que a vitrine pública | o mesmo que a vitrine pública |
+| Fora da visão (sem `@ViewAs`, 403) | documentos, onboarding (status de conta de recebimento), conta MP, equipe, convites, financeiro, repasses, extrato, cupons, comanda (`ticket`), chat, exportações, "revelar contato", marcar como lido, upload, notificações da loja, qualquer rota `/v1/admin/*`, `/v1/me/*` e do cliente | |
+
+### 14.4 Rotas permitidas e bloqueio de mutação
+- **Lista fechada = as 13 `x-view-as: true` do contrato** (`getStore`, `getStoreSettings`, `listProducts`, `getProduct`, `listSections`, `listProductTable`, `listStoreOrders`, `countStoreOrders`, `getStoreOrder`, `listStoreExchanges`, `getStoreExchange`, `getStoreReviewsSummary`, `listStoreReviews`). Rota nova só entra com parecer do Security.
+- `viewAs.authorize`, nesta ordem, nega por padrão: (1) método GET ou HEAD, senão 403 `VIEW_AS_READ_ONLY`; (2) handler com `@ViewAs()`, senão 403 `VIEW_AS_READ_ONLY`; (3) admin com `view-as:open` (perfil lido do banco a cada requisição, já feito pelo `load`); (4) formato `^vas_[A-Za-z0-9_-]{43}$`; (5) linha por `sha256(credencial)` com `admin_user_id = principal.userId`, `admin_session_id = principal.sessionId`, `closed_at is null`, `expires_at > now()`; (6) `:storeId` da rota = `store_id` da linha; (7) limite por sessão (14.7). Falha em 3 a 6: 403 `VIEW_AS_EXPIRED` (um código só; não diz qual parte falhou).
+- `@ViewAs()` **exige** `@Get` e `@StorePermission` no mesmo handler: verificação no boot que derruba a API se não valer.
+- Teste e2e compara o conjunto `@ViewAs()` das rotas reais do Nest com o `x-view-as` do YAML **nos dois sentidos** (B3 e).
+- Sem `X-HTTP-Method-Override` nem middleware equivalente (verificar no `main.ts` e manter assim).
+- **Socket.IO:** o handshake ignora `X-View-As`; o admin não entra em sala de pedido da loja (`realtime.gateway.ts:144-148` exige membro). A visão atualiza por consulta periódica, sem tempo real.
+- Resposta com `Cache-Control: private, no-store`.
+
+### 14.5 Expiração e vínculo à sessão do admin
+- Tabela `admin_view_sessions` (módulo `identity`, I10): `id`, `token_hash` (único), `admin_user_id`, `admin_session_id`, `store_id`, `reason_code`, `reason_note` (até 200 caracteres), `opened_at`, `expires_at`, `closed_at`, `close_cause`.
+- `expires_at = least(opened_at + 30 min, sessions.absolute_expires_at)`. **Sem renovação** (absoluto, não desliza).
+- A visão morre junto com a sessão do admin sem código novo: logout, revogação, inatividade (`admin_inatividade_min`), MFA pendente ou perfil desativado derrubam o Bearer no `AuthGuard`. O sweep de 10 min fecha a linha com a causa correta.
+- **Uma visão ativa por admin:** abrir outra encerra a anterior (`close_cause = replaced`).
+- Credencial: 32 bytes de `crypto.randomBytes`, prefixo `vas_`, mostrada uma vez, guardada só como SHA-256 (busca por hash de segredo de 256 bits dispensa comparação em tempo constante).
+- **BFF (`apps/web/src/server/upstream.ts`):** campo explícito `viewAs` em `UpstreamInit`, usado só pelas telas da visão; cookie `httpOnly`, `Secure`, `SameSite=Strict`, `Path` restrito às telas da visão, `Max-Age` até `expiresAt`, apagado ao encerrar e no logout. Nunca em URL, `localStorage` ou corpo vindo do navegador.
+- **Logs:** acrescentar `req.headers["x-view-as"]` ao `redact` (`apps/api/src/app.module.ts:75-84`) e ao `beforeSend` do Sentry.
+
+### 14.6 Auditoria
+| Evento | Quando | Conteúdo |
+|---|---|---|
+| `view_as.open` | Na **mesma transação** da linha da credencial, antes de devolvê-la | admin, sessão do admin, loja, motivo (código e nota), `expiresAt` |
+| `view_as.close` | `endViewAs`, sweep (`at = expires_at`), logout, revogação, `replaced`, `permission_lost`, `abuse` | causa; total de leituras e contagem por `operationId` (contador no Redis por sessão, o mesmo do limite) |
+| `view_as.denied` | Cada tentativa de mutação, rota fora da lista ou credencial inválida | método, rota, código; no máximo 1 linha por minuto por (sessão, código), o resto só conta |
+| Log `view_as.read` (pino, não `audit_log`) | Cada leitura | `viewAsId`, admin, loja, `operationId`, id do recurso; nunca corpo nem query |
+Não grava "telas navegadas" (WB-352 C9); a contagem agregada no encerramento é o mínimo para revisar abuso de insider.
+
+### 14.7 IDOR, escalonamento e limites
+- **IDOR:** `storeId` da rota tem que ser o da linha; `endViewAs` de outro admin: 404 (já no contrato); recurso filho (pedido, troca, produto) continua filtrado por `store_id` no serviço, como hoje.
+- **Escalonamento:** credencial roubada sozinha não serve (exige o Bearer e a mesma sessão); Bearer roubado sozinho abre uma visão própria, o que é comprometimento de admin (MFA e inatividade já cobrem) e fica auditado.
+- **Limites `[HIPÓTESE]`, parâmetros:** abrir: 10 por hora por admin (contrato) e alerta à operação quando um admin abrir mais de 20 lojas distintas por dia; ler: 120 requisições por minuto por sessão de visualização (429), chave `rl:view-as:{id}`, porque o `RateLimitGuard` atual conta só por IP (`rate-limit.guard.ts:50-58`); 20 negações na mesma sessão encerram a visão (`close_cause = abuse`).
+
+### 14.8 Mudanças a incorporar (backend-dev)
+1. ADR-018 D8 reescrita por esta seção; §"Security" do ADR aponta para cá.
+2. `openapi.yaml`: `viewAsAuth` vira `type: apiKey, in: header, name: X-View-As`; nas 13 rotas, `security: [{ bearerAuth: [] }, { bearerAuth: [], viewAsAuth: [] }]`; `openViewAs` e `ViewAsSession.token` sem "Authorization: Bearer"; 403 `VIEW_AS_READ_ONLY` e `VIEW_AS_EXPIRED` e 429 documentados.
+3. `presentStore` ganha o modo `view_as`; serviços de pedido e troca recebem o modo de apresentação em vez de deduzir por `storeMembership`.
+
+### 14.9 Testes obrigatórios (abuso), donos backend-dev (e2e) e qa-engineer (exploratório)
+| ID | Caso | Esperado |
+|---|---|---|
+| VA-01 | POST, PUT, PATCH e DELETE em cada rota `/v1/stores/{id}/*` com Bearer do admin + `X-View-As` válido | 403 `VIEW_AS_READ_ONLY`; nada gravado |
+| VA-02 | GET de loja fora da lista (documentos, onboarding, equipe, financeiro, cupons, `ticket`, exportação) com a visão | 403 |
+| VA-03 | `X-View-As` em rota `/v1/admin/*`, `/v1/me`, rota pública e de cliente | 403 |
+| VA-04 | `X-View-As` sem Bearer | 401 |
+| VA-05 | Credencial em `Authorization: Bearer` | 401 (não é JWT) |
+| VA-06 | Credencial válida + Bearer de **outro** admin | 403 `VIEW_AS_EXPIRED` |
+| VA-07 | Mesmo admin, outra sessão (outro navegador) | 403 |
+| VA-08 | Credencial da loja A em rota da loja B | 403; nenhum dado da B |
+| VA-09 | Depois de 30 min; depois de `endViewAs`; depois do logout; depois da revogação da sessão; depois da inatividade | 403 ou 401; linha fechada com a causa correta |
+| VA-10 | Perfil perde `view-as:open` ou admin desativado com a visão aberta | próxima leitura negada |
+| VA-11 | `getStore` e `getStoreSettings` na visão | sem `document`, `legalName`, comissão, tarifa, `settings` embutido, conta de recebimento |
+| VA-12 | `getStoreOrder` e `listStoreOrders` de pedido **ativo** na visão | só primeiro nome e bairro; sem telefone, endereço, observação, CPF, código de entrega |
+| VA-13 | `getStoreExchange` na visão | sem texto livre e fotos do cliente |
+| VA-14 | `listProductTable` na visão | `youReceiveCents` nulo |
+| VA-15 | Admin que é membro (dono) da loja, com `X-View-As` | recebe o nível visualizador, não o de dono |
+| VA-16 | Cabeçalho vazio, repetido, com vírgula ou com formato errado | 403 (falha fechada) |
+| VA-17 | `X-HTTP-Method-Override: DELETE` em GET | sem efeito |
+| VA-18 | Abrir sem motivo; 11ª abertura na hora | 422; 429 |
+| VA-19 | `view_as.open` existe e a credencial não é devolvida se a gravação da auditoria falhar (falha injetada) | 500 sem credencial; nenhuma linha órfã |
+| VA-20 | Abrir a segunda visão | a primeira deixa de valer (`replaced`) |
+| VA-21 | 121ª leitura no minuto; 20 negações | 429; visão encerrada (`abuse`) |
+| VA-22 | Socket.IO com Bearer do admin e `X-View-As` pede `subscribe` em pedido da loja | `{ok:false}` |
+| VA-23 | Conjunto `@ViewAs()` das rotas reais x `x-view-as` do YAML | iguais nos dois sentidos; `@ViewAs` sem `@Get` ou sem `@StorePermission` derruba o boot |
+| VA-24 | Varredura de logs da API e do Sentry depois de VA-01 a VA-21 | nenhuma credencial `vas_` |
+Exploratório do QA: navegar a visão no web com DevTools e reenviar formulários, recarregar depois de expirar, abrir em duas abas.
+
+### 14.10 D-06 (papel de banco): riscos além do B4
+1. **Falha segura no boot:** em produção a API recusa subir se `current_user` for superusuário, dono de `audit_log` ou membro de `webag_migrator`; sem isso, esquecer de trocar o `DATABASE_URL` deixa a D-06 só no papel.
+2. `ALTER DEFAULT PRIVILEGES` dá `UPDATE/DELETE` a toda tabela futura: tabela append-only nova precisa de `REVOKE` na própria migração. Teste que lista `has_table_privilege('webag_app', t, 'UPDATE')` para as 7 append-only de `drizzle/0001_append_only_guards.sql` e as novas.
+3. `webag_app` sem `TRIGGER`, sem `GRANT SET ON PARAMETER session_replication_role` e sem ser dono das funções `SECURITY DEFINER` (I8); o teste roda no CI com Testcontainers, não só no staging.
+
+### 14.11 Idempotência em massa (B2): riscos além do pedido do tech-lead
+1. **SEC-208:** a resposta é gravada fora da transação do efeito (`idempotency.service.ts:85-86`) e a reivindicação vence em 120 s; para `price_adjust` grave a chave e o lote **na mesma transação** (ou tabela `bulk_operations` com chave única dentro da transação do lote).
+2. O `expectedVersions` por item que o backend-dev já pôs no contrato fecha a reaplicação **só se** a conferência e o `version = version + 1` estiverem na mesma transação do lote e o `price_adjust` subir a `version` (I2); teste: repetir o mesmo corpo depois de aplicado dá o mesmo `batchId` ou 409, nunca +21%.
+3. Escopo da chave = (rota, loja, ator), nunca só a rota; o web gera a chave **uma vez por clique em "Aplicar"** e a reutiliza na repetição; o `undo` também é idempotente (um desfazer por lote).

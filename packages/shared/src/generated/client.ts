@@ -11,7 +11,7 @@
  * A simulação de pagamento (`/v1/dev/*`) só existe fora de produção e não faz parte deste contrato.
  * Header opcional `X-Device-Id` (8-64 caracteres) ajuda nos limites por dispositivo (SEC-063).
  * Mudanças de 0.1.0 para 0.2.0: só adições (identidade, admin de configuração, pagamentos base).
- * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem na R1.2, quando o web do admin (único consumidor) migra.
+ * Mudanças de 0.3.0 para 0.4.0 (v1.1, R1, ADR-018): só adições (cadastro rápido, admin de lojas, coleta em staging); as operações novas levam `x-planned: v1.1 R1` até serem implementadas. Duas rotas de edição do admin ficam `deprecated` (`editAdminStore`, `editAdminStoreSettings`) e saem no primeiro PR da R1.1 (contrato e código no mesmo PR, porque o teste de deriva compara os dois); não há consumidor.
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
  * "Ver como o lojista" (v1.1 R1): as rotas de LEITURA da loja marcadas `x-view-as: true` (dados da loja, produtos, pedidos, trocas, avaliações) aceitam também a credencial `viewAsAuth`; nenhuma rota de escrita, financeira, de documento, de equipe ou de exportação a aceita (403 `VIEW_AS_READ_ONLY`).
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
@@ -3243,6 +3243,12 @@ export type BulkRequestAction = {
   value: number;
 };
 
+export interface ExpectedVersion {
+  productId: string;
+  /** @minimum 1 */
+  version: number;
+}
+
 export interface BulkRequest {
   /**
      * @minItems 1
@@ -3252,8 +3258,22 @@ export interface BulkRequest {
   dryRun?: boolean;
   /** v1.1 R1 (WB-377 C3): confirma reajuste acima de `reajuste_max_pct` em algum item. Sem isto, 422 `BULK_NEEDS_CONFIRMATION` (nada é aplicado) */
   confirmLargeChange?: boolean;
+  /**
+     * v1.1 R1 (B2): `version` de cada item, como veio em `preview[].version`. Obrigatória no servidor em `price_adjust` sem `dryRun` (cobre todos os `productIds`); opcional nas demais ações
+     * @maxItems 200
+     */
+  expectedVersions?: ExpectedVersion[];
   action: BulkRequestAction;
 }
+
+export type BulkVersionConflictProblem = Problem & {
+  conflicts?: {
+  productId: string;
+  name: string;
+  /** @minimum 1 */
+  currentVersion: number;
+}[];
+};
 
 export type BulkResultBlockedItem = {
   productId: string;
@@ -3264,6 +3284,11 @@ export type BulkResultBlockedItem = {
 export interface BulkPreviewItem {
   productId: string;
   name: string;
+  /**
+     * Versão do produto na prévia; volta em `expectedVersions` ao aplicar
+     * @minimum 1
+     */
+  version: number;
   fromCents: number;
   toCents: number;
   /** Positivo ou negativo, 1 casa */
@@ -7232,6 +7257,42 @@ export interface CatalogQuickStart {
   limits: CatalogQuickStartLimits;
 }
 
+export interface QuickPublishRequest {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minimum 1
+     * @maximum 9999999
+     */
+  basePriceCents: number;
+  /**
+     * Omitida: vale a do rascunho; sem categoria nenhuma, 422 `PRODUCT_INCOMPLETE`
+     * @nullable
+     */
+  categoryId?: string | null;
+  /**
+     * Obrigatória só nas categorias com `descriptionRequired` (422 `DESCRIPTION_REQUIRED`)
+     * @maxLength 1000
+     * @nullable
+     */
+  description?: string | null;
+  /**
+     * Estoque da variação padrão
+     * @minimum 0
+     * @maximum 99999
+     */
+  stock?: number;
+  /**
+     * Uploads `product_image` concluídos da mesma loja; o primeiro é a capa
+     * @minItems 1
+     * @maxItems 8
+     */
+  imageIds: string[];
+}
+
 export interface CreateProductDraftRequest {
   via: ProductVia;
   /**
@@ -7518,6 +7579,8 @@ export type BulkUndoResultSkippedItem = {
 
 export interface BulkUndoResult {
   batchId: string;
+  /** Verdadeiro quando o lote já tinha sido desfeito: a repetição (resposta perdida em 3G) devolve o mesmo resultado, sem erro */
+  alreadyUndone: boolean;
   reverted: number;
   skipped: BulkUndoResultSkippedItem[];
 }
@@ -8052,7 +8115,19 @@ export interface AdminBulkProductsRequest {
      */
   productIds: string[];
   dryRun?: boolean;
+  /**
+     * B2: `version` de cada item, como veio em `preview[].version`. Obrigatória no servidor sem `dryRun` (cobre todos os `productIds`)
+     * @maxItems 200
+     */
+  expectedVersions?: ExpectedVersion[];
   action: AdminBulkProductsRequestAction;
+}
+
+export interface AdminBulkPreviewItem {
+  productId: string;
+  name: string;
+  /** @minimum 1 */
+  version: number;
 }
 
 /**
@@ -8090,9 +8165,14 @@ export interface AdminBulkResult {
   batchId: string | null;
   /** Um único aviso agregado com o motivo */
   merchantNotified: AdminBulkResultMerchantNotified;
+  /** B2: só em `dryRun`; traz a `version` de cada item para `expectedVersions` */
+  preview?: AdminBulkPreviewItem[];
   blocked: AdminBulkResultBlockedItem[];
 }
 
+/**
+ * Presente só quando `code` = `PRODUCT_VERSION_CONFLICT`
+ */
 export type ProductVersionConflictProblemCurrent = {
   version: number;
   updatedAt: string;
@@ -8101,7 +8181,20 @@ export type ProductVersionConflictProblemCurrent = {
 };
 
 export type ProductVersionConflictProblem = Problem & {
-  current: ProductVersionConflictProblemCurrent;
+  /** Presente só quando `code` = `PRODUCT_VERSION_CONFLICT` */
+  current?: ProductVersionConflictProblemCurrent;
+};
+
+export type DraftLimitProblem = Problem & {
+  /** Parâmetro `rascunhos_max_por_loja` */
+  limit?: number;
+  /** @minimum 0 */
+  draftCount?: number;
+  /**
+     * Vagas que restam (limit - draftCount, nunca negativo)
+     * @minimum 0
+     */
+  slotsAvailable?: number;
 };
 
 export type PriceChangeConfirmationProblem = Problem & ({
@@ -8217,7 +8310,7 @@ export interface AnalyticsEventsRequest {
 export interface AnalyticsIngestResult {
   accepted: number;
   duplicates: number;
-  /** Loja ou produto inexistente, sessão nova acima do teto do IP ou coleta desligada */
+  /** Loja ou produto inexistente ou coleta desligada (`unknown_store`, `flag_off`). Limite de taxa NÃO descarta: responde 429 */
   discarded: number;
 }
 
@@ -8265,6 +8358,20 @@ export type AnalyticsAccessReportTotals = {
   bagAdds: number;
 };
 
+/**
+ * Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento
+ */
+export type AnalyticsAccessReportDiscards = {
+  /** @minimum 0 */
+  rate_ip: number;
+  /** @minimum 0 */
+  rate_session: number;
+  /** @minimum 0 */
+  unknown_store: number;
+  /** @minimum 0 */
+  flag_off: number;
+};
+
 export interface AnalyticsAccessReport {
   period: AnalyticsAccessReportPeriod;
   groupBy: AnalyticsAccessReportGroupBy;
@@ -8278,23 +8385,8 @@ export interface AnalyticsAccessReport {
   rows: AnalyticsAccessRow[];
   /** @nullable */
   nextCursor: string | null;
-}
-
-export interface AnalyticsCoverageRow {
-  /** Segunda-feira (America/Sao_Paulo) */
-  weekStart: string;
-  cityId: string;
-  cityName: string;
-  /** Menos de 20 pedidos do app na semana */
-  insufficient: boolean;
-  /** @nullable */
-  coveragePct: number | null;
-}
-
-export interface AnalyticsCoveragePage {
-  data: AnalyticsCoverageRow[];
-  /** @nullable */
-  nextCursor: string | null;
+  /** Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento */
+  discards?: AnalyticsAccessReportDiscards;
 }
 
 /**
@@ -8348,9 +8440,19 @@ export type ServiceUnavailableResponse = Problem;
 export type PayloadTooLargeResponse = Problem;
 
 /**
- * `PRODUCT_VERSION_CONFLICT`: o produto mudou depois da versão informada ("O lojista alterou este produto agora"); traz a versão atual em `current`. Também cobre as demais regras de conflito da rota (`STOCK_BELOW_RESERVED`, `STORE_NOT_APPROVED`, `OPEN_ORDERS`, `IDEMPOTENCY_IN_PROGRESS`), que usam o `code` próprio sem `current`
+ * `PRODUCT_VERSION_CONFLICT`: o produto mudou depois da versão informada ("O lojista alterou este produto agora"); traz a versão atual em `current` (só neste `code`). Também cobre as demais regras de conflito da rota (`STOCK_BELOW_RESERVED`, `STORE_NOT_APPROVED`, `OPEN_ORDERS`, `IDEMPOTENCY_IN_PROGRESS`), que mantêm o corpo antigo do `Problem` (sem `current`); por isso `current` é opcional no schema (tech-lead I1)
  */
 export type ProductVersionConflictResponse = ProductVersionConflictProblem;
+
+/**
+ * 409 das ações em massa: `BULK_VERSION_CONFLICT` (algum item mudou depois da prévia: `conflicts` com a versão atual; nada é aplicado), além de `STORE_NOT_APPROVED` e `IDEMPOTENCY_IN_PROGRESS` com o corpo antigo do `Problem`
+ */
+export type BulkVersionConflictResponse = BulkVersionConflictProblem;
+
+/**
+ * 422 do lote de rascunhos: validação (`VALIDATION_FAILED`) ou `DRAFT_LIMIT_REACHED` com `limit`, `draftCount` e `slotsAvailable` (`DraftLimitProblem`)
+ */
+export type DraftLimitUnprocessableResponse = DraftLimitProblem;
 
 /**
  * Cursor opaco devolvido em `nextCursor`
@@ -8396,9 +8498,9 @@ export type IdempotencyKeyParameter = string;
 export type IdempotencyKeyRequiredParameter = string;
 
 /**
- * Opcional. `version` do produto que o app tem (número inteiro, sem aspas). Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir (compatível com o app 1.0)
+ * Opcional. `version` do produto que o app tem, como entity-tag entre aspas (RFC 9110): `If-Match: "7"`; o mesmo valor vem no cabeçalho `ETag` de `getProduct` e `getAdminStoreProduct`. Diferente da atual: 409 `PRODUCT_VERSION_CONFLICT` com a versão atual e nada é gravado (rascunho aberto em 2 aparelhos, edição em linha, WB-371 C4). Ausente: grava sem conferir, mas a versão sobe (compatível com o app 1.0). Valor fora do formato: 400 `VALIDATION_FAILED`
  */
-export type IfMatchVersionParameter = number;
+export type IfMatchVersionParameter = string;
 
 export type ListAuditLogParams = {
   actorId?: string;
@@ -10675,21 +10777,6 @@ export const GetAdminAnalyticsAccessGroupBy = {
   product: 'product',
   origin: 'origin',
 } as const;
-
-export type GetAdminAnalyticsCoverageParams = {
-  cityId?: string;
-  /**
-   * Cursor opaco devolvido em `nextCursor`
-   * @maxLength 200
-   */
-  cursor?: CursorParameter;
-  /**
-   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
-   * @minimum 1
-   * @maximum 50
-   */
-  limit?: LimitParameter;
-};
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -19425,7 +19512,7 @@ export const getEditAdminStoreUrl = (storeId: string,) => {
 }
 
 /**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; sai na R1.2, quando o web do admin (único consumidor) migra. Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
+ * **DEPRECATED (v1.1 R1, ADR-018):** use `PATCH /v1/admin/stores/{storeId}/profile`. Esta rota aceita `legalName` (razão social), `address` e `fiscalResponsibilityAccepted`, ignora o campo `reason` e não confere versão; **sai no primeiro PR da R1.1, contrato e código juntos** (nenhuma tela as chama: `apps/web` não tem PATCH de loja; decisão do CEO, tech-lead I12). Permissão `stores:write` (super e operação). Grava antes/depois na auditoria.
  * @deprecated
  * @summary Editar dados da loja (substituída por `editAdminStoreProfile`)
  */
@@ -19872,7 +19959,7 @@ export const getEditAdminStoreSettingsUrl = (storeId: string,
 }
 
 /**
- * **DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; sai na R1.2. Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
+ * **DEPRECATED (v1.1 R1, ADR-018):** use `PUT /v1/admin/stores/{storeId}/config/{section}`. Esta rota NÃO recebe motivo nem versão; **sai no primeiro PR da R1.1, contrato e código juntos** (sem consumidor; decisão do CEO, tech-lead I12). Permissão `stores:write`. `section`: hours, holidays, delivery, pickup, exchange-policy (o corpo é o da rota equivalente do lojista). Antes/depois na auditoria.
  * @deprecated
  * @summary Editar configuração da loja (substituída por `editAdminStoreConfig`)
  */
@@ -20149,7 +20236,7 @@ export const getCreateProductUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. **v1.1 R1:** também `DRAFT_LIMIT_REACHED` (50 rascunhos por loja, RN-Q2; vale para todo caminho que cria rascunho). O cadastro rápido usa `createProductDraft`.
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Rascunho só exige o nome; o resto é obrigatório ao publicar (R-38). Aceita `Idempotency-Key`: repetir devolve o mesmo produto. 422 `CATEGORY_FORBIDDEN` (categoria proibida), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. **v1.1 R1:** também `DRAFT_LIMIT_REACHED` (100 rascunhos por loja, parâmetro `rascunhos_max_por_loja`, DEC-118; vale para todo caminho que cria rascunho, e a contagem é serializada por loja). O cadastro rápido usa `createProductDraft`.
  * @summary Criar produto (rascunho)
  */
 export const createProduct = async (storeId: string,
@@ -20330,7 +20417,7 @@ export type bulkProductsResponse404 = {
 }
 
 export type bulkProductsResponse409 = {
-  data: ConflictResponse
+  data: BulkVersionConflictResponse
   status: 409
 }
 
@@ -20357,7 +20444,7 @@ export const getBulkProductsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura).
+ * Permissão da loja: `catalog` (dono, ou funcionário com a permissão); não-membro recebe 404 (SEC-020). Catálogo só com a loja aprovada (409 `STORE_NOT_APPROVED`). Pausar, reativar, mover de seção ou ajustar preço (+/-% ou +/- centavos). `dryRun: true` só mostra o que mudaria. Se algum preço sairia da faixa, a ação INTEIRA é bloqueada (422 `BULK_BLOCKED`, com a lista). Id de outra loja: 404 para o pedido todo. **v1.1 R1 (WB-377):** reajuste de N itens é UMA transação (tudo ou nada); o `dryRun` devolve a prévia por item (`preview`); acima de `reajuste_max_pct` em algum item exige `confirmLargeChange: true` (422 `BULK_NEEDS_CONFIRMATION`, com os itens); estoque menor que o reservado nunca é tocado aqui. Aplicado, devolve `batchId` e `undoUntil` (10 min; `undoBulkBatch`). Promoção NÃO é editada em massa na v1.1. Cada ação registra quem, quando e quantos itens (`listBulkBatches`). Funcionário sem `catalog`: 403/404 como nas demais rotas (a tela fica somente leitura). **Repetição em 3G (tech-lead B2):** `price_adjust` repetido depois de timeout aplicaria o reajuste duas vezes (+10% vira +21%). Por isso, sem `dryRun`, `price_adjust` EXIGE no servidor o header `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`) e `expectedVersions` com a `version` de CADA item vinda da prévia (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; item com versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado e o app refaz a prévia). O header é opcional na assinatura porque `pause`, `resume` e `move_section` são estados absolutos (repetir é seguro) e o app 1.0 não o envia. **Arredondamento do reajuste (A3):** `percent` com no máximo 2 casas, de -90 a +500; `amount` em centavos inteiros; o cálculo é em inteiro, com arredondamento meio para cima ao centavo; resultado fora de 1 a 9.999.999 bloqueia o item (`BULK_BLOCKED`).
  * @summary Ação em massa
  */
 export const bulkProducts = async (storeId: string,
@@ -20842,6 +20929,83 @@ export const publishProduct = async (storeId: string,
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type quickPublishProductResponse200 = {
+  data: Product
+  status: 200
+}
+
+export type quickPublishProductResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type quickPublishProductResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type quickPublishProductResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type quickPublishProductResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type quickPublishProductResponse409 = {
+  data: ProductVersionConflictResponse
+  status: 409
+}
+
+export type quickPublishProductResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type quickPublishProductResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type quickPublishProductResponseSuccess = (quickPublishProductResponse200) & {
+  headers: Headers;
+};
+export type quickPublishProductResponseError = (quickPublishProductResponse400 | quickPublishProductResponse401 | quickPublishProductResponse403 | quickPublishProductResponse404 | quickPublishProductResponse409 | quickPublishProductResponse422 | quickPublishProductResponse429) & {
+  headers: Headers;
+};
+
+export type quickPublishProductResponse = (quickPublishProductResponseSuccess | quickPublishProductResponseError)
+
+export const getQuickPublishProductUrl = (storeId: string,
+    productId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/products/${productId}/quick-publish`
+}
+
+/**
+ * O "publicar em 2 campos" é UMA transação (tech-lead I11, decisão do CEO): grava nome, preço, categoria, descrição (se a categoria exige), as fotos já enviadas, a variação padrão com `stock` (1 se omitido) e publica. Sem isto o caminho mínimo eram 7 a 8 chamadas em série (`updateProduct`, `setProductVariants`, `setProductImages`, `publishProduct`...), inviável em 3G com RTT de 0,4 a 1 s para a meta de 60 s; agora, depois da foto, é 1 chamada (os 3 passos de upload correm em segundo plano enquanto o lojista digita). Serve ao produto SEM grade: rascunho que já tem variações com atributos é 422 `QUICK_PUBLISH_NOT_APPLICABLE` e segue por `setProductVariants` e `publishProduct`. **Tudo ou nada:** qualquer erro desfaz a transação e nada digitado se perde no app. As regras são as de `publishProduct` e `updateProduct`, sem exceção (moderação, `PRODUCT_INCOMPLETE` com a lista do que falta, `DESCRIPTION_REQUIRED`, `CATEGORY_FORBIDDEN`, `PRICE_OUT_OF_RANGE`, `PRODUCT_MODERATED`). `If-Match` com a `version` do rascunho (409 `PRODUCT_VERSION_CONFLICT`); `Idempotency-Key` obrigatória (toque duplo ou repetição por 3G publica uma vez só: mesma chave e mesmo corpo devolvem o mesmo produto). Grava `product_create_published` com `duration_s` e `via` (WB-379). Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. A versão sobe uma vez (a transação é UMA edição de catálogo).
+ * @summary Publicar o rascunho com nome e preço, numa chamada só (WB-370 C3, R-36)
+ */
+export const quickPublishProduct = async (storeId: string,
+    productId: string,
+    quickPublishRequest: QuickPublishRequest, options?: Parameters<typeof apiFetch>[1]): Promise<quickPublishProductResponse> => {
+
+  return apiFetch<quickPublishProductResponse>(getQuickPublishProductUrl(storeId,productId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(quickPublishRequest)
   }
 );}
 
@@ -30590,7 +30754,7 @@ export const getListProductDraftsUrl = (storeId: string,
 }
 
 /**
- * Aba "Rascunhos (n)" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (50) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * Aba "Rascunhos (n)" da lista de Produtos: separados dos ativos e nunca visíveis ao cliente (C6). Cada item diz o que falta para publicar (`missing`) e quando vence (`expiresAt`: 30 dias sem alteração; `expiresInDays` <= 3 mostra o aviso). Mais recentes primeiro; cursor. `count` e `limit` (100, parâmetro `rascunhos_max_por_loja`) vêm na resposta. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`.
  * @summary Rascunhos da loja (WB-371)
  */
 export const listProductDrafts = async (storeId: string,
@@ -30665,7 +30829,7 @@ export const getCreateProductDraftUrl = (storeId: string,) => {
 }
 
 /**
- * O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: ""` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` ("Limite de 50 rascunhos", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` ("Esse tipo de produto não é permitido no Webag"; a tela mostra o link para os Termos do Lojista e "Escolher outra categoria"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos.
+ * O rascunho nasce ANTES da câmera (o navegador pode descarregar a aba ao voltar dela): sem nome, sem preço, só `via`. Rascunho sem nome tem `name: ""` e só deixa de ser rascunho ao publicar (`PRODUCT_INCOMPLETE` lista o que falta). Grava o início da medição (`product_create_started`, WB-379). Aceita `Idempotency-Key` (obrigatória: toque duplo ou repetição por 3G gera 1 rascunho). Mesma chave e mesmo corpo devolvem o mesmo rascunho; corpo diferente é 422 `IDEMPOTENCY_KEY_REUSED`; em andamento 409 `IDEMPOTENCY_IN_PROGRESS`. 422 `DRAFT_LIMIT_REACHED` ("Limite de 100 rascunhos", vale também para `createProduct`, `duplicateProduct` e o lote), `CATEGORY_FORBIDDEN` ("Esse tipo de produto não é permitido no Webag"; a tela mostra o link para os Termos do Lojista e "Escolher outra categoria"), `CATEGORY_INACTIVE`, `PRICE_OUT_OF_RANGE`. Permissão da loja: `catalog`; não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. Nome e demais textos entram como texto puro (C-CAD-04): caracteres de controle são removidos.
  * @summary Abrir um rascunho ao tocar em "Novo produto" (WB-370 C1, WB-371, RN-Q2)
  */
 export const createProductDraft = async (storeId: string,
@@ -30713,7 +30877,7 @@ export type createProductDraftsBatchResponse409 = {
 }
 
 export type createProductDraftsBatchResponse422 = {
-  data: UnprocessableResponse
+  data: DraftLimitUnprocessableResponse
   status: 422
 }
 
@@ -30740,7 +30904,7 @@ export const getCreateProductDraftsBatchUrl = (storeId: string,) => {
 }
 
 /**
- * Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o "Juntar 3 linhas em 1 produto" (preço por variação quando diferem). **Atômico quanto ao limite:** se `rascunhos atuais + itens` passar de 50, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` [HIPÓTESE: 100 linhas contra 50 rascunhos é um conflito do PRD; ver ADR-018, pergunta ao PO]. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE].
+ * Depois da tabela de revisão, o app cria os rascunhos de uma vez (até 100 itens; a leitura do texto colado é LOCAL, no aparelho: nada do texto sai antes desta chamada, C7). Itens incompletos (sem preço, sem foto) também viram rascunho com `missing`; item sem nome é rejeitado na linha. Variações (`variants`) cobrem o "Juntar 3 linhas em 1 produto" (preço por variação quando diferem). **Atômico quanto ao limite (DEC-118):** o lote vai até 100 itens e o teto de rascunhos da loja é 100 (`rascunhos_max_por_loja`; o teto nunca fica abaixo do lote). Se `rascunhos atuais + itens` passar do teto, nada é criado e a resposta é 422 `DRAFT_LIMIT_REACHED` com `slotsAvailable` (vagas que restam), `draftCount` e `limit` (`DraftLimitProblem`); a tela oferece "criar os N que cabem" reenviando só os N primeiros com outra `Idempotency-Key`. A contagem e a inserção ocorrem sob lock da loja (`SELECT ... FOR UPDATE` em `stores`), então requisições simultâneas não passam do teto. `Idempotency-Key` obrigatória; reenviar devolve o mesmo resultado. Nome e atributos entram como texto puro; fórmula e HTML saem escapados (C-CAD-04). Permissão da loja: `catalog`; não-membro 404; loja não aprovada 409 `STORE_NOT_APPROVED`. Limite de 10 lotes por hora por loja [HIPÓTESE].
  * @summary Criar rascunhos a partir da lista colada (WB-376 C4, RN-Q8)
  */
 export const createProductDraftsBatch = async (storeId: string,
@@ -30993,7 +31157,7 @@ export const getListProductTableUrl = (storeId: string,
 }
 
 /**
- * Lista enxuta para a tela "Preços e estoque": por produto, preço, "Você recebe" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: "Selecionar os 12 da busca"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito "Este produto foi alterado agora". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table` antes de `/products/{productId}`.
+ * Lista enxuta para a tela "Preços e estoque": por produto, preço, "Você recebe" (DEC-035), estoque disponível e reservado, e `singleVariantId` (quando o produto tem uma só variação, o estoque se edita na linha com `adjustVariantStock`; com grade a linha leva ao produto). `matchingCount` é a contagem EXATA do filtro (C9: "Selecionar os 12 da busca"); a seleção máxima de uma ação em massa é 200 (`bulkProducts`). Edição em linha: preço por `updateProduct`, estoque por `adjustVariantStock`, ambos com `If-Match` para o conflito "Este produto foi alterado agora". Rascunhos e arquivados não aparecem. Filtros: `q` (nome, até 80), `status` (`active` ou `paused`), `sectionId`. Mais recentes primeiro; cursor. **Permissão:** leitura para QUALQUER membro da loja (WB-377 C6: o funcionário sem `catalog` vê a tela somente leitura; é uma exceção à regra de leitura de `listProducts` [HIPÓTESE: PO e Security confirmam]) e `youReceiveCents` vem nulo para quem não tem `catalog` (comissão não vai a quem não gerencia o catálogo); editar exige `catalog` nas rotas de escrita. Não-membro 404 (SEC-020); loja não aprovada 409 `STORE_NOT_APPROVED`. **Ordem de rotas:** declarar `/products/table`, `/products/bulk`, `/products/bulk-batches` e `/products/bulk/{batchId}/undo` antes de `/products/{productId}`; teste e2e chama cada segmento estático e prova que não cai em `{productId}` (A2).
  * @summary Tabela de preço e estoque (WB-377, edição em massa)
  */
 export const listProductTable = async (storeId: string,
@@ -31059,7 +31223,7 @@ export const getUndoBulkBatchUrl = (storeId: string,
 }
 
 /**
- * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Lote já desfeito: 409 `BATCH_ALREADY_UNDONE`. Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
+ * Devolve o preço anterior dos itens do lote. Vale por 10 minutos depois da aplicação (`undoUntil`); depois, 410 `UNDO_WINDOW_EXPIRED` e o botão some. **Nunca sobrescreve edição posterior:** item que o lojista ou outro funcionário mudou depois do reajuste NÃO é revertido e volta em `skipped` com `CHANGED_AFTER` (desfazer parcial; a transação cobre só os revertidos). Repetir para o mesmo lote já desfeito devolve 200 com o mesmo resultado e `alreadyUndone: true` (a resposta pode ter se perdido em 3G; não é erro). Só o lote da própria loja (outro: 404). Registra no histórico (quem, quando, quantos). Permissão da loja: `catalog`; loja não aprovada 409 `STORE_NOT_APPROVED`.
  * @summary Desfazer um reajuste em massa por até 10 minutos (WB-377 C4)
  */
 export const undoBulkBatch = async (storeId: string,
@@ -31885,7 +32049,7 @@ export const getOpenViewAsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE].
+ * **[PENDENTE, tech-lead B3: a forma da credencial (cabeçalho `X-View-As` somado ao Bearer do admin, ou Bearer com prefixo `vas_`) e o nível de acesso "visualizador" estão em definição pelo Security em ADR-018 D8 e no threat model; o contrato de `openViewAs`, `viewAsAuth` e das rotas `x-view-as` NÃO deve ser implementado até lá.]** Permissão `view-as:open` (os 4 perfis). **Não é sessão do lojista nem permite escrita (C-ADM-02):** devolve uma CREDENCIAL DE VISUALIZAÇÃO opaca ligada a (admin, loja, motivo), válida por até 30 min e encerrada junto com a sessão do admin (`expiresAt` = o menor dos dois); o cliente a envia como `Authorization: Bearer` (esquema `viewAsAuth`) nas rotas de LEITURA marcadas `x-view-as: true`. Um guard global recusa com 403 `VIEW_AS_READ_ONLY` qualquer método diferente de GET e HEAD e qualquer GET sem `x-view-as` (documentos, contato, exportações, marcar como lido, comanda); a resposta já vem MASCARADA como o lojista vê (RN-14), não só a tela. **A linha do `audit_log` (`view_as.open`: admin, loja, motivo, hora) é gravada ANTES de qualquer dado ser devolvido** (C3, C9); encerramento e expiração também (`view_as.close`); as telas navegadas NÃO são gravadas. O ator continua sendo o admin. Sem motivo: 422 `REASON_REQUIRED`. Credencial mostrada uma só vez; guardada só como hash. Limite de 10 aberturas por hora por admin (429) [HIPÓTESE].
  * @summary Abrir "Ver como o lojista" (somente leitura) (WB-352)
  */
 export const openViewAs = async (storeId: string,
@@ -32082,7 +32246,7 @@ export const getCreateAdminProductDraftUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `store-catalog:write` (super admin e operação). Cria um rascunho na loja com o autor (admin) gravado; o produto só nasce `active` com foto, nome e preço (publicação por `setAdminProductStatus`) e a moderação (WB-107) vale igual. Motivo do catálogo obrigatório; `Idempotency-Key` obrigatória; 422 `DRAFT_LIMIT_REACHED` (os 50 rascunhos são da LOJA, contados juntos). Fotos: o admin envia por `/v1/uploads` com `storeId` da loja (autorização de admin com `store-catalog:write`; o upload fica auditado). Aviso ao lojista agregado (C11).
+ * Permissão `store-catalog:write` (super admin e operação). Cria um rascunho na loja com o autor (admin) gravado; o produto só nasce `active` com foto, nome e preço (publicação por `setAdminProductStatus`) e a moderação (WB-107) vale igual. Motivo do catálogo obrigatório; `Idempotency-Key` obrigatória; 422 `DRAFT_LIMIT_REACHED` (os 100 rascunhos são da LOJA, contados juntos). Fotos: o admin envia por `/v1/uploads` com `storeId` da loja (autorização de admin com `store-catalog:write`; o upload fica auditado). Aviso ao lojista agregado (C11).
  * @summary Criar produto pela loja (o admin usa o mesmo cadastro rápido, WB-353 C8)
  */
 export const createAdminProductDraft = async (storeId: string,
@@ -32543,7 +32707,7 @@ export type bulkAdminStoreProductsResponse404 = {
 }
 
 export type bulkAdminStoreProductsResponse409 = {
-  data: ConflictResponse
+  data: BulkVersionConflictResponse
   status: 409
 }
 
@@ -32575,7 +32739,7 @@ export const getBulkAdminStoreProductsUrl = (storeId: string,) => {
 }
 
 /**
- * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia).
+ * Permissão `store-catalog:write`. Ações: `pause`, `resume`, `stock_set` e `stock_adjust` (reajuste de PREÇO em massa pelo admin NÃO existe na R1: risco de dinheiro de terceiros sem a prévia por item do lojista [ADR-018, decisão ao PO]). `dryRun: true` devolve a prévia (o que mudaria e o que seria bloqueado) e exige o mesmo motivo; sem `dryRun` executa. **Até 200 itens** (201: 422 `BULK_TOO_LARGE`); **limite de 10 ações em massa por hora por admin** (429 com `Retry-After`, contado só quando executa); id de outra loja: 404 para o pedido todo; estoque abaixo do reservado bloqueia o item (`blocked`, RN-06). **Uma linha de auditoria por item** (`auditEntries` = itens alterados) e UM aviso agregado ao lojista com o motivo (C11), nunca 200 avisos. Uma transação (tudo ou nada nos itens que passam pela prévia). **Repetição em 3G (tech-lead B2):** `stock_adjust` repetido depois de timeout dobraria o ajuste. Sem `dryRun`, o servidor EXIGE `Idempotency-Key` (ausente: 400 `IDEMPOTENCY_KEY_REQUIRED`; mesma chave e mesmo corpo devolvem o mesmo `batchId`, sem nova auditoria nem novo aviso) e `expectedVersions` com a `version` de cada item, vinda de `preview[].version` (ausente ou incompleto: 400 `EXPECTED_VERSIONS_REQUIRED`; versão diferente: 409 `BULK_VERSION_CONFLICT` com `conflicts`, nada é aplicado). O header é opcional na assinatura OpenAPI só porque a exigência depende de `dryRun`, que o OpenAPI não expressa; a prévia (`dryRun: true`) não grava nada e não consome o limite de 10 por hora.
  * @summary Ação em massa pela loja, até 200 itens (WB-353 C6, C-ADM-07)
  */
 export const bulkAdminStoreProducts = async (storeId: string,
@@ -32640,7 +32804,7 @@ export const getIngestAnalyticsEventsUrl = () => {
 }
 
 /**
- * **Rota PÚBLICA e sem identidade de propósito (C-ANA-01):** o app NÃO envia `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; o nginx não grava IP nem user-agent dela; o `session_id` só trafega no corpo e não vai a log, pedido nem usuário. Corpo em lote: até 100 eventos e 64 KB (acima: 413 `PAYLOAD_TOO_LARGE` ou 422), Zod estrito (campo fora do esquema, texto livre ou `user_id`: 422 `VALIDATION_FAILED` e a rejeição é CONTADA, C6; o lote inteiro é recusado). Idempotente por `eventId` (reenvio do lote não duplica, C5). Resposta SEMPRE 202 quando válido, com `accepted`, `duplicates` e `discarded` (evento com `storeId` ou `productId` inexistente é descartado e contado; com a flag `coleta_eventos` desligada TUDO é descartado em silêncio: o app não distingue). Limites (C-ANA-03): 60 requisições por minuto por sessão e por IP (chave = HMAC do IP no Redis, validade de até 120 s; IP em claro nunca) e, no máximo, 30 sessões novas por hora por IP (a 31ª é DESCARTADA e contada, sem erro) `[HIPÓTESE: parâmetro]`. `occurredAt` é do aparelho e o servidor o limita a [-24 h, +5 min] e o grava truncado ao minuto. O `order_paid` NÃO vem por aqui: o servidor o grava ao confirmar o pagamento, com hora cheia e sem `order_id`, `user_id` nem valor (SEC-194). O app não envia com conta de lojista ou admin logada nem com o opt-out ligado (C-ANA-08): decisão do app.
+ * **Rota PÚBLICA e sem identidade de propósito (C-ANA-01):** o app NÃO envia `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; **nenhum log grava IP, user-agent, cabeçalhos nem `session_id` desta rota** (tech-lead I5): o `pino-http` a ignora no log de acesso e o serializer do caminho não inclui `remoteAddress` nem cabeçalhos, então 413, 422 e 429 viram CONTADOR (não linha); o nginx tem `access_log off` e nenhum `limit_req` nessa `location` (o limite é da API); o Sentry descarta o evento da rota. O `session_id` só trafega no corpo e não vai a log, pedido nem usuário. Corpo em lote: até 100 eventos e 64 KB (acima: 413 `PAYLOAD_TOO_LARGE` ou 422), Zod estrito (campo fora do esquema, texto livre ou `user_id`: 422 `VALIDATION_FAILED` e a rejeição é CONTADA, C6; o lote inteiro é recusado). Idempotente por `eventId` (reenvio do lote não duplica, C5). Resposta SEMPRE 202 quando válido, com `accepted`, `duplicates` e `discarded` (evento com `storeId` ou `productId` inexistente é descartado e contado; com a flag `coleta_eventos` desligada TUDO é descartado em silêncio: o app não distingue). Limites (C-ANA-03, tech-lead I6): o controle real é por **sessão pseudônima**: 60 requisições por minuto por `sessionId` (chave Redis = HMAC do `sessionId`, validade de até 120 s; `sessionId` e IP em claro nunca); acima, 429 com `Retry-After` e o app mantém a fila no aparelho (nada é perdido em silêncio). O IP é só trava anti-inundação com teto alto, porque a rede móvel da região fica atrás de CGNAT (SEC-200, R-38): 600 requisições por minuto e 300 sessões novas por hora por IP (chave = HMAC do IP; IP em claro nunca) `[HIPÓTESE: parâmetros `analytics_ip_req_min` e `analytics_sessoes_novas_ip_hora`; o Security confirma os números]`, também com 429, nunca descarte silencioso com 202. Os descartes e recusas são contados por motivo (`rate_ip`, `rate_session`, `unknown_store`, `flag_off`) e aparecem em `getAdminAnalyticsAccess` (`discards`). Validação de `storeId` e `productId` do lote com UMA consulta `= ANY(:ids)` (ou cache curto de ids existentes), nunca 1 por evento (A5). `occurredAt` é do aparelho e o servidor o limita a [-24 h, +5 min] e o grava truncado ao minuto. O `order_paid` NÃO vem por aqui: o servidor o grava ao confirmar o pagamento, com hora cheia e sem `order_id`, `user_id` nem valor (SEC-194). O app não envia com conta de lojista ou admin logada nem com o opt-out ligado (C-ANA-08): decisão do app.
  * @summary Enviar eventos de navegação, sem identificar a conta (WB-361)
  */
 export const ingestAnalyticsEvents = async (analyticsEventsRequest: AnalyticsEventsRequest, options?: Parameters<typeof apiFetch>[1]): Promise<ingestAnalyticsEventsResponse> => {
@@ -32722,72 +32886,6 @@ export const getGetAdminAnalyticsAccessUrl = (params: GetAdminAnalyticsAccessPar
 export const getAdminAnalyticsAccess = async (params: GetAdminAnalyticsAccessParams, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsAccessResponse> => {
 
   return apiFetch<getAdminAnalyticsAccessResponse>(getGetAdminAnalyticsAccessUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type getAdminAnalyticsCoverageResponse200 = {
-  data: AnalyticsCoveragePage
-  status: 200
-}
-
-export type getAdminAnalyticsCoverageResponse400 = {
-  data: ValidationErrorResponse
-  status: 400
-}
-
-export type getAdminAnalyticsCoverageResponse401 = {
-  data: UnauthorizedResponse
-  status: 401
-}
-
-export type getAdminAnalyticsCoverageResponse403 = {
-  data: ForbiddenResponse
-  status: 403
-}
-
-export type getAdminAnalyticsCoverageResponse409 = {
-  data: ConflictResponse
-  status: 409
-}
-
-export type getAdminAnalyticsCoverageResponseSuccess = (getAdminAnalyticsCoverageResponse200) & {
-  headers: Headers;
-};
-export type getAdminAnalyticsCoverageResponseError = (getAdminAnalyticsCoverageResponse400 | getAdminAnalyticsCoverageResponse401 | getAdminAnalyticsCoverageResponse403 | getAdminAnalyticsCoverageResponse409) & {
-  headers: Headers;
-};
-
-export type getAdminAnalyticsCoverageResponse = (getAdminAnalyticsCoverageResponseSuccess | getAdminAnalyticsCoverageResponseError)
-
-export const getGetAdminAnalyticsCoverageUrl = (params?: GetAdminAnalyticsCoverageParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/v1/admin/analytics/coverage?${stringifiedParams}` : `/v1/admin/analytics/coverage`
-}
-
-/**
- * Permissão `analytics:read` (suporte 403). Cobertura = `order_paid` do app (Android e iOS) COM `session_id` dividido pelo `order_paid` do app, por semana e cidade, calculada no job de agregação (sem coluna nova em `orders` e SEM contar opt-out: desligar a medição não gera evento). Só aparece com 20 pedidos ou mais na semana (`insufficient: true` e `coveragePct: null` abaixo disso); meta >= 85% [HIPÓTESE]. É estimativa, não contagem de quem desligou. `session_id` nunca existe no agregado. Mais recentes primeiro; cursor.
- * @summary Cobertura da medição por semana e cidade (RN-A10, WB-363 C9)
- */
-export const getAdminAnalyticsCoverage = async (params?: GetAdminAnalyticsCoverageParams, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsCoverageResponse> => {
-
-  return apiFetch<getAdminAnalyticsCoverageResponse>(getGetAdminAnalyticsCoverageUrl(params),
   {
     ...options,
     method: 'GET'
