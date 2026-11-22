@@ -1351,6 +1351,8 @@ export const ptBR = {
     terms: 'Termos de uso',
     privacy: 'Política de Privacidade',
     version: 'Versão {n}',
+    reviewNotice: 'Versão para revisão. Vigência a definir.',
+    approvedMeta: 'Versão {n}. Em vigor desde {date}.',
     notFound: 'Não conseguimos abrir o documento agora.',
   },
   location: {

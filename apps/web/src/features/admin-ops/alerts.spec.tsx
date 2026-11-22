@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api/errors';
 import { json, mockFetch, path, renderPanel } from '../../../test/render';
 import { AlertDetailPage, resolveError } from './alert-detail-page';
@@ -8,7 +8,15 @@ import { AlertsPage } from './alerts-page';
 import { ageText } from './common';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/admin/alertas' }));
-afterEach(() => vi.unstubAllGlobals());
+// BUG-032: os alertas de exemplo têm data fixa; só o relógio (Date) é simulado, para que os temporizadores do React Query e do waitFor sigam reais.
+const NOW = new Date('2026-11-19T15:00:00Z');
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'], now: NOW });
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 const alert = (over: object = {}) => ({
   id: 'a1', kind: 'refund_exhausted', label: 'Estorno recusado pelo provedor', area: 'payments', severity: 'critical', hint: 'Tente de novo ou cubra o estorno.', status: 'open', attemptId: null,

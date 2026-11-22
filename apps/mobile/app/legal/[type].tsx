@@ -9,6 +9,7 @@ import { Skeleton } from '../../src/components/Skeleton';
 import { Text } from '../../src/components/Text';
 import { LEGAL_REVIEWED, WEB_PUBLIC_URL } from '../../src/features/checkout/config';
 import { LegalBody } from '../../src/features/legal/LegalBody';
+import { formatVigencia } from '../../src/features/legal/legal-text';
 import { t } from '../../src/i18n';
 import { theme } from '../../src/theme';
 
@@ -19,6 +20,8 @@ export default function LegalScreen() {
   const { type: raw } = useLocalSearchParams<{ type?: string }>();
   const type: LegalType = raw === 'privacy' ? 'privacy' : 'customer_terms';
   const query = useQuery({ queryKey: ['legal', type], queryFn: () => fetchCurrentLegalDocument(type), staleTime: 60 * 60_000 });
+
+  const vigencia = formatVigencia(query.data?.effectiveAt);
 
   return (
     <Screen header={<Header title={type === 'privacy' ? t('legal.privacy') : t('legal.terms')} />}>
@@ -38,7 +41,10 @@ export default function LegalScreen() {
         {query.data ? (
           <View style={styles.doc} testID="legal.content">
             <Text variant="title2">{query.data.title}</Text>
-            <Text color="secondary" variant="caption">{t('legal.version', { n: query.data.version })}</Text>
+            {/* Mesmo critério do site (DEC-078, DEC-082): sem aprovação do jurídico, só o aviso de revisão; aprovado, versão e vigência. */}
+            <Text color="secondary" testID="legal.meta" variant="caption">
+              {LEGAL_REVIEWED && vigencia ? t('legal.approvedMeta', { n: query.data.version, date: vigencia }) : LEGAL_REVIEWED ? t('legal.version', { n: query.data.version }) : t('legal.reviewNotice')}
+            </Text>
             {/* Texto puro: o conteúdo é do admin e nunca é interpretado como HTML (contrato: "exibir como texto puro"); só títulos, listas e negrito simples. */}
             <LegalBody content={query.data.content} effectiveAt={query.data.effectiveAt} reviewed={LEGAL_REVIEWED} siteUrl={WEB_PUBLIC_URL} version={query.data.version} />
           </View>
