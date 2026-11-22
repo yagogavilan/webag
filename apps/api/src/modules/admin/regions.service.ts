@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { asc, eq } from 'drizzle-orm';
 import type { RequestContext } from '../../platform/auth/decorators.js';
 import { CacheService } from '../../platform/cache/cache.service.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService } from './audit.service.js';
@@ -18,6 +19,7 @@ export class RegionsService {
     @Inject(DRIZZLE) private readonly db: Db,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   /** Lista pública (cidades e bairros ativos), em cache de 60 s; escrita de região invalida o namespace. */
@@ -83,6 +85,13 @@ export class RegionsService {
   }
 
   async updateCity(id: string, patch: { name?: string; active?: boolean }, ctx: RequestContext): Promise<City> {
+    const updated = await this.updateCityInTx(id, patch, ctx);
+    // DEC-113: cidade ativada/desativada muda quais lojas a descoberta mostra (o catálogo exige `cities.active`); vale em até 5 s.
+    if (patch.active !== undefined) await this.storefront.everythingChanged();
+    return updated;
+  }
+
+  private async updateCityInTx(id: string, patch: { name?: string; active?: boolean }, ctx: RequestContext): Promise<City> {
     return this.db.transaction(async (tx) => {
       const [before] = await tx.select().from(cities).where(eq(cities.id, id)).for('update');
       if (!before) throw errors.notFound('Cidade não encontrada.');

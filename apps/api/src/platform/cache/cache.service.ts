@@ -1,4 +1,4 @@
-import { Global, Inject, Injectable, Logger, Module } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { REDIS } from '../redis/redis.module.js';
 
@@ -61,7 +61,3 @@ export class CacheService {
     }
   }
 }
-
-@Global()
-@Module({ providers: [CacheService], exports: [CacheService] })
-export class CacheModule {}

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { and, asc, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import { StorefrontCacheService, type StorefrontEvent } from '../../platform/cache/storefront-cache.service.js';
 import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
@@ -52,12 +53,47 @@ export class BrowseService {
     private readonly settings: StoreSettingsService,
     private readonly fees: DeliveryFeesService,
     private readonly config: ConfigService<Env, true>,
-  ) {}
+    storefront: StorefrontCacheService,
+  ) {
+    storefront.register((event) => this.invalidate(event));
+  }
+
+  /**
+   * DEC-113: apaga (não só vence) o que a mudança tornou falso. Chave da loja = `storeId`; do produto = `productId` (o valor guarda a loja); da vitrine = `storeId|...`.
+   * Sacola e checkout nunca passam por estes caches.
+   */
+  private invalidate(event: StorefrontEvent): void {
+    const ofStore = (storeId: string) => (_key: string, value?: { store: { id: string } }) => !value || value.store.id === storeId;
+    const listsOf = (storeId: string) => (key: string) => key.startsWith(`${storeId}|`);
+    switch (event.scope) {
+      case 'all':
+        this.storeBases.invalidate();
+        this.productBases.invalidate();
+        this.storeLists.invalidate();
+        return;
+      case 'store':
+        this.storeBases.invalidate((key) => key === event.storeId);
+        this.productBases.invalidate(ofStore(event.storeId));
+        this.storeLists.invalidate(listsOf(event.storeId));
+        return;
+      case 'takedown':
+        // Retirar o último produto ativo também tira a loja do ar (RN-03): a página da loja precisa reler.
+        this.storeBases.invalidate((key) => key === event.storeId);
+        this.productBases.invalidate((key) => key === event.productId);
+        this.storeLists.invalidate(listsOf(event.storeId));
+        return;
+      case 'product':
+        this.productBases.invalidate(event.productIds ? (key) => event.productIds!.includes(key) : ofStore(event.storeId));
+        this.storeLists.invalidate(listsOf(event.storeId));
+        return;
+    }
+  }
 
   /**
    * Leitura pública igual para todos (vitrine da loja, dados-base da loja e do produto): cache em memória por poucos segundos com single-flight. 1.000 pessoas abrindo a
    * mesma loja viram 1 leitura ao banco por TTL, não 1.000. O que depende do cliente (frete/ETA pela posição) é calculado FORA do cache. TTL 0 = desligado (e2e).
-   * Defasagem máxima = TTL (10 s por padrão), menor que o `Cache-Control: max-age=30` que as respostas já mandam ao app.
+   * Defasagem máxima = TTL (10 s por padrão) para o que nenhum serviço invalidou; moderação, loja e mudança do lojista APAGAM a entrada na hora (`invalidate`, DEC-113).
+   * O `Cache-Control: max-age=30` das respostas é cache do APP/proxy e continua valendo (ver guia de deploy §14).
    */
   private readonly storeBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadStoreBase']>>>(500);
   private readonly productBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadProductBase']>>>(1000);

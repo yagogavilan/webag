@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { AppError, errors, type FieldError } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -47,6 +48,7 @@ export class CatalogService {
     private readonly storeSettings: StoreSettingsService,
     private readonly mail: MailService,
     private readonly orders: ProductOrdersPort,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   // ----------------------------------------------------------------- helpers
@@ -345,6 +347,7 @@ export class CatalogService {
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_update', { productId, fields: Object.keys(input) });
       return row;
     });
+    await this.storefront.productsChanged(store.id, [updated.id]); // DEC-113: preço, promoção, nome e foto aparecem na página e na vitrine em até 5 s
     return this.present(store, (await this.requireProduct(store.id, updated.id)) );
   }
 
@@ -432,6 +435,7 @@ export class CatalogService {
       }
       throw error;
     }
+    await this.storefront.productsChanged(store.id, [productId]);
     await this.sendLowStock(store, low);
     return this.present(store, await this.requireProduct(store.id, productId));
   }
@@ -472,6 +476,7 @@ export class CatalogService {
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.stock_adjust', { productId, variantId, from: variant.stock, to: next.stock });
       return { variant, stock: next.stock };
     });
+    await this.storefront.productsChanged(store.id, [productId]); // ajuste do LOJISTA (esgotar/repor); a venda não invalida (DEC-113)
     const changed = [{ variant: result.variant, available: available(result.stock, result.variant.reserved) }];
     await this.sendLowStock(store, changed);
     const product = await this.requireProduct(store.id, productId);
@@ -494,6 +499,7 @@ export class CatalogService {
       await tx.update(products).set({ updatedAt: new Date() }).where(eq(products.id, productId));
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.images_set', { productId, count: imageIds.length });
     });
+    await this.storefront.productsChanged(store.id, [productId]);
     return this.present(store, await this.requireProduct(store.id, productId));
   }
 
@@ -521,6 +527,7 @@ export class CatalogService {
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_publish', { productId });
       return row ?? product;
     });
+    await this.storefront.productsChanged(store.id, [productId]);
     return this.present(store, await this.requireProduct(store.id, published.id));
   }
 
@@ -545,6 +552,7 @@ export class CatalogService {
       await tx.update(products).set({ status: to, updatedAt: new Date() }).where(eq(products.id, productId));
       await this.stores.logActivity(tx, store.id, actor.userId, action, { productId });
     });
+    await this.storefront.productsChanged(store.id, [productId]);
   }
 
   /** "Excluir" = arquivar: some da vitrine e do painel, o histórico de pedidos mantém nome e preço (WB-060 C5). */
@@ -557,6 +565,7 @@ export class CatalogService {
       await tx.update(products).set({ status: 'archived', archivedAt: new Date(), updatedAt: new Date() }).where(eq(products.id, productId));
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_archive', { productId });
     });
+    await this.storefront.productsChanged(store.id, [productId]);
   }
 
   // ------------------------------------------------------------------- seções
@@ -677,6 +686,7 @@ export class CatalogService {
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.bulk', { action: action.type, productIds: changes.map((c) => c.product.id), requested: ids.length });
       return { blocked, willChange: changes.length, applied: true };
     });
+    if (outcome.applied) await this.storefront.productsChanged(store.id, ids);
     if (outcome.blocked.length > 0 && !input.dryRun) {
       throw new AppError(422, 'BULK_BLOCKED', 'Ação bloqueada', { detail: `${outcome.blocked.length} produto(s) impedem a ação. Nada foi alterado.`, errors: outcome.blocked.map((b) => ({ field: b.productId, message: `${b.name}: ${b.reason}` })) });
     }
@@ -739,6 +749,7 @@ export class CatalogService {
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.import', { created, updated, skipped, errors: plan.errors.length });
       return { created, updated, skipped };
     });
+    if (counts.created + counts.updated > 0) await this.storefront.productsChanged(store.id, null);
     return { ...summary, committed: true, ...counts };
   }
 

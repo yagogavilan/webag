@@ -1,16 +1,21 @@
 import { eq } from 'drizzle-orm';
 import { vi } from 'vitest';
+import { RegionsService } from '../src/modules/admin/index.js';
 import { BrowseService } from '../src/modules/discovery/browse.service.js';
+import { CacheService } from '../src/platform/cache/cache.service.js';
+import { StorefrontCacheService } from '../src/platform/cache/storefront-cache.service.js';
 import { encodeCursor } from '../src/platform/http/pagination.js';
-import { products, productVariants, storeSettings, stores } from '../src/platform/database/schema.js';
+import { products, productVariants, stores } from '../src/platform/database/schema.js';
 import { bearer, createTestApp, type TestContext } from './helpers/app.js';
 import { isolatedPoint, makeStore, northOf, variantOf, type TestPoint } from './helpers/discovery.js';
-import { createCustomer, ensureCity, ensureLegalDocs } from './helpers/fixtures.js';
+import { createAdmin, createCustomer, ensureCity, ensureLegalDocs, type TestAdmin } from './helpers/fixtures.js';
 import { addToCart, customerAt, placeOrder } from './helpers/orders.js';
 
 // I1 do review de desempenho (2026-11-22): TODOS os outros e2e rodam com os caches em memória DESLIGADOS (TTL 0). Aqui eles ficam ligados
 // com os TTLs reais de produção (diretório 15 s, ofertas/mais vendidos 60 s, loja/produto/vitrine 10 s) para provar o que a home e as páginas
 // mostram com o cache quente: isolamento entre áreas, defasagem esperada e que o CHECKOUT recalcula tudo na hora.
+// Desde a DEC-113 (SEC-201, DT-087), moderação, suspensão, pausa, conta de recebimento, cidade e mudança do lojista pela API APAGAM os caches: o bloco
+// "invalidação ativa" prova a retirada na hora (limite da DEC: 5 s). Escrita direta no banco, que nenhum serviço viu, continua seguindo o TTL.
 // A configuração é lida quando o AppModule é importado: o valor tem de existir ANTES dos imports.
 const saved = vi.hoisted(() => {
   const keys = ['FEED_DIRECTORY_TTL_SECONDS', 'HOME_SECTIONS_TTL_SECONDS', 'BROWSE_CACHE_TTL_SECONDS'] as const;
@@ -27,6 +32,7 @@ const q = (p: TestPoint) => `lat=${p.lat}&lng=${p.lng}`;
 describe('Descoberta com cache em memória LIGADO (TTL real): isolamento, defasagem e checkout na hora (I1)', () => {
   let ctx: TestContext;
   let browse: BrowseService;
+  let ops: TestAdmin;
 
   beforeAll(async () => {
     // Só a data é falsa e segue andando; `advance` empurra o relógio para frente para vencer os TTLs sem esperar (o cache usa Date.now()).
@@ -35,6 +41,7 @@ describe('Descoberta com cache em memória LIGADO (TTL real): isolamento, defasa
     await ensureLegalDocs(ctx);
     await ensureCity(ctx, 'Francisco Morato');
     browse = ctx.app.get(BrowseService);
+    ops = await createAdmin(ctx, 'operations');
   });
   afterAll(async () => {
     vi.restoreAllMocks();
@@ -153,44 +160,98 @@ describe('Descoberta com cache em memória LIGADO (TTL real): isolamento, defasa
       expect((await shelf()).available).toBe(false);
     });
 
-    it('produto removido pela moderação depois de cacheado: a página mostra o produto até vencer (<= 10 s), mas a sacola recusa o item na hora', async () => {
+    it('produto alterado direto no banco (sem passar pela API) segue o TTL: o cache não é invalidado por escrita que o serviço não viu', async () => {
+      // Contraprova do desenho: a invalidação é chamada pelos serviços (moderação, loja, catálogo), não por observar o banco.
       const origin = isolatedPoint();
-      const store = await makeStore(ctx, { name: 'Loja Moderacao', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Produto Moderado', priceCents: 1000 }, { name: 'Produto Normal', priceCents: 1000 }] });
-      const [moderated] = store.productIds as [string, string];
-      const variantId = await variantOf(ctx, moderated);
-      expect((await page(moderated)).available).toBe(true); // esquenta
-      await ctx.db.update(products).set({ moderationStatus: 'removed' }).where(eq(products.id, moderated));
-      expect((await page(moderated)).available).toBe(true); // defasagem esperada
+      const store = await makeStore(ctx, { name: 'Loja Banco Direto', at: await northOf(ctx, origin, 800), products: [{ name: 'Produto Direto', priceCents: 1000 }, { name: 'Outro Direto', priceCents: 1000 }] });
+      const id = store.productIds[0]!;
+      expect((await page(id)).available).toBe(true);
+      await ctx.db.update(products).set({ moderationStatus: 'removed' }).where(eq(products.id, id));
+      expect((await page(id)).available).toBe(true);
       const { user } = await customerAt(ctx, origin);
-      const refused = await addToCart(ctx, user, variantId, 1);
-      expect(refused.status).toBeGreaterThanOrEqual(400); // sacola: estado do banco, não da página
-      expect(refused.status).toBeLessThan(500);
+      expect((await addToCart(ctx, user, await variantOf(ctx, id), 1)).status).toBeGreaterThanOrEqual(400); // sacola: estado do banco
       advance(11);
-      const after = await page(moderated);
-      expect(after).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+      expect(await page(id)).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+    });
+  });
+
+  // DEC-113 / SEC-201 / DT-087: moderação e suspensão APAGAM o cache (local e Redis) e valem na hora, sem esperar TTL, com o cache quente e TTL real.
+  describe('invalidação ativa: moderação, suspensão e pausa somem da vitrine em até 5 s (DEC-113)', () => {
+    const moderate = (productId: string, body: Record<string, unknown>) => ctx.http.post(`/v1/admin/products/${productId}/moderation`).set(bearer(ops.accessToken)).send(body);
+    const storeAction = (storeId: string, action: 'suspend' | 'reactivate', body: Record<string, unknown> = {}) => ctx.http.post(`/v1/admin/stores/${storeId}/${action}`).set(bearer(ops.accessToken)).send(body);
+    /** Home SEM limpar o Redis: o cache de 30 s por posição também precisa ser invalidado. */
+    const homeCached = async (point: TestPoint) => (await ctx.http.get(`/v1/home?${q(point)}`).expect(200)).body as { nearbyStores: Card[]; offers: Card[]; bestSellers: Card[] };
+    const shelf = async (storeId: string) => ((await ctx.http.get(`/v1/browse/stores/${storeId}/products`).expect(200)).body.data as { id: string; name: string; available: boolean }[]);
+
+    it('produto removido pela moderação com página, vitrine, ofertas e home quentes: some de todos na hora, a sacola recusa, e restaurar devolve na hora', async () => {
+      const origin = isolatedPoint();
+      const store = await makeStore(ctx, {
+        name: 'Loja Moderacao',
+        at: await northOf(ctx, origin, 800),
+        feeFixedCents: 500,
+        products: [{ name: 'Produto Moderado', priceCents: 2000, promoPriceCents: 1000 }, { name: 'Produto Normal', priceCents: 1000 }],
+      });
+      const [moderated] = store.productIds as [string, string];
+      advance(61); // loja nova só entra no diretório (15 s) e nas ofertas (60 s) depois do TTL
+      expect(names((await homeCached(origin)).offers)).toEqual(['Produto Moderado']);
+      expect((await page(moderated)).available).toBe(true);
+      expect((await shelf(store.id)).map((p) => p.name)).toContain('Produto Moderado');
+      expect((await homeCached(origin)).offers).toHaveLength(1); // tudo quente, inclusive o `home` do Redis
+
+      await moderate(moderated, { action: 'remove', reason: 'Item proibido pela política' }).expect(200);
+      // sem `advance`: nada de esperar TTL
+      expect(await page(moderated)).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+      expect((await shelf(store.id)).map((p) => p.name)).toEqual(['Produto Normal']);
+      expect((await homeCached(origin)).offers).toEqual([]);
+      const { user } = await customerAt(ctx, origin);
+      expect((await addToCart(ctx, user, await variantOf(ctx, moderated), 1)).status).toBeGreaterThanOrEqual(400); // sacola: banco
+
+      await moderate(moderated, { action: 'restore' }).expect(200);
+      expect((await page(moderated)).available).toBe(true);
+      expect((await shelf(store.id)).map((p) => p.name).sort()).toEqual(['Produto Moderado', 'Produto Normal']);
+      expect(names((await homeCached(origin)).offers)).toEqual(['Produto Moderado']);
     });
 
-    it('loja suspensa ou pausada depois de cacheada: a página dura até 10 s, mas sacola e pedido bloqueiam na hora; some da home depois do cache de 30 s da posição', async () => {
+    it('stale-if-error não ressuscita o retirado: com a entrada VENCIDA (ainda dentro de 4x o TTL), moderar e o banco falhar devolve erro, nunca o produto removido', async () => {
       const origin = isolatedPoint();
-      const store = await makeStore(ctx, { name: 'Loja Suspensa', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Item Suspensa', priceCents: 1000 }] });
-      const paused = await makeStore(ctx, { name: 'Loja Pausada', at: await northOf(ctx, origin, 900), feeFixedCents: 500, products: [{ name: 'Item Pausada', priceCents: 1000 }] });
+      const store = await makeStore(ctx, { name: 'Loja Stale', at: await northOf(ctx, origin, 800), products: [{ name: 'Produto Stale', priceCents: 1000 }, { name: 'Outro', priceCents: 1000 }] });
+      const id = store.productIds[0]!;
+      expect((await page(id)).available).toBe(true);
+      advance(11); // vencida: sem a invalidação, o recálculo que falha serviria o valor antigo
+      await moderate(id, { action: 'remove', reason: 'Item proibido pela política' }).expect(200);
+      const spy = vi.spyOn(browse as unknown as { loadProductBase: (id: string) => Promise<unknown> }, 'loadProductBase').mockRejectedValueOnce(new Error('banco fora'));
+      expect((await ctx.http.get(`/v1/browse/products/${id}`)).status).toBe(500);
+      spy.mockRestore();
+      expect(await page(id)).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+    });
+
+    it('loja suspensa e loja pausada com tudo quente: a página, a vitrine e a home refletem na hora; reativar e retomar também; sacola e pedido bloqueiam sempre', async () => {
+      const origin = isolatedPoint();
+      const store = await makeStore(ctx, { name: 'Loja Suspensa', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Item Suspensa', priceCents: 1000, promoPriceCents: 500 }] });
+      const paused = await makeStore(ctx, { name: 'Loja Pausada', at: await northOf(ctx, origin, 900), feeFixedCents: 500, products: [{ name: 'Item Pausada', priceCents: 1000, promoPriceCents: 400 }] });
       const { user, addressId } = await customerAt(ctx, origin);
       const { user: user2, addressId: addressId2 } = await customerAt(ctx, origin);
       await addToCart(ctx, user, await variantOf(ctx, store.productIds[0]!), 1).expect(200);
       await addToCart(ctx, user2, await variantOf(ctx, paused.productIds[0]!), 1).expect(200);
-      advance(16); // o diretório de testes anteriores ainda está quente
-      expect(names((await home(origin)).nearbyStores).sort()).toEqual(['Loja Pausada', 'Loja Suspensa']);
+      advance(61);
+      const warm = await homeCached(origin);
+      expect(names(warm.nearbyStores).sort()).toEqual(['Loja Pausada', 'Loja Suspensa']);
+      expect(names(warm.offers).sort()).toEqual(['Item Pausada', 'Item Suspensa']); // ofertas (60 s) quentes
       await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(200);
       await ctx.http.get(`/v1/browse/stores/${paused.id}`).expect(200);
+      await ctx.http.get(`/v1/browse/products/${store.productIds[0]}`).expect(200);
+      await shelf(store.id);
 
-      await ctx.db.update(stores).set({ status: 'suspended' }).where(eq(stores.id, store.id));
-      await ctx.db.update(storeSettings).set({ pausedIndefinitely: true }).where(eq(storeSettings.storeId, paused.id));
+      await storeAction(store.id, 'suspend', { reason: 'Denúncia de produto proibido' }).expect(200);
+      await ctx.http.post(`/v1/stores/${paused.id}/pause`).set(bearer(paused.owner.accessToken)).send({ kind: 'until_resume' }).expect(204);
 
-      // página: defasagem esperada
-      await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(200);
-      expect((await ctx.http.get(`/v1/browse/stores/${paused.id}`).expect(200)).body.open).toBe(true);
-      // posição: a consulta por raio confere `status = 'approved'` ao vivo (o diretório em cache não decide); o Redis foi limpo na leitura
-      expect(names((await home(origin)).nearbyStores)).toEqual(['Loja Pausada']);
+      await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(404); // suspensa: some na hora
+      await ctx.http.get(`/v1/browse/products/${store.productIds[0]}`).expect(404);
+      await ctx.http.get(`/v1/browse/stores/${store.id}/products`).expect(404);
+      expect((await ctx.http.get(`/v1/browse/stores/${paused.id}`).expect(200)).body.open).toBe(false); // pausada: "Fechada" na hora
+      const afterHome = await homeCached(origin);
+      expect(names(afterHome.nearbyStores)).toEqual(['Loja Pausada']); // diretório + `home` do Redis
+      expect(names(afterHome.offers)).toEqual(['Item Pausada']); // a suspensa saiu das ofertas (a lista por loja segue quente: o feed a filtra)
 
       // checkout: nada disso é lido do cache
       const cart = (await ctx.http.get(`/v1/cart?addressId=${addressId}`).set(bearer(user.accessToken)).expect(200)).body as { checkout: { canCheckout: boolean; blockers: string[] } };
@@ -203,9 +264,65 @@ describe('Descoberta com cache em memória LIGADO (TTL real): isolamento, defasa
       expect(refused.status).toBe(409);
       expect(refused.body.code).toBe('STORE_CLOSED');
 
-      advance(11);
-      await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(404); // alcançou
-      expect((await ctx.http.get(`/v1/browse/stores/${paused.id}`).expect(200)).body.open).toBe(false);
+      await storeAction(store.id, 'reactivate').expect(200);
+      await ctx.http.delete(`/v1/stores/${paused.id}/pause`).set(bearer(paused.owner.accessToken)).expect(204);
+      await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(200); // volta na hora
+      expect((await ctx.http.get(`/v1/browse/stores/${paused.id}`).expect(200)).body.open).toBe(true);
+      const back = await homeCached(origin);
+      expect(names(back.nearbyStores).sort()).toEqual(['Loja Pausada', 'Loja Suspensa']);
+      expect(names(back.offers).sort()).toEqual(['Item Pausada', 'Item Suspensa']);
+    });
+
+    it('cidade desativada pelo admin tira as lojas dela da home na hora', async () => {
+      const origin = isolatedPoint();
+      const city = await ensureCity(ctx, 'Cidade Temporaria Cache');
+      await makeStore(ctx, { name: 'Loja Cidade', cityName: city.name, at: await northOf(ctx, origin, 800) });
+      advance(61);
+      expect(names((await homeCached(origin)).nearbyStores)).toEqual(['Loja Cidade']);
+      await ctx.app.get(RegionsService).updateCity(city.id, { active: false }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      expect((await homeCached(origin)).nearbyStores).toEqual([]);
+      await ctx.app.get(RegionsService).updateCity(city.id, { active: true }, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null });
+      expect(names((await homeCached(origin)).nearbyStores)).toEqual(['Loja Cidade']);
+    });
+
+    it('mudança comercial do lojista pela API (preço e estoque zerado) aparece na página e na vitrine na hora; a venda em si não invalida', async () => {
+      const origin = isolatedPoint();
+      const store = await makeStore(ctx, { name: 'Loja Comercial', at: await northOf(ctx, origin, 800), feeFixedCents: 500, products: [{ name: 'Camiseta Comercial', priceCents: 1000, stock: 10 }] });
+      const productId = store.productIds[0]!;
+      const variantId = await variantOf(ctx, productId);
+      expect((await page(productId)).price.amount).toBe(1000);
+      expect((await shelf(store.id))[0]).toMatchObject({ available: true });
+      await ctx.http.patch(`/v1/stores/${store.id}/products/${productId}`).set(bearer(store.owner.accessToken)).send({ basePriceCents: 1800 }).expect(200);
+      expect((await page(productId)).price.amount).toBe(1800);
+      await ctx.http.post(`/v1/stores/${store.id}/products/${productId}/variants/${variantId}/stock`).set(bearer(store.owner.accessToken)).send({ set: 0 }).expect(200);
+      expect((await page(productId)).available).toBe(false);
+      expect((await shelf(store.id))[0]).toMatchObject({ available: false });
+    });
+
+    it('com mais de uma réplica: a invalidação publicada por outra réplica no Redis apaga o cache local desta (pub/sub) e a própria réplica não processa o eco', async () => {
+      const origin = isolatedPoint();
+      const store = await makeStore(ctx, { name: 'Loja Replica', at: await northOf(ctx, origin, 800), products: [{ name: 'Produto Replica', priceCents: 1000 }, { name: 'Outro Replica', priceCents: 1000 }] });
+      const id = store.productIds[0]!;
+      expect((await page(id)).available).toBe(true);
+      // "Outra réplica": instância própria do serviço, no mesmo Redis, que modera o produto no banco e publica.
+      const other = new StorefrontCacheService(ctx.redis, ctx.app.get(CacheService));
+      const seenByOther: string[] = [];
+      other.register((event) => seenByOther.push(event.scope));
+      other.onModuleInit();
+      const mine = ctx.app.get(StorefrontCacheService);
+      const seenHere: string[] = [];
+      mine.register((event) => seenHere.push(event.scope));
+      try {
+        await vi.waitFor(async () => expect(await ctx.redis.pubsub('NUMSUB', mine.channel)).toEqual([mine.channel, 2]), { timeout: 5_000 }); // as duas réplicas assinaram
+        await ctx.db.update(products).set({ moderationStatus: 'removed' }).where(eq(products.id, id));
+        expect((await page(id)).available).toBe(true); // ainda quente aqui
+        await other.takedown(store.id, id);
+        await vi.waitFor(() => expect(seenHere).toEqual(['takedown']), { timeout: 5_000 });
+        expect(await page(id)).toMatchObject({ available: false, unavailableReason: 'MODERATED' });
+        expect(seenByOther).toEqual(['takedown']); // a que publicou aplicou uma vez só, sem eco
+      } finally {
+        other.onApplicationShutdown();
+      }
     });
   });
 

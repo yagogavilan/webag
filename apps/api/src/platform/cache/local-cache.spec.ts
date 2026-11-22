@@ -85,6 +85,63 @@ describe('LocalTtlCache', () => {
     });
   });
 
+  describe('invalidate (DEC-113: a entrada é APAGADA, não só vencida)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('sem filtro apaga tudo; com filtro apaga só o que casa; a próxima leitura recalcula', async () => {
+      const cache = new LocalTtlCache<string>();
+      await cache.get('a', 60_000, () => Promise.resolve('a1'));
+      await cache.get('b', 60_000, () => Promise.resolve('b1'));
+      expect(cache.invalidate((key) => key === 'a')).toBe(1);
+      expect(await cache.get('a', 60_000, () => Promise.resolve('a2'))).toBe('a2');
+      expect(await cache.get('b', 60_000, () => Promise.resolve('b2'))).toBe('b1');
+      expect(cache.invalidate()).toBe(2);
+      expect(await cache.get('b', 60_000, () => Promise.resolve('b3'))).toBe('b3');
+    });
+
+    it('o filtro enxerga o valor guardado (para apagar por loja, p.ex.)', async () => {
+      const cache = new LocalTtlCache<{ storeId: string }>();
+      await cache.get('p1', 60_000, () => Promise.resolve({ storeId: 's1' }));
+      await cache.get('p2', 60_000, () => Promise.resolve({ storeId: 's2' }));
+      cache.invalidate((_key, value) => value?.storeId === 's1');
+      let recomputed = 0;
+      await cache.get('p1', 60_000, () => Promise.resolve({ storeId: String(++recomputed) }));
+      await cache.get('p2', 60_000, () => Promise.resolve({ storeId: String(++recomputed) }));
+      expect(recomputed).toBe(1);
+    });
+
+    it('stale-if-error NÃO ressuscita a entrada invalidada: o erro do banco propaga em vez de devolver o item retirado', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const cache = new LocalTtlCache<string>();
+      await cache.get('k', 1_000, () => Promise.resolve('retirado'));
+      vi.setSystemTime(Date.now() + 1_500); // vencido, mas ainda dentro de 4x o TTL: o stale-if-error serviria o valor antigo
+      cache.invalidate();
+      await expect(cache.get('k', 1_000, () => Promise.reject(new Error('banco fora')))).rejects.toThrow('banco fora');
+    });
+
+    it('invalidar com um cálculo em andamento: quem esperava recebe o resultado, mas ele NÃO fica guardado (nasceu antes da mudança)', async () => {
+      const cache = new LocalTtlCache<string>();
+      let release!: (value: string) => void;
+      const slow = cache.get('k', 60_000, () => new Promise<string>((resolve) => (release = resolve)));
+      cache.invalidate(); // a moderação gravou e invalidou enquanto o cálculo antigo ainda lia o banco
+      release('lido-antes-da-mudanca');
+      expect(await slow).toBe('lido-antes-da-mudanca');
+      expect(await cache.get('k', 60_000, () => Promise.resolve('lido-depois'))).toBe('lido-depois');
+    });
+
+    it('invalidar durante o recálculo que falha também não serve o valor antigo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const cache = new LocalTtlCache<string>();
+      await cache.get('k', 1_000, () => Promise.resolve('retirado'));
+      vi.setSystemTime(Date.now() + 1_500);
+      let fail!: (error: Error) => void;
+      const recompute = cache.get('k', 1_000, () => new Promise<string>((_resolve, reject) => (fail = reject)));
+      cache.invalidate();
+      fail(new Error('banco fora'));
+      await expect(recompute).rejects.toThrow('banco fora');
+    });
+  });
+
   it('respeita o teto de entradas', async () => {
     const cache = new LocalTtlCache<number>(3);
     for (let i = 0; i < 10; i++) await cache.get(`k${i}`, 1_000, () => Promise.resolve(i));

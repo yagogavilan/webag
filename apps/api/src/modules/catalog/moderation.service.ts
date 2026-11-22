@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, gte, ilike, inArray, lte, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
@@ -22,6 +23,7 @@ export class ModerationService {
     private readonly audit: AuditService,
     private readonly stores: StoresService,
     private readonly mail: MailService,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   async list(filters: { storeId?: string; categoryId?: string; moderationStatus?: ModerationStatus; status?: string; from?: Date; to?: Date; q?: string; cursor?: string; limit?: unknown }): Promise<Page<unknown>> {
@@ -103,6 +105,9 @@ export class ModerationService {
       }
       return { product, next, storeFlagged };
     });
+
+    // DEC-113: pausar, remover ou restaurar muda a vitrine; o produto some (ou volta) em até 5 s, não no fim do TTL. Depois do commit (o escrito já vale).
+    await this.storefront.takedown(outcome.product.storeId, productId);
 
     let storeFlagged = false;
     if (outcome.storeFlagged) {

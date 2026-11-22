@@ -27,7 +27,7 @@ import { LogisticsModule } from './modules/logistics/index.js';
 import { FinanceModule } from './modules/finance/index.js';
 import { IdempotencyModule } from './modules/idempotency/index.js';
 import { DiscoveryModule } from './modules/discovery/index.js';
-import { CacheModule } from './platform/cache/cache.service.js';
+import { CacheModule } from './platform/cache/cache.module.js';
 import { StorageModule } from './platform/storage/storage.module.js';
 import { devModulesFor, PaymentsModule } from './modules/payments/index.js';
 import { UsersModule } from './modules/users/index.js';

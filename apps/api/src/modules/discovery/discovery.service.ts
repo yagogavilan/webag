@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { CacheService } from '../../platform/cache/cache.service.js';
 import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, type Page } from '../../platform/http/pagination.js';
@@ -81,7 +82,18 @@ export class DiscoveryService {
     private readonly stores: StoreFeedService,
     private readonly products: ProductFeedService,
     private readonly config: ConfigService<Env, true>,
-  ) {}
+    storefront: StorefrontCacheService,
+  ) {
+    // DEC-113: apagar (não vencer) as listas por loja. Só produto retirado/alterado as invalida: loja suspensa/pausada/cidade desativada NÃO precisa, porque a home só
+    // lê estas listas das lojas do `feed` (diretório + `home` do Redis, invalidados por esses eventos); o e2e `discovery-cache` prova isso com as listas quentes.
+    storefront.register((event) => {
+      if (event.scope === 'product') this.offerPool.invalidate();
+      if (event.scope === 'takedown' || event.scope === 'all') {
+        this.offerPool.invalidate();
+        this.bestSellerPool.invalidate();
+      }
+    });
+  }
 
   /** Ofertas e mais vendidos POR LOJA (não dependem da posição), em memória do processo por `HOME_SECTIONS_TTL_SECONDS`. */
   private readonly offerPool = new LocalTtlCache<Map<string, OfferRow[]>>(2);

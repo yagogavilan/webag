@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { and, eq, inArray, lte, sql } from 'drizzle-orm';
 import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { AppError, errors } from '../../platform/http/app-error.js';
 import { safeErrorMessage } from '../../platform/logging/mask.js';
@@ -76,6 +77,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
     private readonly mail: MailService,
     private readonly limiter: RateLimitService,
     private readonly codes: CodeService,
+    private readonly storefront: StorefrontCacheService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -200,6 +202,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       return { deletion, email: user.email, effectiveAt };
     });
 
+    if (result.deletion.storeId) await this.storefront.storeChanged(result.deletion.storeId); // DEC-113: a loja do dono sai do ar junto
     const immediate = result.effectiveAt.getTime() <= Date.now();
     if (immediate) {
       await this.anonymizeOne(result.deletion.id, result.email);
@@ -266,6 +269,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
 
     const restored = await this.db.transaction((tx) => this.restoreInTx(tx, row.deletion, row.user.id, ctx, { actorId: row.user.id, actorRole: 'customer', action: 'account.deletion_cancelled' }));
     if (!restored) throw invalid();
+    if (row.deletion.storeId) await this.storefront.storeChanged(row.deletion.storeId);
     await this.limiter.reset(key);
     await this.limiter.reset(`deletion-cancel:email:${emailHash}`); // o dono provou quem é: o ruído de terceiros não pesa mais
     this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail(row.deletion.previousUserStatus === 'blocked') });
@@ -329,6 +333,7 @@ export class AccountDeletionService implements OnApplicationBootstrap, OnApplica
       }),
     );
     if (!restored) throw new DeletionOpsError('DELETION_DUE', 'A exclusão mudou enquanto o comando rodava (cancelada ou anonimizada).');
+    if (row.deletion.storeId) await this.storefront.storeChanged(row.deletion.storeId);
     await this.limiter.reset(`lfa:${row.user.id}`);
     await this.limiter.reset(`deletion-cancel:email:${sha256Hex(email)}`);
     this.mail.enqueue({ to: row.user.email, ...accountDeletionCancelledEmail(row.deletion.previousUserStatus === 'blocked') });

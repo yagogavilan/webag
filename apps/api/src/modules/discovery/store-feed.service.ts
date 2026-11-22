@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { inArray, sql } from 'drizzle-orm';
 import { CacheService } from '../../platform/cache/cache.service.js';
 import { LocalTtlCache } from '../../platform/cache/local-cache.js';
+import { StorefrontCacheService } from '../../platform/cache/storefront-cache.service.js';
 import type { Env } from '../../platform/config/env.js';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { ParametersService } from '../admin/index.js';
@@ -90,7 +91,13 @@ export class StoreFeedService {
     private readonly fees: DeliveryFeesService,
     private readonly availability: LogisticsAvailabilityService,
     private readonly config: ConfigService<Env, true>,
-  ) {}
+    storefront: StorefrontCacheService,
+  ) {
+    // DEC-113: loja suspensa/reprovada/pausada, conta de recebimento, cidade desativada ou produto retirado mudam quem entra no catálogo; ele é pequeno (1 consulta por modo).
+    storefront.register((event) => {
+      if (event.scope !== 'product') this.directories.invalidate();
+    });
+  }
 
   /** Catálogo de lojas visíveis (sem a posição do cliente), em memória do processo; ver `directory`. */
   private readonly directories = new LocalTtlCache<Map<string, DirectoryStore>>(4);
