@@ -113,3 +113,53 @@ jobs:
       # DT-040: um erro no Dockerfile do web (ex.: arquivo que o "standalone" não copia) só aparecia no deploy.
       - name: Imagem Docker do painel web (só build, sem push)
         run: docker build -f apps/web/Dockerfile -t webag-web:ci .
+
+  # DT-095 / R-50: o Playwright do lojista e do admin (API falsa, build de produção) roda em job próprio. Motivos: o job `checks`
+  # já tem Postgres, Redis, 2 imagens Docker e 30 min; aqui não há serviço nenhum, o `next build` do web roda uma vez só, e
+  # uma falha de painel aparece sozinha, sem esconder a do lint. Usa o Google Chrome que já vem no runner (PW_CHANNEL=chrome,
+  # igual ao QA local): não baixa browser nem instala pacote de sistema. Detalhes e orçamento: docs/qa/playwright-no-ci.md.
+  e2e-web:
+    name: Playwright do painel (lojista e admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PW_CHANNEL: chrome
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # Só o web e o que ele usa (shared, tokens): sem API, mobile nem dependências nativas.
+      - name: Instalar dependências do web
+        run: pnpm install --frozen-lockfile --filter "@webag/web..."
+
+      - name: Build de shared e tokens
+        run: pnpm turbo run build --filter="@webag/web^..."
+
+      # Cache do compilador do Next entre execuções; a chave muda com o código do web, e o restore-keys reaproveita o anterior.
+      - uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/src/**', 'apps/web/app/**') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # `next build` + `next start` (a CSP com nonce só existe em produção) e a API falsa sobem pelo `webServer` do playwright.config.ts.
+      # `--trace off`: o trace é o maior arquivo do job; o relatório HTML (sem trace) basta para ver o que falhou.
+      - name: Playwright (build de produção, API falsa)
+        working-directory: apps/web
+        run: pnpm exec playwright test --trace off
+
+      - name: Relatório do Playwright (só se falhar)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 3
+          if-no-files-found: ignore
