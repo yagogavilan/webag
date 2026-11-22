@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 2, o que vem no app (1080 x 1350)</title>
+<title>Webag: post 2, lojista "Tem loja? Venda além da sua rua." (1080 x 1350), v2</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -11,62 +11,28 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
-/* Os 3 aparelhos sobem para a direita seguindo o corte diagonal do painel (-8 graus): grade defasada de 47 px.
-   Borda do painel em x: y = 640 - 0,1407 * x. Topo do aparelho = borda no centro da coluna - 60 px (cruza o corte). */
-.p2 .i1 { left: 72px;  top: 551px; }
-.p2 .i2 { left: 405px; top: 504px; }
-.p2 .i3 { left: 738px; top: 457px; }
 </style>
 </head>
 <body>
-<main class="post papel p2" role="img" aria-label="Post 2 de 3. O que vem no app. 1: escolha a loja, na tela de uma loja. 2: pague com PIX, na tela do PIX. 3: acompanhe o pedido, na tela de acompanhamento. Telas do app em teste.">
+<main class="post lima p2" role="img" aria-label="Tem loja? Venda além da sua rua. O motoboy leva. Tela real do painel da loja: pedido novo com os botões Aceitar pedido e Recusar. Cadastro de lojas em breve. Chame no direct para entrar na lista.">
 
-  <svg class="sprite" aria-hidden="true" focusable="false">
-    <defs>
-      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-        <rect width="160" height="104" fill="#FFFFFF"/>
-        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-      </mask>
-      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
-        <rect x="24" y="34" width="23" height="14" rx="7"/>
-        <rect x="0" y="62" width="49" height="14" rx="7"/>
-        <rect x="18" y="90" width="34" height="14" rx="7"/>
-        <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
-        </g>
-      </symbol>
-    </defs>
-  </svg>
+  <!-- Ideia: para o lojista, a prova é o pedido chegando. A tela do painel é o herói; título de 140 px em 3 linhas
+       ("da sua rua." = 11 x 0,5 x 140 = 770 px). Fundo lima, cartão noite com sombra dura roxa. -->
+  <img class="logo" src="../assets/webag-logo.svg" alt="Webag">
+  <div class="emb">Cadastro em breve</div>
 
-  <div class="painel"></div>
+  <h1 class="d"><span>Tem loja?</span><span>Venda além</span><span>da sua rua.</span></h1>
+  <div class="sticker s-roxo">O motoboy<br>leva.</div>
 
-  <div class="rail">
-    <svg class="sym" viewBox="0 0 160 104" aria-hidden="true"><use href="#s-sym" width="160" height="104"/></svg>
-    <div class="serie"><div class="segs" aria-hidden="true"><i class="seg on"></i><i class="seg on"></i><i class="seg"></i></div><span>2 de 3</span></div>
+  <!-- captura real docs/telas/20-lojista-pedidos-novos-mobile.png (390 x 844): recorte x 16..374, y 313..595 (só o cartão do pedido novo).
+       Escala 820/358 = 2,291: imagem 893,4; esq. -36,7; topo -717,1; caixa 820 x 646. O texto da tela fica com ~36 px ("Aceitar pedido", "Recusar").
+       O bloco noite cobre "02:39" e "há 19 min" (x 228..362, y 366..390 nativos), porque a idade do pedido é dado de demonstração. -->
+  <div class="shot" aria-hidden="true">
+    <img src="../../../telas/20-lojista-pedidos-novos-mobile.png" alt="" style="width:893.4px;left:-36.7px;top:-717.1px">
+    <div class="tapa" style="left:485px;top:121px;width:310px;height:56px;background:#1C1721"></div>
   </div>
 
-  <h1 class="d">
-    <span>O que vem</span>
-    <span>no <span class="mk"><span>app.</span></span></span>
-  </h1>
-
-  <!-- capturas reais: docs/telas/04-app-loja.png, 09-app-pix.png, 11-app-acompanhamento.png (390x844, reduzidas a 64%: nítidas) -->
-  <div class="item i1">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/04-app-loja.png" alt=""></div></div>
-    <div class="rot"><b>1</b><span>Escolha<br>a loja</span></div>
-  </div>
-  <div class="item i2">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/09-app-pix.png" alt=""><div class="cobre">Código copia e cola</div></div></div>
-    <div class="rot"><b>2</b><span>Pague com<br>PIX</span></div>
-  </div>
-  <div class="item i3">
-    <div class="phone" aria-hidden="true"><div class="tela"><img src="../assets-social/11-app-acompanhamento.png" alt=""></div></div>
-    <div class="rot"><b>3</b><span>Acompanhe<br>o pedido</span></div>
-  </div>
-
-  <p class="nota">Telas do app em teste.</p>
+  <p class="cta">Chame no direct para entrar na lista.</p>
 
 </main>
 </body>

@@ -2,61 +2,73 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 3, convite (1080 x 1350)</title>
+<title>Webag: post 3, convite "Ativa o sininho." (1080 x 1350), v2</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
 html, body { width: 1080px; height: 1350px; overflow: hidden; }
 @font-face { font-family: "Bricolage Grotesque"; font-weight: 800; font-display: block; src: url("../../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 600; font-display: block; src: url("../../../design/fonts/figtree-latin-600-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 700; font-display: block; src: url("../../../design/fonts/figtree-latin-700-normal.woff2") format("woff2"); }
 @font-face { font-family: "Figtree"; font-weight: 800; font-display: block; src: url("../../../design/fonts/figtree-latin-800-normal.woff2") format("woff2"); }
 </style>
 </head>
 <body>
-<main class="post roxo p3" role="img" aria-label="Post 3 de 3. Vai abrir. Quer saber primeiro? 1: siga esta página. 2: ative as notificações. 3: avisamos quando abrir. Em breve.">
+<main class="post noite p3" role="img" aria-label="Ativa o sininho. Assim vai chegar quando abrir: aviso no celular do Webag com o texto Abrimos. Aquela loja que você gosta agora entrega. Ilustração de um sino tocando. A gente avisa quando abrir. Francisco Morato e região. Webag, em breve.">
 
-  <svg class="sprite" aria-hidden="true" focusable="false">
-    <defs>
-      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-        <rect width="160" height="104" fill="#FFFFFF"/>
-        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-      </mask>
-      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
+  <!-- Ideia: urgência sem data = mostrar O AVISO que a pessoa vai receber. Uma ação de 1 toque (o sininho), uma prova de que vale a pena (o aviso).
+       O aviso é desenho nosso (rotulado "Assim vai chegar quando abrir"), não captura. O sino usa a gramática do símbolo: curvas chapadas + marcas de "ding" em pílula roxa, giradas -8 graus.
+       Título 220 px: "sininho." = 8 x 0,5 x 220 = 880 px (cabe em 936). -->
+  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
+  <div class="emb">Em breve</div>
+
+  <h1 class="d"><span>Ativa o</span><span class="l">sininho.</span></h1>
+
+  <p class="rot">Assim vai chegar quando abrir:</p>
+  <div class="aviso" aria-hidden="true">
+    <div class="ic">
+      <svg viewBox="0 0 160 104" fill="#FFFFFF">
+        <defs>
+          <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
+            <rect width="160" height="104" fill="#FFFFFF"/>
+            <circle cx="80" cy="52" r="4.5" fill="#000000"/>
+            <circle cx="132" cy="52" r="4.5" fill="#000000"/>
+          </mask>
+        </defs>
         <rect x="24" y="34" width="23" height="14" rx="7"/>
         <rect x="0" y="62" width="49" height="14" rx="7"/>
         <rect x="18" y="90" width="34" height="14" rx="7"/>
         <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
+          <polygon points="67,43 145,43 133,95 72,95" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="#FFFFFF" stroke-width="14"/>
         </g>
-      </symbol>
-    </defs>
-  </svg>
-
-  <div class="painel"></div>
-
-  <div class="rail">
-    <svg class="sym" viewBox="0 0 160 104" aria-hidden="true"><use href="#s-sym" width="160" height="104"/></svg>
-    <div class="serie"><div class="segs" aria-hidden="true"><i class="seg on"></i><i class="seg on"></i><i class="seg on"></i></div><span>3 de 3</span></div>
+      </svg>
+    </div>
+    <div class="nm">Webag</div>
+    <div class="ag">agora</div>
+    <div class="tt">Abrimos.</div>
+    <div class="cp">Aquela loja que você gosta<br>agora entrega.</div>
   </div>
 
-  <h1 class="d">Vai abrir.</h1>
-  <p class="sub d">
-    <span>Quer saber</span>
-    <span>primeiro?</span>
-  </p>
+  <p class="sub">A gente avisa<br>quando abrir.</p>
 
-  <div class="sticker-pos"><span class="sticker">Em breve</span></div>
+  <svg class="sino" viewBox="-30 0 460 400" aria-hidden="true">
+    <g fill="#D6FF4A">
+      <path d="M200 44 C140 44 108 92 108 158 L108 232 C108 258 98 274 72 294 L72 312 L328 312 L328 294 C302 274 292 258 292 232 L292 158 C292 92 260 44 200 44 Z"/>
+      <circle cx="200" cy="32" r="18"/>
+      <path d="M154 326 L246 326 A46 46 0 0 1 154 326 Z"/>
+    </g>
+    <g stroke="#C02EF0" stroke-width="18" stroke-linecap="round" fill="none">
+      <line x1="52.8" y1="95" x2="13.8" y2="72.5"/>
+      <line x1="30" y1="180" x2="-15" y2="180"/>
+      <line x1="52.8" y1="265" x2="13.8" y2="287.5"/>
+      <line x1="347.2" y1="95" x2="386.2" y2="72.5"/>
+      <line x1="370" y1="180" x2="415" y2="180"/>
+      <line x1="347.2" y1="265" x2="386.2" y2="287.5"/>
+    </g>
+  </svg>
 
-  <!-- o símbolo cruza o corte entre o roxo e o painel noite; os olhais mostram o fundo -->
-  <svg class="simbolo" viewBox="0 0 160 104" aria-hidden="true"><use href="#s-sym" width="160" height="104"/></svg>
-
-  <ol class="passos">
-    <li class="passo"><b>1</b><span>Siga esta página.</span></li>
-    <li class="passo"><b>2</b><span>Ative as notificações.</span></li>
-    <li class="passo"><b>3</b><span>Avisamos quando abrir.</span></li>
-  </ol>
+  <p class="escopo">Francisco Morato e região.</p>
 
 </main>
 </body>

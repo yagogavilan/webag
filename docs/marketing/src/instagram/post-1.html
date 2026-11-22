@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Webag: post 1, o problema (1080 x 1350)</title>
+<title>Webag: post 1, "Não deu pra passar na loja?" (1080 x 1350), v2</title>
 <meta name="viewport" content="width=1080">
 <link rel="stylesheet" href="../social.css">
 <style>
@@ -14,47 +14,27 @@ html, body { width: 1080px; height: 1350px; overflow: hidden; }
 </style>
 </head>
 <body>
-<main class="post noite p1" role="img" aria-label="Post 1 de 3. 18h: a loja fecha. 19h: você sai do trabalho. 21h: você chega em casa. E o presente é pra amanhã. Estamos preparando outro jeito de comprar. Webag, em breve.">
+<main class="post roxo p1" role="img" aria-label="19h40, voltando do trabalho. Não deu pra passar na loja? A loja passa aí. Tela real do app: o pedido saiu para entrega, com a linha do tempo mostrando em separação, aguardando motoboy e saiu para entrega.">
 
-  <svg class="sprite" aria-hidden="true" focusable="false">
-    <defs>
-      <mask id="wb-ol" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="104">
-        <rect width="160" height="104" fill="#FFFFFF"/>
-        <circle cx="80" cy="52" r="4.5" fill="#000000"/>
-        <circle cx="132" cy="52" r="4.5" fill="#000000"/>
-      </mask>
-      <symbol id="s-sym" viewBox="0 0 160 104" fill="currentColor">
-        <rect x="24" y="34" width="23" height="14" rx="7"/>
-        <rect x="0" y="62" width="49" height="14" rx="7"/>
-        <rect x="18" y="90" width="34" height="14" rx="7"/>
-        <g mask="url(#wb-ol)">
-          <polygon points="67,43 145,43 133,95 72,95" stroke="currentColor" stroke-width="18" stroke-linejoin="round"/>
-          <path d="M80 42 A26 30 0 0 1 132 42" fill="none" stroke="currentColor" stroke-width="14"/>
-        </g>
-      </symbol>
-    </defs>
-  </svg>
+  <!-- Ideia: o momento específico (fim do dia, loja fechada) e a prova na tela real: a linha do tempo do pedido, enorme.
+       Título 116 px: "passar na loja?" = 15 x 0,5 x 116 = 870 px (cabe em 936). -->
+  <img class="logo" src="../assets/webag-logo-branca.svg" alt="Webag">
+  <div class="emb">Em breve</div>
 
-  <div class="rail">
-    <svg class="sym" viewBox="0 0 160 104" aria-hidden="true"><use href="#s-sym" width="160" height="104"/></svg>
-    <div class="serie"><div class="segs" aria-hidden="true"><i class="seg on"></i><i class="seg"></i><i class="seg"></i></div><span>1 de 3</span></div>
+  <p class="eyebrow">19h40. Voltando do trabalho.</p>
+  <h1 class="d"><span>Não deu pra</span><span>passar na loja?</span></h1>
+
+  <!-- captura real docs/telas/11-app-acompanhamento.png (390 x 844). Os dois recortes escondem o horário previsto (sem prazo).
+       A: topo do cartão noite, x 16..374, y 84..210 ("Etapa 4 de 5 · A caminho", "Saiu para entrega", moto). Escala 900/358 = 2,514: imagem 980,5; esq. -40,2; topo -211,2; caixa 900 x 317.
+       B: linha do tempo, x 8..382, y 554..752 (Em separação, Aguardando motoboy, Saiu para entrega, Entregue). Escala 900/374 = 2,406: imagem 938,5; esq. -19,3; topo -1332,9; caixa 900 x 476.
+       O "00:51" (hora do evento) fica coberto por um bloco da cor da tela: x 48..110, y 692..712 nativos. -->
+  <div class="shot a" aria-hidden="true"><img src="../assets-social/11-app-acompanhamento.png" alt="" style="width:980.5px;left:-40.2px;top:-211.2px"></div>
+  <div class="shot b" aria-hidden="true">
+    <img src="../assets-social/11-app-acompanhamento.png" alt="" style="width:938.5px;left:-19.3px;top:-1332.9px">
+    <div class="tapa" style="left:96px;top:330px;width:156px;height:52px;background:#FAF8FB"></div>
   </div>
 
-  <div class="rows">
-    <div class="row"><div class="hora d">18h</div><div class="fato">A loja fecha.</div></div>
-    <div class="row"><div class="hora d">19h</div><div class="fato">Você sai do trabalho.</div></div>
-    <div class="row"><div class="hora d">21h</div><div class="fato">Você chega em casa.</div></div>
-  </div>
-
-  <h1 class="virada d">
-    <span>E o presente</span>
-    <span class="l">é pra amanhã.</span>
-  </h1>
-
-  <div class="rodape">
-    <p>Estamos preparando outro jeito de comprar.</p>
-    <strong>Webag. Em breve.</strong>
-  </div>
+  <div class="sticker">A loja<br>passa aí.</div>
 
 </main>
 </body>
