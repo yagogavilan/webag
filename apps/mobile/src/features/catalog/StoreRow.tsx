@@ -21,6 +21,8 @@ export interface StoreRowProps {
   /** Modo retirada: destaca a distância e tira a taxa. */
   pickup?: boolean;
   onPress: () => void;
+  /** Dedo encostou: a tela seguinte já pode buscar os dados (prefetch por intenção). */
+  onPressIn?: () => void;
   testID?: string;
 }
 
@@ -49,7 +51,7 @@ function metaLine(store: StoreCard, approximate: boolean, pickup: boolean): stri
  * (DEC-053: faixa real da loja para o endereço, nunca número único), logo-adesivo inclinado e meta em uma linha.
  * Loja fechada continua tocável (DEC-022); loja fora do alcance de 120 min mostra "Fora da área".
  */
-export function StoreRow({ store, categoryName, approximate = false, pickup = false, onPress, testID }: StoreRowProps) {
+export function StoreRow({ store, categoryName, approximate = false, pickup = false, onPress, onPressIn, testID }: StoreRowProps) {
   const meta = metaLine(store, approximate, pickup);
   const range = pickup ? null : deliveryEta(store.delivery);
   const outOfArea = !pickup && range === null;
@@ -74,7 +76,7 @@ export function StoreRow({ store, categoryName, approximate = false, pickup = fa
   const color = coverColor(store.id);
   const art = objectFor(`${categoryName ?? ''} ${store.name}`);
   return (
-    <Pressy accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={styles.card} testID={testID}>
+    <Pressy accessibilityLabel={label} accessibilityRole="button" onPress={onPress} onPressIn={onPressIn} style={styles.card} testID={testID}>
       <View style={[styles.cover, { backgroundColor: color }]}>
         <View pointerEvents="none" style={styles.art}>
           <ProductArt color="#F2EFE9" ground="rgba(0,0,0,0.35)" name={art} size={150} />

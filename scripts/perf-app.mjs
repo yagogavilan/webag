@@ -8,7 +8,8 @@
 //   pnpm perf:app --label depois --dist <pasta> mede um export que já existe (a pasta de `expo export -p web`)
 //   pnpm perf:app --label dev --url http://localhost:8081   mede um servidor que já está no ar (ex.: Metro de desenvolvimento)
 //   pnpm perf:app --report antes depois         junta dois resultados em docs/qa/performance/app-<data>.md (tabela fluxo x métrica)
-// Opções: --runs 3 (mediana)  --net lento|rapido|sem  --cpu 4  --out <arquivo.json>  --no-compress (servidor sem gzip/brotli)
+// Diagnóstico: --profile <passo> (store, product, cart, checkout...) imprime as funções que mais gastam CPU nesse passo (use um export `--no-minify` para ver nomes).
+// Opções: --tap 80 (ms entre o dedo encostar e soltar; um toque humano leva 80 a 120 ms, o que dá tempo ao prefetch por intenção)  --runs 3 (mediana)  --net lento|rapido|sem  --cpu 4  --out <arquivo.json>  --no-compress (servidor sem gzip/brotli)
 // Variável: CHROMIUM_PATH (Chromium alternativo). Limites do método: docs/qa/performance/README.md (não é aparelho real nem Hermes).
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -53,6 +54,23 @@ export function maxEventDuration(events, from, to) {
   return inside.length ? Math.max(...inside.map(([, duration]) => duration)) : null;
 }
 
+/** Resumo de um perfil de CPU do Chrome (`Profiler.stop`): tempo próprio por função, do maior para o menor. */
+export function topSelfTime(profile, limit = 15) {
+  const byId = new Map(profile.nodes.map((n) => [n.id, n]));
+  const self = new Map();
+  profile.samples.forEach((id, i) => {
+    const delta = profile.timeDeltas[i] ?? 0;
+    self.set(id, (self.get(id) ?? 0) + delta);
+  });
+  const byFn = new Map();
+  for (const [id, us] of self) {
+    const { callFrame } = byId.get(id);
+    const key = `${callFrame.functionName || '(anônima)'} ${String(callFrame.url).split('/').slice(-1)[0]}:${callFrame.lineNumber + 1}`;
+    byFn.set(key, (byFn.get(key) ?? 0) + us);
+  }
+  return [...byFn].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name, us]) => ({ name, ms: us / 1000 }));
+}
+
 export function classify(url, apiBase) {
   if (url.startsWith(apiBase) && url.includes('/v1/')) return 'api';
   if (/\/img\/\d+\//.test(url) || /\.(png|jpe?g|webp|avif|gif|svg)(\?|$)/i.test(url)) return 'img';
@@ -95,7 +113,7 @@ export function renderReport(before, after) {
 }
 
 export function parseArgs(argv) {
-  const o = { label: 'medida', runs: 3, net: 'lento', cpu: 4, dist: null, url: null, out: null, compress: true, preload: true, report: null, help: false, errors: [] };
+  const o = { label: 'medida', runs: 3, net: 'lento', cpu: 4, dist: null, url: null, out: null, compress: true, preload: true, profile: null, tap: 80, report: null, help: false, errors: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--label') o.label = argv[++i];
@@ -107,6 +125,8 @@ export function parseArgs(argv) {
     else if (a === '--out') o.out = argv[++i];
     else if (a === '--no-compress') o.compress = false;
     else if (a === '--no-preload') o.preload = false;
+    else if (a === '--profile') o.profile = argv[++i];
+    else if (a === '--tap') o.tap = Number(argv[++i]);
     else if (a === '--report') o.report = [argv[++i], argv[++i]];
     else if (a === '--help' || a === '-h') o.help = true;
     else o.errors.push(`opção desconhecida: ${a}`);
@@ -194,7 +214,7 @@ function loadPlaywright() {
   return req('@playwright/test');
 }
 
-async function runOnce({ chromium, browser, appUrl, api, net, cpu, withClean }) {
+async function runOnce({ browser, appUrl, api, net, cpu, profileStep, tap }) {
   api.reset();
   const context = await browser.newContext({ viewport: { width: 402, height: 874 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: IPHONE_UA, locale: 'pt-BR' });
   const page = await context.newPage();
@@ -249,8 +269,15 @@ async function runOnce({ chromium, browser, appUrl, api, net, cpu, withClean }) 
     await page.evaluate(() => window.__arm());
     step = fresh();
     const doneP = page.evaluate(([expr, t]) => window.__until(expr, t), [untilExpr, timeout]);
-    await target.click({ timeout });
+    const profiling = profileStep === id;
+    if (profiling) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 250 }); await cdp.send('Profiler.start'); }
+    await target.click({ timeout, delay: tap });
     const t1 = await doneP;
+    if (profiling) {
+      const { profile } = await cdp.send('Profiler.stop');
+      console.log(`\n[perf] CPU em "${label}" (tempo próprio, CPU ${cpu}x):`);
+      for (const f of topSelfTime(profile)) console.log(`  ${f.ms.toFixed(0).padStart(6)} ms  ${f.name}`);
+    }
     if (t1 < 0 && process.env.PERF_SHOT) await page.screenshot({ path: process.env.PERF_SHOT });
     if (t1 < 0) throw new Error(`tempo esgotado em "${label}" esperando ${untilExpr}`);
     const t0 = await page.evaluate(() => window.__perf.t0);
@@ -434,7 +461,7 @@ async function main() {
   try {
     for (let i = 0; i < o.runs; i++) {
       log(`rodada ${i + 1}/${o.runs}...`);
-      runs.push(await runOnce({ chromium, browser, appUrl, api, net, cpu: o.cpu }));
+      runs.push(await runOnce({ browser, appUrl, api, net, cpu: o.cpu, profileStep: o.profile, tap: o.tap }));
     }
   } finally {
     await browser.close();
@@ -442,7 +469,7 @@ async function main() {
     await api.close();
   }
   const result = {
-    meta: { label: o.label, date: today, net: net.name, cpu: o.cpu, runs: o.runs, mode: o.url ? 'servidor externo' : o.compress ? 'produção estática (brotli/gzip)' : 'produção estática (sem compressão)', chromium: browser.version?.() ?? 'n/d', node: process.version, bundle },
+    meta: { label: o.label, date: today, net: net.name, cpu: o.cpu, tapMs: o.tap, runs: o.runs, mode: o.url ? 'servidor externo' : o.compress ? 'produção estática (brotli/gzip)' : 'produção estática (sem compressão)', chromium: browser.version?.() ?? 'n/d', node: process.version, bundle },
     steps: aggregate(runs),
     problems: runs.flatMap((r) => r.problems ?? []).slice(0, 8),
   };

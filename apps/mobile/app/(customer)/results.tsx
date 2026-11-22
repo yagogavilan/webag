@@ -15,7 +15,7 @@ import { EmptyState, ErrorState } from '../../src/components/StateViews';
 import { Text } from '../../src/components/Text';
 import { fromProductCard, ProductTile } from '../../src/features/catalog/ProductTile';
 import { StoreRow } from '../../src/features/catalog/StoreRow';
-import { useCategoryNames, useDeliveryPoint, useProductResults, useStoreResults } from '../../src/features/catalog/queries';
+import { useCategoryNames, useDeliveryPoint, usePrefetchCatalog, useProductResults, useStoreResults } from '../../src/features/catalog/queries';
 import {
   activeChips,
   activeFilterCount,
@@ -45,6 +45,7 @@ export default function ResultsScreen() {
   const router = useRouter();
   const online = useOnline();
   const point = useDeliveryPoint();
+  const prefetch = usePrefetchCatalog();
   const { width } = useWindowDimensions();
   const { names, tree } = useCategoryNames();
   const q = params.q?.trim() ? params.q.trim() : undefined;
@@ -216,7 +217,7 @@ export default function ResultsScreen() {
         onEndReachedThreshold={0.6}
         renderItem={({ item }) => (
           <View style={styles.cell}>
-            <ProductTile onPress={() => router.push(`/product/${item.id}`)} product={fromProductCard(item)} testID={`results.product-${item.id}`} width={tile} />
+            <ProductTile onPress={() => router.push(`/product/${item.id}`)} onPressIn={() => prefetch.product(item.id)} product={fromProductCard(item)} testID={`results.product-${item.id}`} width={tile} />
           </View>
         )}
         testID="results.list"
@@ -238,6 +239,7 @@ export default function ResultsScreen() {
             approximate={point?.approximate ?? true}
             categoryName={item.mainCategoryId ? names.get(item.mainCategoryId) : undefined}
             onPress={() => router.push(`/store/${item.id}`)}
+            onPressIn={() => prefetch.store(item.id)}
             store={item}
             testID={`results.store-${item.id}`}
           />

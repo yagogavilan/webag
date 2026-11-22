@@ -1,5 +1,5 @@
 import type { Category, CategoryNode } from '@webag/shared';
-import { useInfiniteQuery, useQuery, type QueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import {
   fetchBanners,
@@ -111,28 +111,57 @@ export function useCategoryNames(): { names: ReadonlyMap<string, string>; tree: 
 
 // ---- Loja e produto ----
 
+// Mesmas opções para a tela e para o prefetch no toque (mesma chave: o que o prefetch trouxe a tela encontra pronto, sem repetir).
+const storeOptions = (storeId: string | undefined, point: Pick<DeliveryPoint, 'lat' | 'lng'> | null) => ({
+  queryKey: ['store', storeId, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null] as const,
+  queryFn: () => fetchStore(storeId ?? '', point ? { lat: point.lat, lng: point.lng } : undefined),
+  staleTime: 60_000,
+});
+
+const storeProductsOptions = (storeId: string | undefined, sectionId: string | null) => ({
+  queryKey: ['store-products', storeId, sectionId] as const,
+  queryFn: ({ pageParam }: { pageParam: string }) => fetchStoreProducts(storeId ?? '', { limit: 20, ...(sectionId ? { sectionId } : {}), ...(pageParam ? { cursor: pageParam } : {}) }),
+  initialPageParam: '' as string,
+  getNextPageParam: (last: { nextCursor: string | null }) => last.nextCursor ?? undefined,
+  staleTime: 60_000,
+});
+
+const productOptions = (productId: string | undefined) => ({ queryKey: ['product', productId] as const, queryFn: () => fetchProduct(productId ?? ''), staleTime: 30_000 });
+
 export function useStoreQuery(storeId: string | undefined, point: DeliveryPoint | null) {
-  return useQuery({
-    queryKey: ['store', storeId, point ? roundPoint(point.lat) : null, point ? roundPoint(point.lng) : null],
-    queryFn: () => fetchStore(storeId ?? '', point ? { lat: point.lat, lng: point.lng } : undefined),
-    enabled: Boolean(storeId),
-    staleTime: 60_000,
-  });
+  return useQuery({ ...storeOptions(storeId, point), enabled: Boolean(storeId) });
 }
 
 export function useStoreProductsQuery(storeId: string | undefined, sectionId: string | null) {
-  return useInfiniteQuery({
-    queryKey: ['store-products', storeId, sectionId],
-    queryFn: ({ pageParam }) => fetchStoreProducts(storeId ?? '', { limit: 20, ...(sectionId ? { sectionId } : {}), ...(pageParam ? { cursor: pageParam } : {}) }),
-    initialPageParam: '' as string,
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled: Boolean(storeId),
-    staleTime: 60_000,
-  });
+  return useInfiniteQuery({ ...storeProductsOptions(storeId, sectionId), enabled: Boolean(storeId) });
 }
 
 export function useProductQuery(productId: string | undefined) {
-  return useQuery({ queryKey: ['product', productId], queryFn: () => fetchProduct(productId ?? ''), enabled: Boolean(productId), staleTime: 30_000 });
+  return useQuery({ ...productOptions(productId), enabled: Boolean(productId) });
+}
+
+/**
+ * Prefetch por intenção: ao PÔR O DEDO numa loja ou produto (onPressIn) já começa a buscar o que a tela seguinte vai pedir; quando o dedo
+ * solta e a tela monta (100 a 250 ms depois), a leitura já está a caminho ou pronta. Só catálogo público; `prefetchQuery` ignora o que
+ * ainda está fresco e junta com a requisição em andamento, então toque repetido ou rolagem não duplica.
+ */
+export function usePrefetchCatalog() {
+  const client = useQueryClient();
+  const point = useDeliveryPoint();
+  const lat = point?.lat ?? null;
+  const lng = point?.lng ?? null;
+  return useMemo(() => {
+    const where = lat !== null && lng !== null ? { lat, lng } : null;
+    return {
+      store: (id: string) => {
+        void client.prefetchQuery(storeOptions(id, where));
+        void client.prefetchInfiniteQuery(storeProductsOptions(id, null));
+      },
+      product: (id: string) => {
+        void client.prefetchQuery(productOptions(id));
+      },
+    };
+  }, [client, lat, lng]);
 }
 
 export function useReviewsQuery(kind: 'store' | 'product', id: string | undefined) {

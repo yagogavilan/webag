@@ -1,16 +1,24 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
 import { addressStore } from '../src/features/address/store';
-import { modeStore, prefetchStartup } from '../src/features/catalog/queries';
+import { modeStore, prefetchStartup, usePrefetchCatalog } from '../src/features/catalog/queries';
 import { categories, homeData, seedAddress } from '../src/test/fixtures';
 
 const mockHome = jest.fn();
 const mockCategories = jest.fn();
 const mockBanners = jest.fn();
 const mockRegions = jest.fn();
+const mockStore = jest.fn();
+const mockStoreProducts = jest.fn();
+const mockProduct = jest.fn();
 jest.mock('../src/api/catalog-api', () => ({
   fetchHome: (...a: unknown[]) => mockHome(...a),
   fetchCategories: () => mockCategories(),
   fetchBanners: (...a: unknown[]) => mockBanners(...a),
+  fetchStore: (...a: unknown[]) => mockStore(...a),
+  fetchStoreProducts: (...a: unknown[]) => mockStoreProducts(...a),
+  fetchProduct: (...a: unknown[]) => mockProduct(...a),
 }));
 jest.mock('../src/api/auth-api', () => ({ fetchRegions: () => mockRegions() }));
 
@@ -78,5 +86,29 @@ describe('prefetchStartup (abertura do app)', () => {
     await flush();
     await flush();
     expect(mockBanners).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('usePrefetchCatalog (toque em loja ou produto)', () => {
+  it('onPressIn busca loja, 1ª página de produtos e produto nas chaves das telas, sem duplicar toque repetido', async () => {
+    await seedAddress('full');
+    const client = newClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const { result } = await renderHook(() => usePrefetchCatalog(), { wrapper });
+    mockStore.mockResolvedValue({ id: 's1' });
+    mockStoreProducts.mockResolvedValue({ data: [], nextCursor: null });
+    mockProduct.mockResolvedValue({ id: 'p1' });
+    result.current.store('s1');
+    result.current.store('s1');
+    result.current.product('p1');
+    await flush();
+    expect(mockStore).toHaveBeenCalledTimes(1);
+    expect(mockStore).toHaveBeenCalledWith('s1', { lat: -23.28, lng: -46.74 });
+    expect(mockStoreProducts).toHaveBeenCalledTimes(1);
+    expect(mockStoreProducts.mock.calls[0]?.[0]).toBe('s1');
+    expect(mockProduct).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(['store', 's1', -23.28, -46.74])).toBeDefined();
+    expect(client.getQueryData(['product', 'p1'])).toBeDefined();
+    expect(client.getQueryData(['store-products', 's1', null])).toBeDefined();
   });
 });
