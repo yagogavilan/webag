@@ -1,0 +1,48 @@
+WEBAG - INICIO RAPIDO (abrir o app no seu iPhone, de graca, sem criar conta)
+================================================================================
+
+O QUE VOCE VAI TER: o Webag inteiro (API, banco, site, paineis e app) rodando no
+seu computador, e o app aberto no SAFARI do iPhone pelo Wi-Fi. Dados e pagamentos
+sao de demonstracao: nada e cobrado.
+
+1) INSTALE (uma vez so)             Guia completo: docs/guias/rodar-no-meu-computador.md
+   - Git        git-scm.com                       (Mac: vem com as "ferramentas de linha de comando")
+   - Node 24    nodejs.org  (instalador LTS; minimo 22.12)
+   - pnpm       no terminal:  corepack enable      (Windows: PowerShell COMO ADMINISTRADOR; Mac: se pedir, sudo corepack enable)
+   - Docker Desktop  docker.com/products/docker-desktop  (abra e deixe ABERTO)
+
+2) BAIXE E ABRA O TERMINAL NA PASTA
+   https://github.com/yagogavilan/webag/archive/refs/heads/main.zip
+   Extraia numa pasta sem espacos nem acentos (ex.: C:\webag ou ~/webag).
+
+3) RODE
+   Opcao A, duplo clique:  Mac: iniciar-webag.command    Windows: iniciar-webag.bat
+   Opcao B, comandos no terminal (dentro da pasta):
+        pnpm install
+        pnpm run setup          (com "run"; uma vez so; cria o banco e os dados de demonstracao)
+        pnpm iphone             (sobe tudo e mostra o endereco para o iPhone)
+
+4) NO IPHONE (no MESMO Wi-Fi do computador)
+   - Safari > digite o endereco que o terminal mostrou (ex.: http://192.168.0.10:8081)
+     ou aponte a camera para o QR code do terminal.
+   - Opcional: Compartilhar > Adicionar a Tela de Inicio (fica o icone do Webag).
+   - Permita "Rede Local" se o iPhone perguntar. A 1a abertura demora.
+
+5) COMPRA DE MENTIRA
+   Login: cliente.ana@seed.webag.local   senha: webag-seed-lojista-2026
+   Escolha a cidade > loja > produto > sacola > Finalizar com PIX >
+   toque em "Simular pagamento". Pronto: pedido recebido.
+   (Lojista: lojista.mercadinho-boa-compra@seed.webag.local, mesma senha,
+    em http://SEU-IP:3001/lojista/entrar)
+
+PARAR: Ctrl+C na janela.   VOLTAR OUTRO DIA: abra o Docker Desktop e rode "pnpm iphone".
+
+SE O IPHONE NAO ABRE: confira o mesmo Wi-Fi (nada de "convidados" ou dados moveis) e
+libere o firewall para as portas 3000, 3001, 8081 e 9000 na rede PRIVADA.
+Se o computador tiver mais de uma rede:  pnpm iphone --ip <IP do seu Wi-Fi>
+Mais problemas e solucoes: docs/guias/rodar-no-meu-computador.md (secao 6).
+
+NAO TESTADO ainda: macOS, Windows, os arquivos de duplo clique e o iPhone fisico
+(o caminho foi verificado num Chromium emulando iPhone 17 Pro, em Linux).
+App instalado de verdade (IPA/TestFlight): exige Apple Developer Program (pago):
+docs/guias/instalar-no-iphone.md

@@ -93,6 +93,9 @@ const config: ExpoConfig = {
       },
     ],
   ],
+  // Navegador (`pnpm web`, ou o Safari do iPhone via `pnpm iphone`): public/index.html e public/manifest.json (gerado por `pnpm assets:pwa`) dão o
+  // ícone, o nome e a abertura em tela cheia de "Adicionar à Tela de Início". A cor da barra do navegador vem daqui.
+  web: { bundler: 'metro', name: 'Webag', shortName: 'Webag', lang: 'pt-BR', themeColor: BRAND },
   experiments: { typedRoutes: true },
 };
 

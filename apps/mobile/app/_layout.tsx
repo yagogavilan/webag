@@ -1,3 +1,5 @@
+// Primeiro import: reservas de crypto.randomUUID/clipboard para o navegador em http na rede local (no app nativo não faz nada).
+import '../src/lib/web-insecure-context';
 import { BricolageGrotesque_600SemiBold, BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import {
   Figtree_400Regular,

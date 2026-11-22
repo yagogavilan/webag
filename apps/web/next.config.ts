@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   // Imagem de produção enxuta (Dockerfile do web entra com o guia de deploy).
   output: 'standalone',
   typedRoutes: true,
+  // Só em desenvolvimento e só quando `pnpm iphone` define o endereço do computador na rede local: libera o acesso pelo IP (iPhone no Safari).
+  ...(process.env.WEBAG_DEV_HOST ? { allowedDevOrigins: [process.env.WEBAG_DEV_HOST] } : {}),
   async headers() {
     // CSP com nonce é montada no proxy.ts (só /admin). Aqui, o que vale para todas as rotas.
     return [

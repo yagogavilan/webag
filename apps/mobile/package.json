@@ -19,6 +19,7 @@
     "assets": "node scripts/build-assets.mjs",
     "assets:art": "node scripts/build-art.mjs",
     "assets:icons": "node scripts/build-icons.mjs",
+    "assets:pwa": "node scripts/build-pwa.mjs",
     "assets:licenses": "node scripts/build-license-texts.mjs"
   },
   "dependencies": {
