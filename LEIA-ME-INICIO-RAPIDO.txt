@@ -42,7 +42,9 @@ sao de demonstracao: nada e cobrado.
 PARAR: Ctrl+C na janela.   VOLTAR OUTRO DIA: abra o Docker Desktop e rode "pnpm iphone".
 
 SE O IPHONE NAO ABRE: confira o mesmo Wi-Fi (nada de "convidados" ou dados moveis) e
-libere o firewall para as portas 3000, 3001, 8081 e 9000 na rede PRIVADA.
+no aviso do firewall marque so "Redes privadas" (guia, secao 6, tem a regra restrita; nao desligue o firewall).
+USE SO NO WI-FI DA SUA CASA: enquanto roda, qualquer aparelho do mesmo Wi-Fi acessa o Webag
+de teste (portas 3000, 3001, 8081 e 9000). Nao use em Wi-Fi publico, de cafe, faculdade ou trabalho.
 Se o computador tiver mais de uma rede:  pnpm iphone --ip <IP do seu Wi-Fi>
 Mais problemas e solucoes: docs/guias/rodar-no-meu-computador.md (secao 6).
 

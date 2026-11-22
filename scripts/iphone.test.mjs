@@ -1,7 +1,29 @@
 // Testes das funções puras do `pnpm iphone`. Rodar: node --test scripts/iphone.test.mjs
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildBanner, envUpdates, isUnusableAddress, isValidIPv4, mergeCors, mergeEnvText, parseArgs, parseEnv, rankCandidates } from './iphone.mjs';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  SAFETY_NOTICE,
+  buildBanner,
+  envUpdates,
+  findBundlePaths,
+  firewallHelp,
+  isMainModule,
+  isUnusableAddress,
+  isValidIPv4,
+  makeRunner,
+  mergeCors,
+  mergeEnvText,
+  parseArgs,
+  parseEnv,
+  planEnvWrite,
+  portHelpLines,
+  rankCandidates,
+  spawnOptions,
+} from './iphone.mjs';
 
 const nic = (address, internal = false) => ({ address, family: 'IPv4', internal });
 
@@ -89,4 +111,71 @@ test('recado final traz o endereço do Safari, logins e o botão de simular', ()
   assert.ok(banner.includes('cliente.ana@seed.webag.local'));
   assert.ok(banner.includes('Simular pagamento'));
   assert.ok(banner.includes('exp://192.168.0.10:8081'));
+});
+
+test('Windows: docker roda SEM shell e a consulta do psql chega como 1 argumento só', () => {
+  const calls = [];
+  const run = makeRunner((command, args, options) => (calls.push({ command, args, options }), { status: 0, stdout: '1' }), 'win32', 'C:\\webag');
+  const query = 'select count(*) from users';
+  run('docker', ['compose', 'exec', '-T', 'postgres', 'psql', '-U', 'webag', '-d', 'webag', '-tAc', query]);
+  assert.equal(calls[0].options.shell, false);
+  assert.equal(calls[0].args.filter((arg) => arg === query).length, 1);
+  run('pnpm', ['--filter', '@webag/api', 'db:migrate']);
+  assert.equal(calls[1].options.shell, true);
+});
+
+test('Windows: nenhuma chamada com shell recebe argumento com espaço ou aspas', () => {
+  assert.throws(() => spawnOptions('pnpm', ['run', 'select count(*) from users'], 'win32'), /inseguro/);
+  assert.throws(() => spawnOptions('pnpm', ['say "oi"'], 'win32'), /inseguro/);
+  assert.equal(spawnOptions('pnpm', ['dev', '--env-mode=loose'], 'win32').shell, true);
+  assert.equal(spawnOptions('docker', ['exec', 'a b'], 'win32').shell, false);
+  assert.equal(spawnOptions('pnpm', ['dev'], 'linux').shell, false);
+  assert.equal(spawnOptions('pnpm', ['x y'], 'darwin').shell, false);
+});
+
+test('--check não grava o .env; fora do --check grava e só cria .env.bak uma vez', () => {
+  assert.deepEqual(planEnvWrite({ check: true, changed: ['A'], backupExists: false }), { write: false, backup: false });
+  assert.deepEqual(planEnvWrite({ check: false, changed: [], backupExists: false }), { write: false, backup: false });
+  assert.deepEqual(planEnvWrite({ check: false, changed: ['A'], backupExists: false }), { write: true, backup: true });
+  assert.deepEqual(planEnvWrite({ check: false, changed: ['A'], backupExists: true }), { write: true, backup: false });
+});
+
+test('guard de execução funciona por link simbólico e recusa outro arquivo', () => {
+  const self = fileURLToPath(new URL('./iphone.mjs', import.meta.url));
+  const dir = mkdtempSync(join(tmpdir(), 'webag-iphone-'));
+  try {
+    const link = join(dir, 'iphone-link.mjs');
+    symlinkSync(self, link);
+    assert.ok(isMainModule(self, import.meta.url.replace('iphone.test.mjs', 'iphone.mjs')));
+    assert.ok(isMainModule(link, new URL('./iphone.mjs', import.meta.url).href));
+    assert.ok(!isMainModule(fileURLToPath(import.meta.url), new URL('./iphone.mjs', import.meta.url).href));
+    assert.ok(!isMainModule(undefined, import.meta.url));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('porta reservada no Windows (EACCES) aponta o netsh; porta em uso aponta o netstat', () => {
+  const reserved = portHelpLines(8081, 'EACCES', true).join('\n');
+  assert.ok(reserved.includes('netsh interface ipv4 show excludedportrange protocol=tcp'));
+  assert.ok(portHelpLines(8081, 'EADDRINUSE', true).join('\n').includes('netstat'));
+  assert.ok(portHelpLines(8081, 'EADDRINUSE', false).join('\n').includes('lsof'));
+});
+
+test('acha o bundle na página do app (só caminhos do próprio Metro)', () => {
+  const html = '<script src="/node_modules/expo-router/entry.bundle?platform=web&amp;dev=true" defer></script><script src="https://cdn.exemplo/x.js"></script><script>1</script>';
+  assert.deepEqual(findBundlePaths(html), ['/node_modules/expo-router/entry.bundle?platform=web&dev=true']);
+  assert.deepEqual(findBundlePaths(''), []);
+});
+
+test('SEC-191: aviso de "só no Wi-Fi de casa" com as portas no recado final; firewall restrito, sem "desligue"', () => {
+  assert.ok(SAFETY_NOTICE.join(' ').includes('SÓ no Wi-Fi da sua casa'));
+  for (const platform of ['win32', 'darwin']) {
+    const banner = buildBanner({ ip: '192.168.0.10', expoSdk: '58', platform });
+    assert.ok(banner.includes('SÓ no Wi-Fi da sua casa'));
+    assert.ok(banner.includes('3000') && banner.includes('9000'));
+    assert.ok(!/(?<!não )desligue o firewall/i.test(banner));
+  }
+  assert.ok(firewallHelp('win32').join('\n').includes('-Profile Private -RemoteAddress LocalSubnet'));
+  assert.ok(firewallHelp('darwin').join('\n').includes('"node"'));
 });

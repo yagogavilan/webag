@@ -2,6 +2,15 @@
 # Uso: cp .env.example .env && docker compose up -d
 # Serviços: PostgreSQL 18 + PostGIS 3.6, Redis 8, RustFS (S3, ver ADR-005), Mailpit (e-mail de teste).
 # API em container: docker compose --profile app up -d --build
+#
+# Exposição de rede (SEC-190): TODAS as portas abaixo são publicadas só em 127.0.0.1 (a própria máquina). Postgres, Redis, console
+# do armazenamento e Mailpit não aparecem para os outros aparelhos do Wi-Fi. A única exceção é a 9000 (API S3 do RustFS), porque o
+# navegador do iPhone carrega as fotos das lojas direto dela: `STORAGE_BIND` vale 127.0.0.1 por padrão, e o `pnpm iphone` sobe o
+# compose com STORAGE_BIND=0.0.0.0. Nesse caso a 9000 fica aberta no Wi-Fi e a proteção é a chave S3 aleatória que o
+# `pnpm run setup` gera no .env (escrita e bucket privado exigem a chave; só o bucket público é de leitura anônima).
+# API, web e Metro rodam no host (não em container) e falam com os serviços por localhost; os containers falam entre si pelos
+# nomes dos serviços (rede interna do compose), que não depende destas publicações.
+# Senhas: POSTGRES_PASSWORD, REDIS_PASSWORD e S3_* vêm do .env (gerados pelo setup). Os padrões abaixo só valem sem .env.
 name: webag
 
 services:
@@ -15,7 +24,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-webag}
       TZ: UTC
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       # PostgreSQL 18+: montar o diretório pai (dados em /var/lib/postgresql/18/docker)
       - postgres-data:/var/lib/postgresql
@@ -30,13 +39,17 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
+    # REDIS_PASSWORD vazio (padrão) = sem senha; o `pnpm run setup` gera uma no .env novo (a REDIS_URL do .env leva a senha).
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:-}']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      # REDISCLI_AUTH só quando há senha (com a variável vazia o redis-cli enviaria um AUTH vazio e falharia)
+      test: ['CMD-SHELL', '[ -z "$${REDIS_PASSWORD}" ] || export REDISCLI_AUTH="$${REDIS_PASSWORD}"; redis-cli ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 20
@@ -50,8 +63,8 @@ services:
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-webag-dev-secret-only}
       RUSTFS_CONSOLE_ENABLE: 'true'
     ports:
-      - '9000:9000' # API S3
-      - '9001:9001' # console web
+      - '${STORAGE_BIND:-127.0.0.1}:9000:9000' # API S3 (0.0.0.0 só no `pnpm iphone`, ver o topo do arquivo)
+      - '127.0.0.1:9001:9001' # console web
     volumes:
       - storage-data:/data
 
@@ -78,8 +91,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - '1025:1025' # SMTP
-      - '8025:8025' # UI
+      - '127.0.0.1:1025:1025' # SMTP
+      - '127.0.0.1:8025:8025' # UI
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: 'true'
       MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
@@ -112,7 +125,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:3101,http://localhost:8081}
       DATABASE_URL: postgresql://${POSTGRES_USER:-webag}:${POSTGRES_PASSWORD:-webag_dev_only}@postgres:5432/${POSTGRES_DB:-webag}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
       # Dentro da rede do compose os serviços se chamam pelo nome. Quem usa a URL do armazenamento de fora (navegador, app)
       # enxerga o mesmo serviço em localhost:9000, por isso a URL pública fica em localhost.
       S3_ENDPOINT: http://storage:9000

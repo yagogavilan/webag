@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // `pnpm iphone`: deixa o Webag pronto para abrir no iPhone (Safari) pela rede Wi-Fi da sua casa e sobe tudo.
 //   1. descobre o endereço (IPv4) deste computador na rede local (macOS, Windows e Linux; ignora Docker, VPN e redes virtuais);
-//   2. grava no `.env` (com cópia em `.env.bak`, de forma idempotente) só os ENDEREÇOS que o celular precisa; nenhum segredo é lido nem escrito;
+//   2. grava no `.env` (com cópia do original em `.env.bak`, criada só uma vez, de forma idempotente) só os ENDEREÇOS que o celular precisa; nenhum segredo é lido nem escrito;
 //   3. confere Docker, banco e portas 3000, 3001 e 8081;
 //   4. sobe API + site/painéis + app (reaproveita `pnpm dev`) e imprime o endereço para o Safari, os logins e como simular o pagamento.
 // Uso: pnpm iphone [--ip 192.168.0.10] [--check] [--help]
 //   --ip <IPv4>  usa este endereço em vez do detectado (se houver mais de uma rede, ou se a detecção errar)
-//   --check      só prepara o `.env` e confere tudo; não sobe nada (bom para testar)
+//   --check      só confere tudo e mostra o que mudaria; NÃO altera o `.env` e não sobe o app (bom para testar)
 // Variáveis: SKIP_DOCKER=1 (Postgres/Redis seus, como no `pnpm run setup`).
 import { spawn, spawnSync } from 'node:child_process';
 import { createSocket } from 'node:dgram';
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { createServer } from 'node:net';
 import { networkInterfaces } from 'node:os';
@@ -20,7 +20,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const isWindows = process.platform === 'win32';
+const WARMUP_MS = 4 * 60_000;
 export const PORTS = { api: 3000, web: 3001, app: 8081, storage: 9000 };
+
+/** Aviso fixo de segurança (SEC-191): impresso no início e no fim do `pnpm iphone`. */
+export const SAFETY_NOTICE = [
+  'ATENÇÃO: use SÓ no Wi-Fi da sua casa. Não use em Wi-Fi público, de convidados, de café, faculdade ou trabalho.',
+  `Enquanto o Webag estiver rodando, qualquer aparelho deste Wi-Fi consegue abrir o ambiente de teste (portas ${PORTS.api} API, ${PORTS.web} site e painéis, ${PORTS.app} app, ${PORTS.storage} fotos).`,
+  'Ao terminar: Ctrl+C nesta janela e, para desligar o banco, pnpm infra:down.',
+];
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Funções puras (testadas em scripts/iphone.test.mjs)
@@ -177,7 +185,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function buildBanner({ ip, expoSdk, withExpoGo = true, qrSafari = '', qrExpo = '', title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
+export function buildBanner({ ip, expoSdk, withExpoGo = true, qrSafari = '', qrExpo = '', platform = process.platform, title = 'WEBAG PRONTO. ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }) {
   const indent = (qr) => (qr ? ['', ...qr.trimEnd().split('\n').map((row) => `        ${row}`), ''] : []);
   const web = `http://${ip}:${PORTS.app}`;
   const line = '='.repeat(72);
@@ -221,10 +229,88 @@ export function buildBanner({ ip, expoSdk, withExpoGo = true, qrSafari = '', qrE
     '',
     '  Notas: a localização do iPhone não funciona em http (use a cidade ou o CEP); em Safari/atalho a sessão fica só na memória,',
     '  então ao recarregar a página você entra de novo. Para PARAR: Ctrl+C nesta janela.',
+    '',
+    '  Se o iPhone não abrir o endereço (fica carregando): confira o Wi-Fi (o mesmo do computador, não o de convidados nem dados móveis) e o firewall.',
+    ...firewallHelp(platform),
+    '',
+    ...SAFETY_NOTICE.map((text) => `  ${text}`),
     line,
     '',
   );
   return out.join('\n');
+}
+
+/**
+ * Opções do `spawn`. No Windows, `.cmd` (pnpm) exige shell; `docker` é `.exe` e NÃO deve passar pelo shell, porque o Node junta os
+ * argumentos sem aspas e um argumento com espaço (ex.: a consulta do psql) vira vários. Com shell, argumento com espaço/aspas é erro.
+ */
+export function spawnOptions(command, args, platform = process.platform, extra = {}) {
+  const shell = platform === 'win32' && command !== 'docker';
+  if (shell) {
+    const bad = args.find((arg) => /[\s"'&|<>^%()]/.test(String(arg)));
+    if (bad !== undefined) throw new Error(`argumento inseguro para o shell do Windows em "${command}": ${JSON.stringify(bad)}`);
+  }
+  return { encoding: 'utf8', shell, ...extra };
+}
+
+/** `spawnSync` com as opções acima. `impl` e `platform` existem para o teste simular o Windows. */
+export function makeRunner(impl = spawnSync, platform = process.platform, cwd = root) {
+  return (command, args, options = {}) => impl(command, args, spawnOptions(command, args, platform, { cwd, ...options }));
+}
+
+/** O `.env` só é gravado fora do `--check`; a cópia `.env.bak` guarda o ORIGINAL e não é sobrescrita nas execuções seguintes. */
+export function planEnvWrite({ check, changed, backupExists }) {
+  const write = !check && changed.length > 0;
+  return { write, backup: write && !backupExists };
+}
+
+/** Caminhos relativos dos scripts da página inicial do app (o bundle), para "esquentar" a montagem antes do aviso de pronto. */
+export function findBundlePaths(html) {
+  const paths = [];
+  for (const match of String(html ?? '').matchAll(/<script\b[^>]*?\ssrc=["']([^"']+)["']/gi)) {
+    const src = match[1].replace(/&amp;/g, '&');
+    if (src.startsWith('/') && !src.startsWith('//')) paths.push(src);
+  }
+  return paths;
+}
+
+/** True se este arquivo é o executado (compara caminhos reais: link simbólico, junction e maiúscula da letra do drive no Windows). */
+export function isMainModule(argv1, metaUrl, platform = process.platform) {
+  if (!argv1) return false;
+  try {
+    const norm = (p) => (platform === 'win32' ? p.toLowerCase() : p);
+    return norm(realpathSync.native(resolve(argv1))) === norm(realpathSync.native(fileURLToPath(metaUrl)));
+  } catch {
+    return false;
+  }
+}
+
+/** Ajuda para porta ocupada. EACCES/EPERM no Windows quase sempre é faixa reservada pelo Hyper-V/WSL/Docker, que o netstat não mostra. */
+export function portHelpLines(port, code, windows = isWindows) {
+  if (windows && (code === 'EACCES' || code === 'EPERM')) {
+    return [
+      `A porta ${port} não está "em uso": o Windows a reservou (comum com Hyper-V, WSL e Docker Desktop), por isso o netstat não mostra nada.`,
+      'Veja as faixas reservadas: netsh interface ipv4 show excludedportrange protocol=tcp',
+      `Se a ${port} estiver numa faixa, abra o Prompt de Comando COMO ADMINISTRADOR e rode: net stop winnat  e depois  net start winnat   (depois reinicie o Docker Desktop e rode de novo).`,
+    ];
+  }
+  return windows
+    ? [`Para ver quem usa a porta ${port}: netstat -ano | findstr :${port}   (o último número é o PID; encerre com: taskkill /PID <número> /F)`]
+    : [`Para ver quem usa a porta ${port}: lsof -nP -iTCP:${port} -sTCP:LISTEN   (encerre com: kill <PID>)`];
+}
+
+/** Como liberar o iPhone no firewall SEM abrir para outras redes (SEC-191). Nunca sugerir desligar o firewall. */
+export function firewallHelp(platform = process.platform) {
+  return platform === 'win32'
+    ? [
+        '  Windows: no aviso do Firewall marque só "Redes privadas". Se não abrir, no PowerShell COMO ADMINISTRADOR:',
+        `    New-NetFirewallRule -DisplayName "Webag" -Direction Inbound -Protocol TCP -LocalPort ${Object.values(PORTS).join(',')} -Action Allow -Profile Private -RemoteAddress LocalSubnet`,
+        '  ("Privada" é só para o Wi-Fi da sua casa; a regra acima só aceita aparelhos da sua rede local.)',
+      ]
+    : [
+        '  macOS: Ajustes do Sistema > Rede > Firewall > Opções: permita conexões de entrada para o "node" (não desligue o firewall).',
+        '  Se o macOS perguntar "Deseja permitir que o node aceite conexões de entrada?", clique em Permitir.',
+      ];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -240,9 +326,7 @@ const fail = (title, lines = []) => {
   process.exit(1);
 };
 
-function run(command, args, options = {}) {
-  return spawnSync(command, args, { cwd: root, encoding: 'utf8', shell: isWindows, ...options });
-}
+const run = makeRunner();
 
 /** Endereço que o sistema usa para sair para a internet. Não envia nada: só pergunta ao sistema qual placa usaria. */
 function detectRouteIp() {
@@ -282,11 +366,12 @@ async function makeQr(text) {
   }
 }
 
-function isPortFree(port) {
+/** Devolve `{ free: true }` ou `{ free: false, code }` (EADDRINUSE = em uso; EACCES = reservada pelo sistema, comum no Windows). */
+function checkPort(port) {
   return new Promise((done) => {
     const server = createServer();
-    server.once('error', () => done(false));
-    server.once('listening', () => server.close(() => done(true)));
+    server.once('error', (error) => done({ free: false, code: error?.code }));
+    server.once('listening', () => server.close(() => done({ free: true })));
     server.listen(port, '0.0.0.0');
   });
 }
@@ -306,26 +391,60 @@ function httpGet(url, timeout = 2000) {
   });
 }
 
-const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
-
-function portHelp(port) {
-  return isWindows
-    ? [`Para ver quem usa a porta ${port}: netstat -ano | findstr :${port}   (o último número é o PID; encerre com: taskkill /PID <número> /F)`]
-    : [`Para ver quem usa a porta ${port}: lsof -nP -iTCP:${port} -sTCP:LISTEN   (encerre com: kill <PID>)`];
+/** GET que devolve o texto (para a página inicial do app, que é pequena). */
+function httpGetText(url, timeout = 60_000) {
+  return new Promise((done) => {
+    const req = request(url, { method: 'GET', timeout }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        if (body.length < 200_000) body += chunk;
+      });
+      res.on('end', () => done({ status: res.statusCode ?? 0, body }));
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      done({ status: 0, body: '' });
+    });
+    req.on('error', () => done({ status: 0, body: '' }));
+    req.end();
+  });
 }
+
+/** Pede a página e o bundle do app uma vez, para o Metro montá-lo ANTES de o Safari pedir (a 1ª montagem leva minutos). */
+async function warmUpApp(limitMs) {
+  const deadline = Date.now() + limitMs;
+  const base = `http://127.0.0.1:${PORTS.app}`;
+  const page = await httpGetText(`${base}/`, limitMs);
+  if (page.status !== 200) return false;
+  const paths = findBundlePaths(page.body).slice(0, 3);
+  if (paths.length === 0) return false;
+  for (const path of paths) {
+    const left = deadline - Date.now();
+    if (left <= 0) return false;
+    const status = await httpGet(`${base}${path}`, left);
+    if (status !== 200) return false;
+  }
+  return true;
+}
+
+const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    say('Uso: pnpm iphone [--ip 192.168.0.10] [--check]\n  --ip <IPv4>  usa este endereço em vez do detectado\n  --check      só prepara o .env e confere tudo; não sobe nada');
+    say('Uso: pnpm iphone [--ip 192.168.0.10] [--check]\n  --ip <IPv4>  usa este endereço em vez do detectado\n  --check      só confere tudo e mostra o que mudaria; NÃO altera o .env nem sobe nada');
     return;
   }
   if (options.errors.length > 0) fail(options.errors[0], ['Uso: pnpm iphone [--ip 192.168.0.10] [--check]']);
+  say('');
+  for (const text of SAFETY_NOTICE) say(`[iphone] ${text}`);
+  say('');
 
   // 1. Pré-requisitos
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 12)) {
-    fail(`o Node é muito antigo (${process.versions.node}); o Webag pede 22.12 ou mais novo (o recomendado é o 24).`, ['Instale o Node LTS em https://nodejs.org e abra um terminal novo.']);
+    fail(`o Node é muito antigo (${process.versions.node}); o Webag pede 22.12 ou mais novo (o recomendado é o 24).`, ['Instale o Node 24 em https://nodejs.org (escolha a versão 24 explicitamente) e abra um terminal novo.']);
   }
   if (!existsSync(resolve(root, 'node_modules'))) fail('as dependências ainda não foram instaladas.', ['Rode: pnpm install', 'Depois: pnpm run setup']);
   const envFile = resolve(root, '.env');
@@ -355,10 +474,14 @@ async function main() {
   const before = readFileSync(envFile, 'utf8');
   const current = parseEnv(before);
   const { text: after, changed } = mergeEnvText(before, envUpdates(ip, current.CORS_ORIGINS, current.S3_BUCKET_PUBLIC));
-  if (changed.length > 0) {
-    copyFileSync(envFile, resolve(root, '.env.bak'));
+  const backupFile = resolve(root, '.env.bak');
+  const plan = planEnvWrite({ check: options.check, changed, backupExists: existsSync(backupFile) });
+  if (plan.write) {
+    if (plan.backup) copyFileSync(envFile, backupFile);
     writeFileSync(envFile, after);
-    step(`.env atualizado (cópia do anterior em .env.bak): ${changed.join(', ')}`);
+    step(`.env atualizado (${plan.backup ? 'cópia do original em .env.bak' : '.env.bak já guarda o original e foi mantido'}): ${changed.join(', ')}`);
+  } else if (changed.length > 0) {
+    step(`--check: o .env NÃO foi alterado. O "pnpm iphone" vai atualizar: ${changed.join(', ')}`);
   } else {
     step('.env já estava certo para este endereço');
   }
@@ -408,13 +531,17 @@ async function main() {
 
   // 5. Portas
   const busy = [];
-  for (const label of ['api', 'web', 'app']) if (!(await isPortFree(PORTS[label]))) busy.push({ label, port: PORTS[label] });
+  for (const label of ['api', 'web', 'app']) {
+    const result = await checkPort(PORTS[label]);
+    if (!result.free) busy.push({ label, port: PORTS[label], code: result.code });
+  }
   if (busy.length > 0) {
     const names = { api: 'a API', web: 'o site e os painéis', app: 'o app (Metro)' };
     const alive = await httpGet(`http://127.0.0.1:${PORTS.api}/health`);
-    fail(`as portas ${busy.map((b) => b.port).join(', ')} já estão em uso (${busy.map((b) => names[b.label]).join(', ')}).`, [
-      alive === 200 ? 'Provavelmente o Webag já está rodando em outra janela (um `pnpm dev` ou `pnpm iphone` anterior). Feche essa janela (Ctrl+C) e rode de novo.' : 'Outro programa está usando essas portas. Feche-o e rode de novo.',
-      ...portHelp(busy[0].port),
+    const reserved = busy.some((b) => b.code === 'EACCES' || b.code === 'EPERM');
+    fail(`as portas ${busy.map((b) => b.port).join(', ')} já estão em uso ou bloqueadas (${busy.map((b) => names[b.label]).join(', ')}).`, [
+      alive === 200 ? 'Provavelmente o Webag já está rodando em outra janela (um `pnpm dev` ou `pnpm iphone` anterior). Feche essa janela (Ctrl+C) e rode de novo.' : reserved ? 'O sistema não deixou o Webag usar essas portas.' : 'Outro programa está usando essas portas. Feche-o e rode de novo.',
+      ...portHelpLines(busy[0].port, busy[0].code),
     ]);
   }
   step('portas 3000, 3001 e 8081 livres');
@@ -432,10 +559,11 @@ async function main() {
 
   // 6. Sobe tudo (mesmo caminho do `pnpm dev`)
   step('subindo API, site/painéis e app... (a primeira vez demora; aguarde a mensagem "WEBAG PRONTO")');
-  const child = spawn('pnpm', ['dev', '--env-mode=loose'], {
+  const devArgs = ['dev', '--env-mode=loose'];
+  const child = spawn('pnpm', devArgs, {
+    ...spawnOptions('pnpm', devArgs),
     cwd: root,
     stdio: 'inherit',
-    shell: isWindows,
     env: {
       ...process.env,
       // Metro mostra o endereço da rede (e não "localhost") no QR do Expo Go.
@@ -447,7 +575,7 @@ async function main() {
     },
   });
   let stopping = false;
-  child.on('error', (error) => fail(`não consegui executar o "pnpm": ${error.message}`, ['Confirme com: pnpm --version (instale com: corepack enable)']));
+  child.on('error', (error) => fail(`não consegui executar o "pnpm": ${error.message}`, ['Confirme com: pnpm --version (instale com: npm install -g pnpm@10.28.0)']));
   child.on('exit', (code) => {
     say(`\n[iphone] Webag parado${stopping ? '' : ` (código ${code ?? '?'})`}. O banco continua no Docker; para desligá-lo: pnpm infra:down`);
     process.exit(stopping ? 0 : (code ?? 1));
@@ -473,16 +601,15 @@ async function main() {
     say(`\n[iphone] AVISO: depois de 5 minutos ainda não responderam: ${waiting.join(', ')}. Veja as mensagens de erro acima.`);
     return;
   }
-  say(buildBanner({ ip, expoSdk, qrSafari, qrExpo }));
-  say('Se o iPhone não abrir o endereço (fica carregando): confira o Wi-Fi e o firewall.');
-  say(
-    isWindows
-      ? '  Windows: Segurança do Windows > Firewall > Permitir um aplicativo > Node.js, marcando "Privada"; ou, no PowerShell como administrador:\n    New-NetFirewallRule -DisplayName "Webag" -Direction Inbound -Protocol TCP -LocalPort 3000,3001,8081,9000 -Action Allow -Profile Private'
-      : '  macOS: Ajustes do Sistema > Rede > Firewall: permitir conexões de entrada para o "node" (ou desligue o firewall só durante o teste).',
-  );
-  say('  Também confira: iPhone no MESMO Wi-Fi (não use "Wi-Fi de convidados" nem dados móveis) e o Wi-Fi do computador como rede "Privada".\n');
+  // "PRONTO" só depois de o bundle do app estar montado: o 1º pedido do Safari dispararia a montagem (minutos) e a página ficaria em branco.
+  step('montando o app para o Safari (na 1ª vez leva de 1 a 4 minutos; só depois aparece o recado "WEBAG PRONTO")...');
+  const warmed = await warmUpApp(WARMUP_MS);
+  if (!warmed) {
+    say(`\n[iphone] AVISO: o app ainda não terminou de ser montado (passaram ${WARMUP_MS / 60_000} minutos ou ele deu erro; veja as mensagens acima). A 1ª abertura no iPhone pode demorar ou ficar em branco: espere um pouco e recarregue a página.`);
+  }
+  say(buildBanner({ ip, expoSdk, qrSafari, qrExpo, title: warmed ? undefined : 'WEBAG NO AR (o app ainda pode estar sendo montado). ABRA NO IPHONE (celular e computador no MESMO Wi-Fi)' }));
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(process.argv[1], import.meta.url)) {
   main().catch((error) => fail(`erro inesperado: ${error?.message ?? error}`));
 }
