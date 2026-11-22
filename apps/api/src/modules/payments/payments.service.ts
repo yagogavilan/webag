@@ -388,7 +388,9 @@ export class PaymentsService implements OnApplicationBootstrap, OnApplicationShu
       const due = await tx
         .select()
         .from(webhookEvents)
-        .where(and(eq(webhookEvents.status, 'pending'), lte(webhookEvents.nextAttemptAt, new Date())))
+        // `now()` do BANCO (a coluna nasce com `default now()` em microssegundos): comparar com `new Date()` (milissegundos) deixava o evento recém-gravado "ainda não vencido"
+        // quando o processamento disparado logo após o INSERT rodava no mesmo milissegundo; ele só saía no próximo ciclo (e fazia o e2e de pagamento falhar de forma intermitente).
+        .where(and(eq(webhookEvents.status, 'pending'), lte(webhookEvents.nextAttemptAt, sql`now()`)))
         .orderBy(webhookEvents.id)
         .limit(limit)
         .for('update', { skipLocked: true });

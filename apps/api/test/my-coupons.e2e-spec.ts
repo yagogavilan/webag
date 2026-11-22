@@ -73,7 +73,10 @@ describe('Meus cupons (GET /v1/me/coupons)', () => {
   it('paginado por cursor, do mais novo ao mais antigo, sem repetir nem pular', async () => {
     const ana = await createCustomer(ctx);
     const made: string[] = [];
-    for (let i = 0; i < 5; i += 1) made.push((await makeCoupon(ctx, { ownerUserId: ana.userId, kind: 'free_shipping', value: 0 })).id);
+    // `createdAt` explícito e distinto (10 ms entre eles): o cursor ordena por milissegundo + id, e numa máquina rápida dois cupons criados em sequência caíam no MESMO
+    // milissegundo e saíam na ordem do id aleatório (falha intermitente que só aparecia sem carga).
+    const first = Date.now() - 60_000;
+    for (let i = 0; i < 5; i += 1) made.push((await makeCoupon(ctx, { ownerUserId: ana.userId, kind: 'free_shipping', value: 0, createdAt: new Date(first + i * 10) })).id);
     const seen: string[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < 5; page += 1) {
