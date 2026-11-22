@@ -93,7 +93,7 @@ export class BrowseService {
    * Leitura pública igual para todos (vitrine da loja, dados-base da loja e do produto): cache em memória por poucos segundos com single-flight. 1.000 pessoas abrindo a
    * mesma loja viram 1 leitura ao banco por TTL, não 1.000. O que depende do cliente (frete/ETA pela posição) é calculado FORA do cache. TTL 0 = desligado (e2e).
    * Defasagem máxima = TTL (10 s por padrão) para o que nenhum serviço invalidou; moderação, loja e mudança do lojista APAGAM a entrada na hora (`invalidate`, DEC-113).
-   * O `Cache-Control: max-age=30` das respostas é cache do APP/proxy e continua valendo (ver guia de deploy §14).
+   * O `Cache-Control: max-age=5` das respostas é cache do APP/proxy (DEC-116; ver guia de deploy §14.6).
    */
   private readonly storeBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadStoreBase']>>>(500);
   private readonly productBases = new LocalTtlCache<Awaited<ReturnType<BrowseService['loadProductBase']>>>(1000);

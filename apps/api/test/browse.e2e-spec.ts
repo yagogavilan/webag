@@ -47,7 +47,7 @@ describe('Loja e produto públicos (WB-016, WB-017, WB-018, DEC-022)', () => {
     expect(res.body.sections.map((s: { name: string }) => s.name)).toEqual(['Destaques', 'Outros']);
     expect(res.body.supplier.documentMasked).toMatch(/^\*+\d{2}$/);
     expect(JSON.stringify(res.body)).not.toMatch(/documentNumber|passwordHash|ownerUserId/);
-    expect(res.headers['cache-control']).toBe('private, max-age=30');
+    expect(res.headers['cache-control']).toBe('private, max-age=5');
     // Sem posição: só os dados da loja.
     const bare = await ctx.http.get(`/v1/browse/stores/${store.id}`).expect(200);
     expect(bare.body.delivery).toMatchObject({ available: null, feeCents: null, distanceM: null });

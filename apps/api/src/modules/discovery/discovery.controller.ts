@@ -30,6 +30,8 @@ const suggestionsQuery = z.strictObject({ ...geoQuery, q: z.string().trim().max(
 
 /** Resposta de descoberta é por posição e vira lixo logo: cache curto no aparelho, nunca em cache compartilhado. */
 const PRIVATE_SHORT_CACHE = 'private, max-age=30';
+/** Home (vitrine): 5 s no aparelho, para a invalidação da DEC-113 valer no cliente (DEC-116). A busca (search/*) segue com 30 s. */
+const HOME_CACHE = 'private, max-age=5';
 
 /**
  * Descoberta pública (WB-005: navegar sem login). A posição vem de `lat`/`lng` (o app a tem do endereço salvo, do CEP
@@ -42,7 +44,7 @@ export class DiscoveryController {
   @Public()
   @RateLimit({ name: 'discovery', limit: 120, windowSeconds: 60 })
   @Get('home')
-  @Header('Cache-Control', PRIVATE_SHORT_CACHE)
+  @Header('Cache-Control', HOME_CACHE)
   home(@Query(new ZodPipe(homeQuery)) q: z.infer<typeof homeQuery>) {
     return this.discovery.home({ lat: q.lat, lng: q.lng }, q.mode);
   }

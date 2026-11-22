@@ -30,11 +30,11 @@ describe('Cache-Control global: no-store nas rotas autenticadas, público só on
     expect(notFound.headers['cache-control']).toBe('private, no-store');
   });
 
-  it('rota pública que declara o cabeçalho mantém o dela (`public, max-age=30`); 404 dessa mesma rota volta a `private, no-store`', async () => {
+  it('rota pública que declara o cabeçalho mantém o dela (`public, max-age=5`, DEC-116); 404 dessa mesma rota volta a `private, no-store`', async () => {
     const origin = isolatedPoint();
     const store = await makeStore(ctx, { name: 'Loja Cabecalho', at: await northOf(ctx, origin, 800) });
     const ok = await ctx.http.get(`/v1/browse/stores/${store.id}/products`).expect(200);
-    expect(ok.headers['cache-control']).toBe('public, max-age=30');
+    expect(ok.headers['cache-control']).toBe('public, max-age=5');
     // erro de rota pública NUNCA pode ser cacheável por proxy (um 404 transitório ficaria preso)
     const missing = await ctx.http.get(`/v1/browse/stores/${randomUUID()}/products`).expect(404);
     expect(missing.headers['cache-control']).toBe('private, no-store');
@@ -42,7 +42,7 @@ describe('Cache-Control global: no-store nas rotas autenticadas, público só on
     expect(missingStore.headers['cache-control']).toBe('private, no-store');
     // com posição a página é por aparelho (privada), sem cache compartilhado
     const withPoint = await ctx.http.get(`/v1/browse/stores/${store.id}?lat=${origin.lat}&lng=${origin.lng}`).expect(200);
-    expect(withPoint.headers['cache-control']).toBe('private, max-age=30');
+    expect(withPoint.headers['cache-control']).toBe('private, max-age=5');
   });
 
   it('rota pública: ETag e 304 com `If-None-Match` continuam funcionando (o `no-store` não os remove; só impede o armazenamento)', async () => {
