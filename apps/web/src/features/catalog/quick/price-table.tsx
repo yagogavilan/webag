@@ -5,7 +5,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/panel/page-header';
-import { Banner, Button, ErrorState, MessageState, SkeletonRows, TextField, cx, ui } from '@/components/ui';
+import { Banner, Button, CheckboxField, ErrorState, MessageState, SkeletonRows, TextField, cx, ui } from '@/components/ui';
 import { catalogApi, catalogErrorMessage, catalogKeys, type ProductTableRow } from '@/lib/api/catalog';
 import { ApiError } from '@/lib/api/errors';
 import { MAX_PRICE_CENTS } from '@/lib/catalog/helpers';
@@ -14,7 +14,9 @@ import { centsFromDigits, moneyField } from '@/lib/money';
 import { asRoute } from '@/lib/routes';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
-import { CatalogGate } from '../catalog-gate';
+import { BULK_MAX, BulkBar } from '../bulk-bar';
+import { UndoNotice, type UndoBatch } from '../bulk-undo';
+import { CatalogGate, isCatalogOwner } from '../catalog-gate';
 import s from '../catalog.module.css';
 import q from './quick.module.css';
 
@@ -24,7 +26,7 @@ const OFFLINE_ROW = 'Não salvou: sem internet';
 
 /** `/lojista/produtos/precos`: "Preços e estoque" (WB-377): preço e estoque editáveis em linha, salvando por linha. */
 export function PriceTablePage() {
-  return <CatalogGate>{(store) => <PriceTable storeId={store.id} />}</CatalogGate>;
+  return <CatalogGate>{(store) => <PriceTable storeId={store.id} owner={isCatalogOwner(store)} />}</CatalogGate>;
 }
 
 /** Confirmação inline acima de `reajuste_max_pct` nos dois sentidos (WB-377 C8, RN-Q9): "De R$ 49,90 para R$ 4,99 (-90%). Confirmar?". */
@@ -36,8 +38,12 @@ export function priceChangeNote(fromCents: number, toCents: number, limitPct: nu
   return `De ${formatCents(fromCents)} para ${formatCents(toCents)} (${rounded > 0 ? '+' : '-'}${Math.abs(rounded)}%). Confirmar?`;
 }
 
-function PriceTable({ storeId }: { storeId: string }) {
+function PriceTable({ storeId, owner }: { storeId: string; owner: boolean }) {
   const online = useOnline();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [undo, setUndo] = useState<UndoBatch | null>(null);
+  // Depois de um reajuste ou de um desfazer, as linhas recomeçam do valor do servidor (o estado local da linha só lê a prop ao montar).
+  const [generation, setGeneration] = useState(0);
   const [input, setInput] = useState('');
   const [q2, setQ] = useState('');
   useEffect(() => {
@@ -55,6 +61,15 @@ function PriceTable({ storeId }: { storeId: string }) {
   });
   const rows = useMemo(() => list.data?.pages.flatMap((page) => page.data) ?? [], [list.data]);
   const matching = list.data?.pages[0]?.matchingCount ?? rows.length;
+  const selectedRows = useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
+  const allSelected = rows.length > 0 && rows.slice(0, BULK_MAX).every((row) => selected.has(row.id));
+  const toggle = (id: string, checked: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   return (
     <div className={ui.stack}>
@@ -66,6 +81,30 @@ function PriceTable({ storeId }: { storeId: string }) {
       {list.data && rows.length === 0 ? (
         <MessageState icon={MagnifyingGlass} title={q2 ? 'Nenhum produto com esse nome' : 'Nenhum produto vendendo ou pausado'} text={q2 ? 'Tente outro nome.' : 'Rascunhos ficam na aba Rascunhos de Produtos.'} testId={T('empty')} />
       ) : null}
+      {undo ? <UndoNotice key={undo.batchId} storeId={storeId} batch={undo} onUndone={() => setGeneration((n) => n + 1)} /> : null}
+      {rows.length > 0 ? (
+        <CheckboxField
+          label={`${q2 ? 'Selecionar os' : 'Selecionar todos os'} ${rows.length > BULK_MAX ? BULK_MAX : rows.length} ${q2 ? 'da busca' : 'da lista'}${list.hasNextPage ? '. Há mais produtos: toque em Mostrar mais para incluir' : ''}`}
+          checked={allSelected}
+          onChange={(event) => setSelected(event.target.checked ? new Set(rows.slice(0, BULK_MAX).map((row) => row.id)) : new Set())}
+          data-testid={T('select-all')}
+        />
+      ) : null}
+      {selected.size > 0 ? (
+        <BulkBar
+          storeId={storeId}
+          selected={selectedRows}
+          canChangePrice={owner}
+          actions={['price', 'pause']}
+          onClear={() => setSelected(new Set())}
+          onDone={(_ids, result) => {
+            setSelected(new Set());
+            setGeneration((n) => n + 1);
+            if (result?.batchId && result.undoUntil) setUndo({ batchId: result.batchId, undoUntil: result.undoUntil, count: result.changed });
+          }}
+        />
+      ) : null}
+      {selected.size > BULK_MAX ? <Banner tone="warning">O máximo é {BULK_MAX} produtos por vez. Desmarque alguns.</Banner> : null}
       {rows.length > 0 ? (
         <div className={q.tableWrap}>
           <table className={ui.table}>
@@ -81,7 +120,7 @@ function PriceTable({ storeId }: { storeId: string }) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <Line key={row.id} storeId={storeId} row={row} limitPct={limitPct} />
+                <Line key={`${row.id}:${generation}`} storeId={storeId} row={row} limitPct={limitPct} selected={selected.has(row.id)} onSelect={(checked) => toggle(row.id, checked)} />
               ))}
             </tbody>
           </table>
@@ -94,7 +133,7 @@ function PriceTable({ storeId }: { storeId: string }) {
 
 type RowState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'confirm'; note: string } | { kind: 'error'; message: string; retry: boolean };
 
-function Line({ storeId, row, limitPct }: { storeId: string; row: ProductTableRow; limitPct: number }) {
+function Line({ storeId, row, limitPct, selected, onSelect }: { storeId: string; row: ProductTableRow; limitPct: number; selected: boolean; onSelect: (checked: boolean) => void }) {
   const client = useQueryClient();
   const online = useOnline();
   const [price, setPrice] = useState<number | null>(row.basePriceCents);
@@ -152,11 +191,10 @@ function Line({ storeId, row, limitPct }: { storeId: string; row: ProductTableRo
         savedPrice.current = price;
       }
       if (stockChanged && row.singleVariantId) {
-        await catalogApi.adjustStock(storeId, row.id, row.singleVariantId, { set: stockNumber as number }, version.current);
+        const adjusted = await catalogApi.adjustStock(storeId, row.id, row.singleVariantId, { set: stockNumber as number }, version.current);
         savedStock.current = stockNumber;
-        // A resposta é da variação, sem a versão do produto: lê a versão nova para o próximo salvamento.
-        const fresh = await catalogApi.get(storeId, row.id);
-        version.current = fresh.version ?? version.current + 1;
+        // DEC-132: a resposta traz a versão nova do produto (`productVersion`), sem GET extra. Contrato antigo (sem o campo): lê o produto.
+        version.current = typeof adjusted.productVersion === 'number' ? adjusted.productVersion : ((await catalogApi.get(storeId, row.id)).version ?? version.current + 1);
       }
       confirmed.current = null;
       setState({ kind: 'saved' });
@@ -176,8 +214,15 @@ function Line({ storeId, row, limitPct }: { storeId: string; row: ProductTableRo
   return (
     <tr data-testid={T(`row-${row.id}`)}>
       <td data-primary>
-        <Link href={asRoute(`/lojista/produtos/${row.id}`)} className={cx('wb-text-body-strong', s.productName, s.editLink)} style={{ overflowWrap: 'anywhere' }}>{label}</Link>
-        {row.status === 'paused' ? <span className={cx('wb-text-caption', ui.muted)}> · Pausado</span> : null}
+        <div className={q.nameRow}>
+          <label className={q.selectBox}>
+            <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Selecionar ${label}`} data-testid={T(`select-${row.id}`)} />
+          </label>
+          <span className={q.nameText}>
+            <Link href={asRoute(`/lojista/produtos/${row.id}`)} className={cx('wb-text-body-strong', s.productName, s.editLink)} style={{ overflowWrap: 'anywhere' }}>{label}</Link>
+            {row.status === 'paused' ? <span className={cx('wb-text-caption', ui.muted)}> · Pausado</span> : null}
+          </span>
+        </div>
       </td>
       <td data-label="Preço">
         <TextField
