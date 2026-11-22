@@ -684,6 +684,7 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | Status | Histórias | O que ainda depende (dono) |
 |---|---|---|
 | **Pronta para sprint (PO), R1** | WB-350, 351, 352, 354, 355, 370, 371, 372, 374, 375, 376, 377, 379 | Poker (PM); contrato (backend). WB-354 inclui a D-06 (papel de banco sem posse do `audit_log`; backend) |
+| **Front do cadastro rápido: PRONTO (DoR fechada pelo PO, 2026-11-22, DEC-128)** | R1.2: WB-370, 371, 372, 374, 375, 379. R1.3: WB-376 (parser 376a já existe) e 377. Fora da R1: WB-373 (R2), WB-378 (R5) | Estimado (16,0 UT front, DEC-126); contrato no OpenAPI (a rota só é usada depois que o backend tira o `x-planned`, e `quickPublish` só depois dos SEC-213/214/215/218). **Não bloqueiam o início:** o designer corrige teto 100 e estado sem rede (lista em `prd/v1-1-cadastro-rapido.md`, "Respostas ao parser") antes da revisão da tela; os critérios novos já valem. Aceite da meta de 60 s depende do teste em aparelho real (fundador, T1) |
 | **Pronta, R1, produção só com condição** | WB-353 (produção só com motivo "solicitado pelo lojista" até o **J27**) | J27 (jurídico) |
 | **Pronta, R1 em staging; liga em produção só com o J24** | WB-360, 361, 363, 369 | **J24** (jurídico e Security); política de privacidade, Data Safety e App Privacy antes de ligar (C-GEN-03) |
 | **Pronta para sprint (PO), R2** | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362, 367, 373 | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
@@ -693,6 +694,8 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | **Pronta (PO), R5; lançamento condicionado** | WB-364, 365, 366, 378 | RN-A8 (8 semanas de dado e 5 lojas com 100 visitas), **F5** (preço) e HIP-A1 para lançar; WB-378 real só com **F8** e **J25**; construir e testar com seed é livre |
 | **Pronta (PO), R4; bloqueada** | WB-383, 384, 385, 386 (dividir em 386a e 386b, abaixo), 387, 388, 389, 392, 393, 394, 395, 398, 399 | **SEC-193 e SEC-198** (corrigir antes do G4; Security/backend); ADR do app separado e do ADR de mapa (tech-lead); **J8 e J26** para ligar (jurídico); aparelho Android real e plano de dados (fundador); teste em campo com 3 motoboys (fundador) |
 | **Cortada (DEC-104)** | WB-359 (só o export de widget; a **proteção das consultas passou para a WB-356 C9 a C11**, não é cortada), WB-368 | Gatilhos de volta nos PRDs |
+
+**Cadastro rápido, critérios revistos em 2026-11-22 (DEC-128):** teto de 100 rascunhos (WB-371 C2); sem fila offline na R1 (WB-370 C8, WB-371 C8, WB-376 C15, WB-377 C1); `quickPublish` de uma chamada, com idempotência, foto em processamento e resposta perdida (WB-370 C3, C6, C14 a C17; WB-374 C7); medição e histórico sem `session_id` (WB-379 C1, DEC-122); leitor do texto colado (WB-376 C10 a C15). Detalhe nos critérios do PRD, não repetido aqui.
 
 **Divisões e alertas de tamanho (INVEST "Pequena"):** WB-386 vira **386a** (coleta: C1 a C4, C8, C9, C11 a C13) e **386b** (entrega: C5 a C7, C10, C14, C15). WB-391 (14 critérios) e WB-353 (11) são grandes: o PM confirma no poker e, se estourar, divide por ator (391: estados e timeouts x hora do aparelho e prova). WB-344 (13) e WB-356 (11) idem.
 
