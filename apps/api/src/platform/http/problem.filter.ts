@@ -28,6 +28,7 @@ export class ProblemFilter implements ExceptionFilter {
 
     // /health segue o contrato próprio do Terminus (HealthStatus), não o RFC 9457.
     if (exception instanceof HttpException && req.path.startsWith('/health')) {
+      res.setHeader('Cache-Control', 'private, no-store');
       res.status(exception.getStatus()).json(exception.getResponse());
       return;
     }
@@ -62,6 +63,9 @@ export class ProblemFilter implements ExceptionFilter {
       captureError(exception, typeof req.id === 'string' ? req.id : undefined);
     }
 
+    // Erro NUNCA é cacheável: o `@Header('Cache-Control', 'public, ...')` das rotas públicas é aplicado ANTES do handler e sobreviveria ao 404/5xx
+    // (um 404 transitório ficaria preso em proxy por 30 a 60 s). Corrigido junto do I3 do review de desempenho (2026-11-22).
+    res.setHeader('Cache-Control', 'private, no-store');
     if (retryAfter !== undefined) res.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfter))));
     res
       .status(status)

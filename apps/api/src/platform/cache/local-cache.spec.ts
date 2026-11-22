@@ -1,3 +1,4 @@
+import { errors } from '../http/app-error.js';
 import { LocalTtlCache } from './local-cache.js';
 
 describe('LocalTtlCache', () => {
@@ -39,10 +40,49 @@ describe('LocalTtlCache', () => {
     expect(calls).toBe(2);
   });
 
-  it('erro não é guardado: a próxima chamada tenta de novo; valor antigo continua servindo se já existia', async () => {
+  it('erro sem valor antigo não é guardado: propaga e a próxima chamada tenta de novo', async () => {
     const cache = new LocalTtlCache<string>();
     await expect(cache.get('k', 1_000, () => Promise.reject(new Error('banco fora')))).rejects.toThrow('banco fora');
     expect(await cache.get('k', 1_000, () => Promise.resolve('ok'))).toBe('ok');
+  });
+
+  describe('com valor antigo e o recálculo falhando (stale-if-error)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('serve o valor antigo (não o erro) para quem disparou e para quem chega depois, e recua ~1 s antes de tentar de novo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const cache = new LocalTtlCache<string>();
+      await cache.get('k', 1_000, () => Promise.resolve('antigo'));
+      vi.setSystemTime(Date.now() + 1_500); // vencido
+      let calls = 0;
+      const failing = () => {
+        calls += 1;
+        return Promise.reject(new Error('banco fora'));
+      };
+      expect(await cache.get('k', 1_000, failing)).toBe('antigo');
+      expect(await cache.get('k', 1_000, failing)).toBe('antigo');
+      expect(await cache.get('k', 1_000, failing)).toBe('antigo');
+      expect(calls).toBe(1); // recuo: sem uma consulta ao banco por requisição
+      vi.setSystemTime(Date.now() + 1_100);
+      expect(await cache.get('k', 1_000, () => Promise.resolve('novo'))).toBe('novo'); // banco voltou: valor novo
+    });
+
+    it('erro de NEGÓCIO (AppError: 404 de loja suspensa/produto removido) nunca é mascarado pelo valor antigo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const cache = new LocalTtlCache<string>();
+      await cache.get('k', 1_000, () => Promise.resolve('antigo'));
+      vi.setSystemTime(Date.now() + 1_500);
+      await expect(cache.get('k', 1_000, () => Promise.reject(errors.notFound('Loja não encontrada.')))).rejects.toMatchObject({ status: 404 });
+      await expect(cache.get('k', 1_000, () => Promise.reject(errors.notFound('Loja não encontrada.')))).rejects.toMatchObject({ status: 404 }); // nada ficou guardado
+    });
+
+    it('não serve valor velho demais: passado 4x o TTL o erro propaga', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const cache = new LocalTtlCache<string>();
+      await cache.get('k', 1_000, () => Promise.resolve('antigo'));
+      vi.setSystemTime(Date.now() + 5_000);
+      await expect(cache.get('k', 1_000, () => Promise.reject(new Error('banco fora')))).rejects.toThrow('banco fora');
+    });
   });
 
   it('respeita o teto de entradas', async () => {

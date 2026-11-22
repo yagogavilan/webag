@@ -37,6 +37,12 @@ function etaFields(eta: EtaEstimate | null, prepMinutes: number | null, config: 
   };
 }
 
+/** Deslocamento do cursor da vitrine: inteiro >= 0 (qualquer outra coisa vira 0, para a chave do cache e a consulta nunca divergirem). */
+function offsetOf(cursor: string | undefined): number {
+  const o = decodeCursor<{ o: number }>(cursor)?.o;
+  return typeof o === 'number' && Number.isInteger(o) && o > 0 ? o : 0;
+}
+
 @Injectable()
 export class BrowseService {
   constructor(
@@ -105,7 +111,25 @@ export class BrowseService {
 
   /** O que a página da loja mostra e NÃO depende de quem olha: loja, configurações, abertura agora, nota, seções e logo/capa. */
   private async loadStoreBase(storeId: string) {
-    const { store, settings } = await this.visibleStore(storeId);
+    const { store: row, settings } = await this.visibleStore(storeId);
+    // LGPD (minimização, A4): o cache guarda só o que a página usa; o CPF/CNPJ completo (`documentNumber`) fica fora da memória, só a máscara.
+    const store = {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      logoAssetId: row.logoAssetId,
+      coverAssetId: row.coverAssetId,
+      mainCategoryId: row.mainCategoryId,
+      addressCityId: row.addressCityId,
+      legalName: row.legalName,
+      documentType: row.documentType,
+      documentMasked: maskDocument(row.documentNumber),
+      addressStreet: row.addressStreet,
+      addressNumber: row.addressNumber,
+      addressNeighborhood: row.addressNeighborhood,
+      addressCityName: row.addressCityName,
+      addressState: row.addressState,
+    };
     const now = new Date();
     const [opening, rating, sections, assets] = await Promise.all([
       this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now),
@@ -164,7 +188,7 @@ export class BrowseService {
       supplier: {
         name: store.legalName ?? store.name,
         documentType: store.documentType,
-        documentMasked: maskDocument(store.documentNumber),
+        documentMasked: store.documentMasked,
         address: { street: store.addressStreet, number: store.addressNumber, neighborhood: store.addressNeighborhood, city: store.addressCityName, state: store.addressState },
       },
       sections: sections.map((section) => ({ id: section.id, name: section.name })),
@@ -174,13 +198,14 @@ export class BrowseService {
   /** Vitrine da loja: disponíveis primeiro, na ordem das seções e dos produtos; sem estoque ao final como "Indisponível". */
   async storeProducts(storeId: string, filters: { sectionId?: string | undefined; cursor?: string | undefined; limit?: unknown }) {
     const limit = parseLimit(filters.limit);
-    const key = `${storeId}|${filters.sectionId ?? ''}|${filters.cursor ?? ''}|${limit}`;
+    // A chave leva o OFFSET decodificado, não o cursor cru: cursor com texto diferente e o mesmo conteúdo não cria entrada nova nem expulsa as lojas quentes (A1).
+    const key = `${storeId}|${filters.sectionId ?? ''}|${offsetOf(filters.cursor)}|${limit}`;
     return this.storeLists.get(key, this.cacheMs(), () => this.loadStoreProducts(storeId, filters, limit));
   }
 
   private async loadStoreProducts(storeId: string, filters: { sectionId?: string | undefined; cursor?: string | undefined }, limit: number) {
     await this.visibleStore(storeId);
-    const offset = decodeCursor<{ o: number }>(filters.cursor)?.o ?? 0;
+    const offset = offsetOf(filters.cursor);
     const result = await this.db.execute<{ id: string; name: string; section_id: string | null; base_price_cents: number; promo_price_cents: number | null; promo_starts_at: Date | null; promo_ends_at: Date | null; free: number }>(sql`
       select p.id, p.name, p.section_id, p.base_price_cents, p.promo_price_cents, p.promo_starts_at, p.promo_ends_at,
              coalesce((select sum(greatest(v.stock - v.reserved, 0)) from product_variants v where v.product_id = p.id and v.active), 0)::int as free
@@ -236,7 +261,9 @@ export class BrowseService {
   private async loadProductBase(productId: string) {
     const [product] = await this.db.select().from(products).where(eq(products.id, productId));
     if (!product || !['active', 'paused'].includes(product.status) || product.basePriceCents === null) throw errors.notFound('Produto não encontrado.');
-    const { store, settings } = await this.visibleStore(product.storeId);
+    const { store: row, settings } = await this.visibleStore(product.storeId);
+    // LGPD (A4): só o que a página usa entra no cache (nunca o CPF/CNPJ da loja).
+    const store = { id: row.id, name: row.name, addressCityId: row.addressCityId };
     const now = new Date();
     const unavailableReason = product.status === 'paused' ? 'PAUSED' : product.moderationStatus === 'paused' || product.moderationStatus === 'removed' ? 'MODERATED' : null;
     const opening = await this.openingOf(store.id, settings.pausedUntil, settings.pausedIndefinitely, now);
