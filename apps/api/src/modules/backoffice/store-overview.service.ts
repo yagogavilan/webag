@@ -35,6 +35,10 @@ export class StoreOverviewService {
     private readonly audit: AuditService,
   ) {}
 
+  async operatorSettings(storeId: string) {
+    return this.settings.presentOperator(await this.stores.getStore(storeId));
+  }
+
   async overview(storeId: string, now = new Date()) {
     const store = await this.stores.getStore(storeId);
     const since = new Date(now.getTime() - 30 * DAY_MS);

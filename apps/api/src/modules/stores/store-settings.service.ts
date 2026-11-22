@@ -156,6 +156,15 @@ export class StoreSettingsService {
     };
   }
 
+  /**
+   * Visão segura da configuração (lista permitida explícita): a do "Ver como" (§14.3) e a do admin (`GET /v1/admin/stores/:id/settings`).
+   * Sem `notifications` nem qualquer destino de contato; campo novo em `present()` NÃO sai aqui até alguém incluí-lo de propósito.
+   */
+  async presentOperator(store: Store, now = new Date()) {
+    const { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold } = await this.present(store, now);
+    return { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold };
+  }
+
   // ------------------------------------------------------------------ horários
 
   async setHours(store: Store, days: { weekday: number; intervals: { start: string; end: string }[] }[], actor: Actor, ctx: RequestContext, exec?: Tx): Promise<AuditRef> {

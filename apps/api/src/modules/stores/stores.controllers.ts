@@ -219,11 +219,9 @@ export class StoresController {
   @StorePermission('settings')
   @Get('stores/:storeId/settings')
   async getSettings(@CurrentViewAs() view: ViewAsContext | null, @Param('storeId') storeId: string) {
-    const present = await this.settings.present(await this.stores.getStore(uuidParam(storeId)));
-    if (!view) return present;
+    const store = await this.stores.getStore(uuidParam(storeId));
     // §14.3: na visão some qualquer destino de contato/notificação; o resto é lista permitida explícita.
-    const { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold } = present;
-    return { isOpenNow, hours, holidays, pause, delivery, pickup, exchangePolicy, lowStockThreshold };
+    return view ? this.settings.presentOperator(store) : this.settings.present(store);
   }
 
   @StorePermission('settings')

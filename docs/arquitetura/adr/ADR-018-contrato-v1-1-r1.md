@@ -124,3 +124,10 @@ Divergências conscientes do contrato (todas MAIS permissivas na borda ou de apr
 | A1 | `test/helpers/openapi-schema.spec.ts` (unitário, incluído em `vitest.config.ts`) com os 4 casos negativos; `format` desconhecido agora lança (`email` entrou na lista; `binary` não é conferido) |
 | A2 | `.for('no key update')` em `AdminStoreEditService.run` e nas duas leituras de `AdminStoresService` (`:112`, `:224`) |
 | A6 | Já era `private, no-store` pelo padrão global (`app.setup.ts`); o teste A6 em `view-as.e2e-spec.ts` o garante na rota `openViewAs` |
+
+## Leitura da configuração da loja pelo admin e SEC-221 (backend-dev, 2026-11-22; DEC-130, DEC-131)
+| Item | Decisão e estado |
+|---|---|
+| `GET /v1/admin/stores/{storeId}/settings` (`getAdminStoreSettings`) | Permissão `stores:read` (os 4 perfis; a matriz de `rbac.e2e-spec.ts` já cobre a permissão). Resposta no schema `StoreSettingsViewAs` (sem `notifications`, e-mail, telefone, documento, razão social nem recebimento). Escolhida em vez de pôr `settings` no overview 360: o overview é chamado a cada abertura da ficha e já faz 9 consultas; a configuração só é lida na aba de horários e no editor de `config/{section}` (que substitui a seção inteira e precisa do valor atual). Sem auditoria de leitura: não há dado pessoal na resposta, como no overview. Campo aditivo, nenhuma mudança incompatível. |
+| Implementação | `StoreSettingsService.presentOperator` é a lista permitida única (usada pela visão "Ver como" e pelo admin); campo novo em `present()` só sai nas duas visões se for incluído ali de propósito. |
+| SEC-221 | `COOKIE_SECURE` diferente de `true` (inclui `false`, `0`, vazio, `True`) derruba o boot em produção: `validateEnv` da API (campo opcional só para esse fim) e `productionConfigProblems` do web (o escape `WEBAG_ALLOW_LOCAL_ORIGINS=true` do Playwright segue valendo só no web). Variável não definida segue aceita (padrão do web em produção é `true`). Guia de deploy e `infra/env.prod.example` atualizados. O compose de produção não repassa `COOKIE_SECURE` ao web nem à API; a regra cobre quem monta o ambiente por fora. |

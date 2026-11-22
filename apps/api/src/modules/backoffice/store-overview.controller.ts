@@ -28,6 +28,13 @@ export class StoreOverviewController {
     return this.overview.overview(uuidParam(storeId));
   }
 
+  /** DEC-131: leitura da configuração para o editor `config/{section}` (substitui a seção inteira). Mesma lista permitida da visão "Ver como". */
+  @AdminOnly('stores:read')
+  @Get(':storeId/settings')
+  operatorSettings(@Param('storeId') storeId: string) {
+    return this.overview.operatorSettings(uuidParam(storeId));
+  }
+
   @AdminOnly('stores:read')
   @Get(':storeId/history')
   history(@Param('storeId') storeId: string, @Query(new ZodPipe(historyQuery)) query: z.infer<typeof historyQuery>) {

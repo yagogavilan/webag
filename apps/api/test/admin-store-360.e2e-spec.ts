@@ -203,6 +203,24 @@ describe('Ficha 360 e edição da loja pelo admin (WB-350, WB-351)', () => {
       await ctx.http.get(`/v1/admin/stores/${storeId}/overview`).set(bearer(shop.store.owner.accessToken)).expect(403);
     });
 
+    it('DEC-131: os 4 perfis leem a configuração operacional no schema seguro (sem notificações, contato, documento nem recebimento); lojista e cliente 403; sem token 401; loja inexistente e id inválido 404', async () => {
+      const owner = shop.store.owner;
+      for (const who of [superAdmin, ops, finance, support]) {
+        const res = await ctx.http.get(`/v1/admin/stores/${storeId}/settings`).set(bearer(who.accessToken)).expect(200);
+        expect(validateAgainst('StoreSettingsViewAs', res.body), who.profile).toEqual([]);
+        expect(Object.keys(res.body).sort()).toEqual(['delivery', 'exchangePolicy', 'holidays', 'hours', 'isOpenNow', 'lowStockThreshold', 'pause', 'pickup'].sort());
+        expect(JSON.stringify(res.body)).not.toMatch(/notifications|newOrderEmail|document|legalName|mpAccount|cpf|cnpj|tokensEnc|@/i);
+      }
+      const own = await ctx.http.get(`/v1/stores/${storeId}/settings`).set(bearer(owner.accessToken)).expect(200);
+      const adminView = await ctx.http.get(`/v1/admin/stores/${storeId}/settings`).set(bearer(ops.accessToken)).expect(200);
+      expect(adminView.body.hours).toEqual(own.body.hours);
+      expect(adminView.body.exchangePolicy).toEqual(own.body.exchangePolicy);
+      await ctx.http.get(`/v1/admin/stores/${storeId}/settings`).set(bearer(owner.accessToken)).expect(403);
+      await ctx.http.get(`/v1/admin/stores/${storeId}/settings`).expect(401);
+      await ctx.http.get(`/v1/admin/stores/${randomUUID()}/settings`).set(bearer(ops.accessToken)).expect(404);
+      await ctx.http.get('/v1/admin/stores/nao-e-uuid/settings').set(bearer(ops.accessToken)).expect(404);
+    });
+
     it('C3: loja sem pedidos mostra indicators.empty = true, pedidos e GMV zerados e produtos ativos', async () => {
       const res = await ctx.http.get(`/v1/admin/stores/${storeId}/overview`).set(bearer(support.accessToken)).expect(200);
       expect(res.body.indicators).toMatchObject({ empty: true, orders: 0, gmv: { amount: 0, currency: 'BRL' }, cancellations: { count: 0, pct: null } });
