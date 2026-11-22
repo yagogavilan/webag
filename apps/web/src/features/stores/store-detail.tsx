@@ -21,11 +21,10 @@ import { viewAsKeys } from '@/lib/api/view-as';
 import { DocumentViewer } from './doc-viewer';
 import { EditProfileDialog, PauseDialog, ResumeDialog } from './edit-dialogs';
 import { HistoryTab, HoursPauseTab, OverviewTab } from './store-ficha';
+import type { StoreTabId } from './store-tabs';
 import s from './stores.module.css';
 
 const T = (id: string) => tid('loja', id);
-export type StoreTabId = 'resumo' | 'horario' | 'dados' | 'documentos' | 'historico';
-export const isStoreTab = (value: string | undefined): value is StoreTabId => value === 'resumo' || value === 'horario' || value === 'dados' || value === 'documentos' || value === 'historico';
 
 const TONE = { approved: 'success', live: 'success', suspended: 'danger', rejected: 'danger', correction_requested: 'warning', in_review: 'info', draft: 'neutral' } as const;
 

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { StoreCasePage } from '@/features/stores/store-case-page';
-import { isStoreTab } from '@/features/stores/store-detail';
+import { isStoreTab } from '@/features/stores/store-tabs';
 
 export const metadata: Metadata = { title: 'Loja' };
 

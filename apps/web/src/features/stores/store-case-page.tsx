@@ -5,7 +5,8 @@ import { useSession } from '@/components/panel/session-context';
 import { NoAccessState, QueryBoundary, SkeletonRows } from '@/components/ui';
 import { adminStoresApi, storeKeys } from '@/lib/api/admin-stores';
 import { ApprovalCase } from './approval-case';
-import { StoreDetail, type StoreTabId } from './store-detail';
+import { StoreDetail } from './store-detail';
+import type { StoreTabId } from './store-tabs';
 
 /** Uma loja no admin: em análise abre o caso de aprovação (A2); nos demais estados, o detalhe (A3). */
 export function StoreCasePage({ storeId, tab }: { storeId: string; tab?: StoreTabId }) {

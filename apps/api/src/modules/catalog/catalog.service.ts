@@ -778,6 +778,13 @@ export class CatalogService {
     await this.db.transaction(async (tx) => {
       const product = await this.requireProduct(store.id, productId, tx, true);
       if (product.status === 'archived') return;
+      if (product.status === 'draft') {
+        // BUG-036: rascunho nunca foi vendido, então não há histórico a preservar: apaga a linha (variações, fotos e medição caem em cascata), como o vencimento
+        // dos 30 dias. Arquivar exigiria nome de 2 a 80 caracteres (CHECK products_name_len) e o rascunho da câmera nasce sem nome.
+        await tx.delete(products).where(eq(products.id, productId));
+        await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.draft_delete', { productId });
+        return;
+      }
       if (await this.orders.hasOpenOrders(productId)) throw errors.conflict('OPEN_ORDERS', 'Há pedidos em andamento', 'Há pedidos em andamento com este produto. Pause o produto e tente depois.');
       await this.editProduct(tx, productId, { status: 'archived', archivedAt: new Date() });
       await this.stores.logActivity(tx, store.id, actor.userId, 'catalog.product_archive', { productId });

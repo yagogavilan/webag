@@ -17,11 +17,10 @@ import { KEEPS_RUNNING, OnlyMerchantTag } from './boundary';
 import { OpenViewAsDialog } from './open-dialog';
 import { ExchangesScreen, MoreScreen, OrdersScreen, ProductsScreen, ReviewsScreen, StoreDataScreen } from './screens';
 import { useRemaining, useViewAsState } from './use-view-as';
+import type { ViewAsTab } from './view-as-tabs';
+import { VIEW_AS_TITLES } from './view-as-tabs';
 import s from './view-as.module.css';
 
-export type ViewAsTab = 'ped' | 'prod' | 'mais' | 'troca' | 'aval' | 'loja';
-const TITLES: Record<ViewAsTab, string> = { ped: 'Pedidos', prod: 'Produtos', mais: 'Mais', troca: 'Trocas', aval: 'Avaliações', loja: 'Dados da loja' };
-export const isViewAsTab = (value: string | undefined): value is ViewAsTab => value !== undefined && value in TITLES;
 
 /** Tela terminal: sem banner e sem nenhum dado da loja na tela (spec 4.4). O foco vai ao título e o leitor anuncia o texto. */
 function EndedScreen({ storeId, replaced, onReopen }: { storeId: string; replaced: boolean; onReopen: () => void }) {
@@ -146,7 +145,7 @@ export function ViewAsPage({ storeId, tab }: { storeId: string; tab: ViewAsTab }
   const screen = { storeId, onExpired };
   return (
     <div className={s.scope} data-testid={T('page')}>
-      <PageHeader title={TITLES[tab]} eyebrow="Como o lojista vê" />
+      <PageHeader title={VIEW_AS_TITLES[tab]} eyebrow="Como o lojista vê" />
       <ViewAsBanner storeName={storeName ?? 'a loja'} expiresAt={data!.expiresAt!} exiting={exiting} onExit={() => void exit()} />
       <FrameNav storeId={storeId} tab={tab} />
       {!online ? <Banner tone="warning" offline>{KEEPS_RUNNING}</Banner> : null}

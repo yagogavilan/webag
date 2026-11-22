@@ -199,7 +199,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(await draftCount(id)).toBe(100);
     });
 
-    it.fails('BUG-036: apagar ("Excluir") um rascunho SEM nome (o que nasce ao tocar em "Novo produto", antes da câmera) devolve 204 e libera a vaga; hoje é 500 (products_name_len)', async () => {
+    it('BUG-036: apagar ("Excluir") um rascunho SEM nome (o que nasce ao tocar em "Novo produto", antes da câmera) devolve 204 e libera a vaga; hoje é 500 (products_name_len)', async () => {
       const { merchant, id } = await freshStore();
       const nameless = await newDraft(merchant, id);
       const res = await ctx.http.delete(`${base(id)}/products/${nameless.id}`).set(as(merchant));
@@ -207,7 +207,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       expect(await draftCount(id)).toBe(0);
     });
 
-    it.fails('BUG-036 (variante): rascunho com nome de 1 caractere também não pode ser apagado (500)', async () => {
+    it('BUG-036 (variante): rascunho com nome de 1 caractere também não pode ser apagado (500)', async () => {
       const { merchant, id } = await freshStore();
       const d = await newDraft(merchant, id, { via: 'form', name: 'A' });
       expect((await ctx.http.delete(`${base(id)}/products/${d.id}`).set(as(merchant))).status).toBe(204);
