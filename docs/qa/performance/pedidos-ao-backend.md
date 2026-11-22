@@ -1,0 +1,16 @@
+# Pedidos de desempenho ao backend-dev
+
+Origem: revisão de desempenho do app do cliente, 2026-11-22 ([app-2026-11-22.md](app-2026-11-22.md)). O `mobile-dev` não altera `apps/api`; cada item abaixo é uma mudança de contrato ou de resposta que destrava ganho no app. Prioridade pelo impacto no cliente em 4G ruim.
+
+| # | Pedido | Por quê (evidência) | Impacto | Esforço [HIPÓTESE] |
+|---|---|---|---|---|
+| 1 | Banners por cidade sem depender do id: aceitar `GET /v1/banners?citySlug=` (ou `city=` com o nome) | O app só sabe o `cityId` depois de `GET /v1/regions` e então pede `/v1/banners`: cascata de 1 ida e volta no topo do Início (medido: banners saem ~250 ms depois de home e categorias na reabertura). Com o slug (que o endereço já tem) as 4 leituras saem juntas | Médio: carrossel do topo aparece 1 RTT antes, menos "pulo" de layout | Baixo (parâmetro novo opcional; `cityId` continua valendo) |
+| 2 | Imagens com `blurhash`/`thumbhash` e dimensões: em `ImageUrls` acrescentar `placeholder` (string de ~30 bytes) e `width`/`height` da imagem original | O app mostra cor lisa até a foto chegar. Com o hash, a lista nunca fica "vazia" enquanto o 4G ruim baixa as fotos; sem dimensões não dá para reservar o espaço do detalhe | Alto na percepção (listas e detalhe) | Médio (gerar no worker de imagem, ADR-005/007; campo opcional, app antigo ignora) |
+| 3 | Variantes: confirmar que `urls` traz 160/400/800 (ADR-005); a fixture e os testes do app usam 120 | O app escolhe a menor variante que cobre `largura x min(densidade, 2)`; sem a de 160 um logo de 56 dp baixa a de 400 | Baixo/médio | Baixo |
+| 4 | Meta de peso por variante: miniatura de lista (400 px) em WebP q≈60-70, alvo ≤ 30 KB; detalhe (800 px) ≤ 80 KB | Orçamento do fundador: "imagens de lista ≤ 30 KB". Hoje não há medida no servidor | Alto em dados móveis | Baixo (parâmetro do encoder) e medir amostra real do seed |
+| 5 | `ETag` + `304` nas leituras públicas de catálogo (`/v1/categories`, `/v1/regions`, `/v1/home`, `/v1/browse/*`) e `Cache-Control: public, max-age=…, stale-while-revalidate=…` onde não houver dado por endereço | Hoje há `max-age` de 30 a 60 s. Reabrir o app depois disso rebaixa o corpo inteiro; com ETag a revalidação custa só o cabeçalho | Médio | Baixo/médio |
+| 6 | CORS: `Access-Control-Max-Age` (ex.: 600) e liberar `Authorization`, `X-Device-Id`, `Idempotency-Key`, `X-Request-Id` | Só afeta o app **web** (Safari do iPhone com `pnpm iphone`, porta 8081 chamando a 3000): cada URL nova faz um OPTIONS antes (+1 RTT por chamada, visto no medidor). O app nativo não tem preflight | Baixo (só teste no Safari) | Baixo |
+| 7 | Compressão: o nginx de produção já faz gzip (`infra/nginx/templates/00-global.conf.template`); habilitar também `brotli` se o módulo estiver disponível na imagem | JSON de catálogo comprime bem; brotli rende ~15-20% a mais que gzip | Baixo | Baixo |
+| 8 | Medir no servidor (k6, `docs/qa/plano-carga.md` S1): p95 de `/v1/home`, `/v1/browse/stores/{id}`, `/v1/browse/products/{id}` | Meta do app: rede ≤ 1 s p95 em 4G; o servidor precisa responder em ≤ 500 ms p95 (plano de carga §5) para sobrar tempo à rede | Alto (é o piso de todo o resto) | Já planejado (carga ainda não executada) |
+
+Observação: nenhum dos itens muda regra de negócio; todos são campos opcionais ou cabeçalhos (compatíveis com apps já publicados, `contrato-api`).

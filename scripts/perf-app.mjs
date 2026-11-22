@@ -98,6 +98,10 @@ export function renderReport(before, after) {
   for (const [id, stepB] of Object.entries(before.steps)) {
     const stepA = after.steps[id];
     if (!stepA) continue;
+    if (id === 'scroll') {
+      rows.push(`| ${stepB.label} | Quadro p95 / pior quadro / quadros > 50 ms | ${fmtMs(stepB.frameP95)} / ${fmtMs(stepB.frameMax)} / ${stepB.slowFrames} | ${fmtMs(stepA.frameP95)} / ${fmtMs(stepA.frameMax)} / ${stepA.slowFrames} | | quadro ≤ 16,7 ms (60 fps); indicativo no web |`);
+      continue;
+    }
     const kind = id.startsWith('cold') || id === 'reopen' ? 'cold' : 'step';
     const target = TARGETS[kind];
     rows.push(`| ${stepB.label} | Tempo até o conteúdo | ${fmtMs(stepB.ms)} | ${fmtMs(stepA.ms)} | ${delta(stepB.ms, stepA.ms)} | ${target.text} ${status(stepA.ms, target) ? `(${status(stepA.ms, target)})` : ''} |`);

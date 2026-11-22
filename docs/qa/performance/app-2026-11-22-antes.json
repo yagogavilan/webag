@@ -4,6 +4,7 @@
     "date": "2026-11-22",
     "net": "4G lento (1,6 Mbps, RTT 150 ms)",
     "cpu": 4,
+    "tapMs": 80,
     "runs": 3,
     "mode": "produção estática (brotli/gzip)",
     "chromium": "153.0.8010.12",
@@ -29,13 +30,13 @@
   "steps": {
     "cold": {
       "label": "Abertura a frio (1ª visita) até a escolha da cidade",
-      "ms": 7153.299999999814,
+      "ms": 7116.700000000186,
       "runsMs": [
-        7153,
-        7280,
-        7088
+        7117,
+        7239,
+        7054
       ],
-      "tbtMs": 886,
+      "tbtMs": 903,
       "inpMs": null,
       "feedbackMs": null,
       "fcpMs": null,
@@ -56,15 +57,15 @@
     },
     "home": {
       "label": "Escolher cidade > Início com lojas",
-      "ms": 1085.2999999998137,
+      "ms": 908.5,
       "runsMs": [
-        1142,
-        1085,
-        984
+        909,
+        965,
+        810
       ],
-      "tbtMs": 228,
-      "inpMs": 40,
-      "feedbackMs": 16.5,
+      "tbtMs": 157,
+      "inpMs": 32,
+      "feedbackMs": 20.200000000186265,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -82,56 +83,56 @@
       "calls": [
         {
           "path": "/v1/home",
-          "startMs": 745,
-          "endMs": 745
+          "startMs": 543,
+          "endMs": 549
         },
         {
           "path": "/v1/home",
-          "startMs": 745,
-          "endMs": 991
+          "startMs": 549,
+          "endMs": 769
         },
         {
           "path": "/v1/categories",
-          "startMs": 745,
-          "endMs": 745
+          "startMs": 549,
+          "endMs": 551
         },
         {
           "path": "/v1/banners",
-          "startMs": 745,
-          "endMs": 746
+          "startMs": 549,
+          "endMs": 551
         },
         {
           "path": "/v1/categories",
-          "startMs": 745,
-          "endMs": 932
+          "startMs": 549,
+          "endMs": 764
         },
         {
           "path": "/v1/banners",
-          "startMs": 745,
-          "endMs": 924
+          "startMs": 549,
+          "endMs": 734
         }
       ]
     },
     "scroll": {
       "label": "Rolagem do início (14 passos)",
-      "frameP95": 50.100000000000364,
-      "frameMax": 99.89999999999964,
-      "slowFrames": 4,
-      "frames": 80
+      "frameP95": 49.899999999999636,
+      "frameMax": 116.69999999999891,
+      "slowFrames": 2,
+      "frames": 79
     },
     "reopen": {
       "label": "Reabertura (endereço salvo, cache quente) até o início com lojas",
-      "ms": 2149.8000000000466,
+      "ms": 1580.2999999998137,
       "runsMs": [
-        1669,
-        2361,
-        2150
+        1701,
+        1574,
+        1580
       ],
-      "tbtMs": 1138,
+      "tbtMs": 674,
       "inpMs": null,
       "feedbackMs": null,
-      "fcpMs": 1620,
-      "lcpMs": 1752,
+      "fcpMs": 1124,
+      "lcpMs": 1244,
       "req": {
         "total": 29,
         "api": 8
@@ -147,57 +148,57 @@
       "calls": [
         {
           "path": "/v1/home",
-          "startMs": 1268,
-          "endMs": 1272
+          "startMs": 1331,
+          "endMs": 1332
         },
         {
           "path": "/v1/categories",
-          "startMs": 1268,
-          "endMs": 1272
-        },
-        {
-          "path": "/v1/regions",
-          "startMs": 1268,
-          "endMs": 1272
+          "startMs": 1332,
+          "endMs": 1334
         },
         {
           "path": "/v1/home",
-          "startMs": 1268,
-          "endMs": 1517
+          "startMs": 1332,
+          "endMs": 1566
         },
         {
           "path": "/v1/categories",
-          "startMs": 1268,
-          "endMs": 1468
+          "startMs": 1332,
+          "endMs": 1535
         },
         {
           "path": "/v1/regions",
-          "startMs": 1268,
-          "endMs": 1459
+          "startMs": 1332,
+          "endMs": 1335
+        },
+        {
+          "path": "/v1/regions",
+          "startMs": 1332,
+          "endMs": 1507
         },
         {
           "path": "/v1/banners",
-          "startMs": 1461,
-          "endMs": 1468
+          "startMs": 1530,
+          "endMs": 1532
         },
         {
           "path": "/v1/banners",
-          "startMs": 1461,
-          "endMs": 1785
+          "startMs": 1530,
+          "endMs": 1804
         }
       ]
     },
     "store": {
       "label": "Início > Loja (produtos visíveis)",
-      "ms": 796.3999999999069,
+      "ms": 811.7000000001863,
       "runsMs": [
-        735,
-        796,
-        1098
+        779,
+        817,
+        812
       ],
-      "tbtMs": 145,
-      "inpMs": 16,
-      "feedbackMs": 88.30000000004657,
+      "tbtMs": 184,
+      "inpMs": 24,
+      "feedbackMs": 18.800000000279397,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -215,47 +216,47 @@
       "calls": [
         {
           "path": "/v1/browse/stores/s1",
-          "startMs": 488,
-          "endMs": 489
-        },
-        {
-          "path": "/v1/browse/stores/s1/products",
-          "startMs": 488,
-          "endMs": 489
-        },
-        {
-          "path": "/v1/me/favorites",
-          "startMs": 488,
-          "endMs": 489
+          "startMs": 560,
+          "endMs": 563
         },
         {
           "path": "/v1/browse/stores/s1",
-          "startMs": 489,
-          "endMs": 646
+          "startMs": 562,
+          "endMs": 730
         },
         {
           "path": "/v1/browse/stores/s1/products",
-          "startMs": 489,
-          "endMs": 745
+          "startMs": 562,
+          "endMs": 564
         },
         {
           "path": "/v1/me/favorites",
-          "startMs": 489,
-          "endMs": 747
+          "startMs": 562,
+          "endMs": 564
+        },
+        {
+          "path": "/v1/browse/stores/s1/products",
+          "startMs": 563,
+          "endMs": 824
+        },
+        {
+          "path": "/v1/me/favorites",
+          "startMs": 563,
+          "endMs": 835
         }
       ]
     },
     "product": {
       "label": "Loja > Produto (botão adicionar)",
-      "ms": 710.3000000000466,
+      "ms": 658.7999999998137,
       "runsMs": [
-        676,
-        733,
-        710
+        638,
+        695,
+        659
       ],
-      "tbtMs": 138,
+      "tbtMs": 72,
       "inpMs": 16,
-      "feedbackMs": 194.20000000018626,
+      "feedbackMs": 13.300000000279397,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -273,37 +274,37 @@
       "calls": [
         {
           "path": "/v1/browse/products/s1-p1",
-          "startMs": 536,
-          "endMs": 545
-        },
-        {
-          "path": "/v1/browse/products/s1-p1/reviews",
-          "startMs": 536,
-          "endMs": 545
+          "startMs": 541,
+          "endMs": 546
         },
         {
           "path": "/v1/browse/products/s1-p1",
-          "startMs": 536,
-          "endMs": 718
+          "startMs": 541,
+          "endMs": 725
         },
         {
           "path": "/v1/browse/products/s1-p1/reviews",
-          "startMs": 536,
-          "endMs": 708
+          "startMs": 541,
+          "endMs": 546
+        },
+        {
+          "path": "/v1/browse/products/s1-p1/reviews",
+          "startMs": 542,
+          "endMs": 711
         }
       ]
     },
     "add": {
       "label": "Adicionar à sacola (selo \"Adicionado\")",
-      "ms": 534.7000000001863,
+      "ms": 507.5,
       "runsMs": [
-        505,
-        535,
-        645
+        497,
+        508,
+        510
       ],
-      "tbtMs": 56,
-      "inpMs": 88,
-      "feedbackMs": 59.10000000009313,
+      "tbtMs": 57,
+      "inpMs": 40,
+      "feedbackMs": 35.799999999813735,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -321,32 +322,32 @@
       "calls": [
         {
           "path": "/v1/browse/products/s1-p1",
-          "startMs": 117,
-          "endMs": 278
+          "startMs": 185,
+          "endMs": 348
         },
         {
           "path": "/v1/cart/items/s1-p1-v40",
-          "startMs": 287,
-          "endMs": 288
+          "startMs": 355,
+          "endMs": 358
         },
         {
           "path": "/v1/cart/items/s1-p1-v40",
-          "startMs": 287,
-          "endMs": 466
+          "startMs": 355,
+          "endMs": 535
         }
       ]
     },
     "back-store": {
       "label": "Produto > voltar à Loja (barra da sacola)",
-      "ms": 234.19999999995343,
+      "ms": 164.89999999990687,
       "runsMs": [
-        171,
-        317,
-        234
+        165,
+        230,
+        133
       ],
-      "tbtMs": 150,
-      "inpMs": 24,
-      "feedbackMs": 28,
+      "tbtMs": 79,
+      "inpMs": 16,
+      "feedbackMs": 16,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -365,15 +366,15 @@
     },
     "cart": {
       "label": "Loja > Sacola (total)",
-      "ms": 568.6999999999534,
+      "ms": 481.5,
       "runsMs": [
-        483,
-        569,
-        673
+        482,
+        475,
+        518
       ],
-      "tbtMs": 139,
-      "inpMs": 16,
-      "feedbackMs": 25.699999999953434,
+      "tbtMs": 67,
+      "inpMs": 152,
+      "feedbackMs": 14.100000000093132,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -391,27 +392,27 @@
       "calls": [
         {
           "path": "/v1/config/maintenance",
-          "startMs": 6861,
-          "endMs": 6875
+          "startMs": 7381,
+          "endMs": 7382
         },
         {
           "path": "/v1/config/maintenance",
-          "startMs": 6875,
-          "endMs": 7023
+          "startMs": 7381,
+          "endMs": 7563
         }
       ]
     },
     "checkout": {
       "label": "Sacola > Checkout",
-      "ms": 547.1999999999534,
+      "ms": 543.8999999999069,
       "runsMs": [
-        438,
-        609,
-        547
+        440,
+        544,
+        667
       ],
-      "tbtMs": 119,
-      "inpMs": 16,
-      "feedbackMs": 208.69999999995343,
+      "tbtMs": 105,
+      "inpMs": 20,
+      "feedbackMs": 24.600000000093132,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -429,27 +430,27 @@
       "calls": [
         {
           "path": "/v1/cart",
-          "startMs": 503,
-          "endMs": 505
+          "startMs": 568,
+          "endMs": 571
         },
         {
           "path": "/v1/cart",
-          "startMs": 505,
-          "endMs": 668
+          "startMs": 571,
+          "endMs": 737
         }
       ]
     },
     "pix": {
       "label": "Checkout > Pagar com PIX (código)",
-      "ms": 947,
+      "ms": 859,
       "runsMs": [
-        947,
-        909,
-        992
+        859,
+        854,
+        861
       ],
-      "tbtMs": 251,
+      "tbtMs": 162,
       "inpMs": 16,
-      "feedbackMs": 22.0999999998603,
+      "feedbackMs": 11.199999999720603,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -467,47 +468,47 @@
       "calls": [
         {
           "path": "/v1/orders",
-          "startMs": 71,
-          "endMs": 72
+          "startMs": 150,
+          "endMs": 151
         },
         {
           "path": "/v1/orders",
-          "startMs": 72,
-          "endMs": 256
+          "startMs": 151,
+          "endMs": 321
         },
         {
           "path": "/v1/cart",
-          "startMs": 273,
-          "endMs": 275
+          "startMs": 330,
+          "endMs": 332
         },
         {
           "path": "/v1/cart",
-          "startMs": 275,
-          "endMs": 539
+          "startMs": 331,
+          "endMs": 511
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
-          "startMs": 809,
-          "endMs": 809
+          "startMs": 800,
+          "endMs": 800
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
-          "startMs": 809,
-          "endMs": 973
+          "startMs": 800,
+          "endMs": 961
         }
       ]
     },
     "confirmed": {
       "label": "Simular pagamento > Pedido confirmado",
-      "ms": 2180.100000000093,
+      "ms": 2026.8000000002794,
       "runsMs": [
-        2216,
-        2108,
-        2180
+        1995,
+        2027,
+        2068
       ],
-      "tbtMs": 126,
-      "inpMs": 16,
-      "feedbackMs": 61.300000000046566,
+      "tbtMs": 40,
+      "inpMs": 40,
+      "feedbackMs": 32.60000000009313,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
@@ -525,47 +526,47 @@
       "calls": [
         {
           "path": "/v1/dev/orders/11111111-1111-4111-8111-111111111111/payment/approve",
-          "startMs": 88,
-          "endMs": 109
+          "startMs": 196,
+          "endMs": 198
         },
         {
           "path": "/v1/dev/orders/11111111-1111-4111-8111-111111111111/payment/approve",
-          "startMs": 88,
-          "endMs": 289
+          "startMs": 201,
+          "endMs": 368
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111",
-          "startMs": 300,
-          "endMs": 302
+          "startMs": 370,
+          "endMs": 372
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111",
-          "startMs": 301,
-          "endMs": 489
+          "startMs": 370,
+          "endMs": 550
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
-          "startMs": 302,
-          "endMs": 303
+          "startMs": 370,
+          "endMs": 374
         },
         {
           "path": "/v1/orders/11111111-1111-4111-8111-111111111111/payment",
-          "startMs": 302,
-          "endMs": 489
+          "startMs": 372,
+          "endMs": 551
         }
       ]
     },
     "track": {
       "label": "Pedido confirmado > Acompanhamento",
-      "ms": 667.2000000001863,
+      "ms": 458.89999999990687,
       "runsMs": [
-        667,
-        507,
-        702
+        459,
+        459,
+        486
       ],
-      "tbtMs": 77,
-      "inpMs": null,
-      "feedbackMs": 29.5,
+      "tbtMs": 75,
+      "inpMs": 32,
+      "feedbackMs": 22,
       "fcpMs": null,
       "lcpMs": null,
       "req": {
