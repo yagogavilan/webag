@@ -23,7 +23,7 @@ const marketing = join(root, 'docs/marketing');
 const srcRoot = join(marketing, 'src');
 const docsRoot = join(root, 'docs'); // raiz do servidor: as pecas referenciam ../../telas e ../../design (fora de marketing/src)
 
-const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'tudo'];
+const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'video-lojista', 'video-cliente', 'tudo'];
 const DECKS = { lojista: 'apresentacao-lojista', cliente: 'apresentacao-cliente' };
 const SLIDE = { w: 1920, h: 1080 };
 const INSTAGRAM = [
@@ -33,7 +33,7 @@ const INSTAGRAM = [
   { name: 'post-2', w: 1080, h: 1350, roots: ['main.post'] },
   { name: 'post-3', w: 1080, h: 1350, roots: ['main.post'] },
 ];
-const STORY = { w: 1080, h: 1920, fps: 30, file: 'video-story' };
+const STORY = { w: 1080, h: 1920, fps: 30, file: 'video-lojista' };
 
 const log = (msg) => console.log(`[marketing] ${msg}`);
 const warnings = [];
@@ -471,7 +471,7 @@ async function renderInstagram(browser, origin) {
 
 // ---------------------------------------------------------------- video (MP4)
 // Frames PNG (sem perda) por pipe para o ffmpeg: nada de 450 arquivos em disco. Silencio AAC por padrao: ver README (decisao).
-async function renderVideo(browser, origin) {
+async function renderVideoOne(browser, origin) {
   needFfmpeg();
   const file = join(srcDir, `${STORY.file}.html`);
   if (!existsSync(file)) return skipMissing(file);
@@ -690,6 +690,16 @@ function skipMissing(file) {
   return { peca: rel, pulado: true };
 }
 
+// Renderiza um video por publico (um HTML por video). Cada um e opcional em `tudo`.
+async function renderVideo(browser, origin, names = ['video-lojista', 'video-cliente']) {
+  const out = [];
+  for (const n of names) {
+    STORY.file = n;
+    out.push(...flat(await renderVideoOne(browser, origin)));
+  }
+  return out;
+}
+
 const flat = (r) => (Array.isArray(r) ? r : [r]);
 const jobs = [];
 if (target === 'lojista' || target === 'tudo')
@@ -698,6 +708,8 @@ if (target === 'cliente' || target === 'tudo')
   jobs.push(['cliente', (b, o) => renderDeck(b, o, 'cliente')]);
 if (target === 'instagram' || target === 'tudo') jobs.push(['instagram', renderInstagram]);
 if (target === 'video' || target === 'tudo') jobs.push(['video', renderVideo]);
+if (target === 'video-lojista') jobs.push(['video', (b, o) => renderVideo(b, o, ['video-lojista'])]);
+if (target === 'video-cliente') jobs.push(['video', (b, o) => renderVideo(b, o, ['video-cliente'])]);
 
 const started = Date.now();
 const results = [];
