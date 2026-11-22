@@ -111,7 +111,7 @@ function DraftItem({ storeId, draft, onDuplicate, duplicating }: { storeId: stri
   return (
     <li className={q.draftItem} data-testid={T(`item-${draft.id}`)}>
       <Thumb cover={draft.cover} />
-      <div style={{ minWidth: 0 }}>
+      <div className={q.draftText}>
         <p className={cx('wb-text-body-strong', q.draftName)} style={{ margin: 0 }}>{title}</p>
         <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>
           {missingText(draft.missing)} · {savedAgo(draft.updatedAt)}
