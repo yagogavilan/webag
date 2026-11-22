@@ -1,6 +1,47 @@
-# Pendências das apresentações (lojista e cliente)
+# Pendências das apresentações v2 (lojista e cliente)
 
-Peças: `src/apresentacao-lojista.html` (14 slides) e `src/apresentacao-cliente.html` (10 slides). Autor: product-designer. Data: 2026-11-20.
+Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 de guia) e `src/apresentacao-cliente.html` (8 slides). Autor: product-designer. Data: 2026-11-22. Revisão por slide: `revisao-decks-v2.md`.
+`[HIPÓTESE]` = não validado. As seções "v1" mais abaixo estão obsoletas (história); o que continua valendo foi trazido para cá.
+
+## V2.1 Confirmar antes de imprimir
+
+| # | Item | Onde | Ação |
+|---|---|---|---|
+| V1 | **"Sem mensalidade"** (adesivo). Só existe em DEC-008 (mensalidade rejeitada) e no posicionamento §5.2; não está no brief nem em regras de negócio | Lojista s5 | Fundador confirmar por escrito; senão apagar o `.tag` "Sem mensalidade" (uma linha no HTML) |
+| V2 | **Comissão de 15%** é exemplo `[HIPÓTESE]` (HIP-C01) e **tarifa de pagamento de até 4,98%** (HIP-C02, conferir contrato do Mercado Pago). Conta: 100 − 15 − 4,98 = 80,02, exibido como "cerca de R$ 80" e "até R$ 5". A tarifa aparece como desconto sem nomear método | Lojista s5 | Rótulo "exemplo ilustrativo; condições finais no cadastro" está no slide (24 px). Jurídico: J5 (pode ser lido como proposta) |
+| V3 | **"Cai na sua conta"** depende do split do Mercado Pago em produção (H4); no modo centralizado o texto muda | Lojista s5 | Confirmar o modelo antes de imprimir |
+| V4 | **"Aceite em até 10 minutos"** e "sem resposta, o pedido é cancelado" são `[HIPÓTESE]` (HIP-008, parâmetro editável no admin) | Lojista s12 | Confirmar o valor padrão |
+| V5 | **"O motoboy do Webag busca"/"Você separa. O Webag leva."/"Aquela loja agora entrega"**: parecer jurídico sobre motoboys (DEC-039, J8). Nenhuma peça externa sai antes do parecer e do G5 | Lojista s3 e s13; Cliente s1 a s3 | Aguardar jurídico. Plano B sem entrega: avisar o designer, as duas ideias centrais mudam |
+| V6 | "Peça a troca pelo app" (J2) e "O Webag não guarda os dados do seu cartão" (J3): redação a validar; sem prazo nem condição de troca | Cliente s6; Lojista s6 | Jurídico |
+| V7 | Documentos exigidos (CPF: RG ou CNH e comprovante; CNPJ/MEI: cartão CNPJ e documento do responsável) estão em revisão jurídica no PRD (J4) | Lojista s9 | Jurídico |
+| V8 | **Lista de abertura** ("Seu nome na lista de abertura", linhas para escrever à mão, "Usamos seu contato só para avisar da abertura"): não existe fluxo de lista de espera de lojista; o fundador anota. LGPD: finalidade, base legal e onde o papel/planilha fica (F7 da v1) | Lojista s7 | Fundador confirmar como guarda; ajustar a frase de 24 px se for diferente |
+| V9 | Contatos em `src/config.json` (WhatsApp, site, e-mail vazios; `@webag` e "Yago" assumidos). Vazio vira linha para escrever à mão; no s14 do lojista o WhatsApp vira `(__) _____-____` | Lojista s7 e s14; Cliente s8 | Fundador preencher |
+| V10 | "Pause com um toque", "Importe por planilha", "O painel avisa com som": existem no painel (capturas 21 e 20; som exige ativar no navegador) | Lojista s11 e s12 | Nada; só conferir se o texto "com som" cabe depois do primeiro acesso |
+| V11 | Categorias: o cliente não cita "beleza" nem lista categorias (a captura 01 mostra Mercado, Farmácia, Pet, Casa e construção). Não aparece nenhuma promessa de variedade além de "loja" | Cliente | Se o fundador quiser "moda, casa e mais" de volta, só entra com loja de moda ativa |
+
+## V2.2 Capturas (o que usei e o que está errado nelas)
+
+Fonte: `docs/telas/` (2026-11-20, 1x: 390x844 e 1440x900). **`docs/marketing/src/capturas/` ainda não existe**; usei `docs/telas` e deixei um único ponto de troca: `var CAP_BASE = "../../telas/"` no `<script>` do fim de cada HTML (mesmos nomes de arquivo). Se a captura nova tiver outro nome ou outro layout, ajustar os `data-cap` e recalibrar os `.patch` e `.ring`.
+
+| # | Observação | Efeito |
+|---|---|---|
+| K1 | **Resolução 1x ampliada 2x a 3x** (cartão do pedido 2,5x; botão "Pronto para coleta" 2,95x). Texto da UI fica macio, legível mas sem a nitidez de uma captura 2x | O CEO decide no primeiro render; com captura 2x o HTML não muda (o tamanho é em px do slide, não da imagem) |
+| K2 | Dados de seed com **alimento** (banana, pão, bolo de fubá, suco) nas capturas 20, 21 (e 25 vem de vendas de mercadinho) contradizem "bens de consumo, não comida" | Cobri o nome do produto no cartão do pedido (s4). Produtos (s11) e Financeiro (s14) mostram o seed. **Pedir ao mobile-dev capturas com loja de moda/casa** (peça de roupa, vaso, tênis) e valores redondos |
+| K3 | Loja do app (04) é "Farmácia Saúde Já" (perfume na capa), não uma loja "que você gosta"; o início (01) mostra "Francisco Mor…" e a faixa "Entrega pelo Webag" | Cliente s4 e s7. Mesma recomendação K2 |
+| K4 | Horário estimado de captura de madrugada ("03:06 – 03:31", "03:31 – 04:01") lê como prazo prometido (regra 7 da direção criativa) | Cobri com "Veja no app" (cliente s4 e s5). Remover os `.patch` quando a captura vier em horário comercial **e** o jurídico aceitar faixa de tempo em imagem |
+| K5 | Pedido novo da captura 20 mostra "há 19 min" e "Som desligado" (BFF sem tempo real no ambiente de captura) | Recortei só o cartão, cobri a idade com "Novo". "Pago no app" aparece pequeno no cartão (fato, não argumento) |
+| K6 | Captura 25 (financeiro) mostra "Vendas R$ 59,90" e "Você recebe R$ 50,90" de seed | Rotulado só pelo contexto; se imprimir, vale um selo "exemplo" ou captura com valores redondos |
+
+## V2.3 Foto real (opcional) e técnico
+
+- **Foto de fachada** no slide 1 do lojista: bloco diagonal da direita, `id="foto-slot"`. Instrução no comentário do topo do HTML. Sem foto, vale a ilustração `assets/fachada-loja.svg` (a mesma aparece no slide 2 do cliente). Foto de loja de terceiro exige autorização de imagem do dono.
+- Arquivos novos em `src/assets/`: `fachada-loja.svg`, `etapa-separando.svg`, `etapa-entregue.svg` (cópias do kit, fundo noite). `etapa-a-caminho.svg` já existia.
+- Render: sem Bash, **não renderizei**. Larguras de título foram calculadas com a métrica estimada da Bricolage 800 (~0,54 em por caractere, tracking -0,035 em) com folga de 8 a 20%. Maior risco de quebra de linha: lojista s3 ("O Webag" a 184 px, `nowrap`, termina em ~1840 px), s2 (frase final a 80 px, 1555 de 1680 px), cliente s6 (texto da direita a 80 px, 3 linhas). Se estourar, devolva o quadro que eu ajusto.
+- Contrato técnico mantido: `<meta name="marketing-slides">` (14 e 8), `data-ready` (agora também espera as capturas), `config.json` com fallback embutido, tudo que sangra fica em `.clip`/`.shot` (overflow:hidden). Não há texto abaixo de 32 px, exceto as notas de 24 px (exemplo de venda; lista de abertura).
+
+# v1 (obsoleto, só histórico). Pendências das apresentações de 2026-11-20
+
+Peças da v1: 14 e 10 slides, substituídas pela v2 acima. Autor: product-designer. Data: 2026-11-20.
 Regra de leitura: nada aqui é fato de produto até alguém fechar o item. `[HIPÓTESE]` = não validado.
 
 ## 1. Depende do fundador

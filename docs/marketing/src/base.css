@@ -1,6 +1,8 @@
-/* Webag - apresentações oficiais (lojista e cliente). Base compartilhada.
+/* Webag - apresentações oficiais (lojista e cliente), v2. Base compartilhada.
    Regras: cor sólida (sem degradê), sem emoji, sem mascote. Cada .slide = 1920x1080 px, uma página do PDF.
-   Texto mínimo 28 px. Fontes: Bricolage Grotesque (títulos) e Figtree (texto), caminhos relativos. */
+   Texto mínimo 32 px (exceto notas legais, 24 px). Títulos 110 a 200 px. Fontes: Bricolage Grotesque (títulos) e Figtree (texto).
+   IMPORTANTE (render): o pipeline mede scrollWidth/scrollHeight de cada .slide. Tudo que sangra (blocos diagonais, capturas
+   recortadas, faixas) fica dentro de um contêiner com overflow:hidden (.clip, .shot), nunca solto fora dos 1920x1080. */
 
 @font-face{font-family:"Bricolage Grotesque";font-weight:600;font-style:normal;font-display:block;src:url("../../design/recursos/fontes/bricolage-grotesque-latin-600-normal.woff2") format("woff2")}
 @font-face{font-family:"Bricolage Grotesque";font-weight:700;font-style:normal;font-display:block;src:url("../../design/recursos/fontes/bricolage-grotesque-latin-700-normal.woff2") format("woff2")}
@@ -38,6 +40,7 @@ img,svg{display:block}
 .slide:last-of-type{break-after:auto;page-break-after:auto}
 .slide.roxo{background:var(--roxo);color:#fff}
 .slide.noite{background:var(--noite);color:#fff}
+.slide.lima{background:var(--lima);color:var(--noite)}
 
 /* Na tela: espaço entre slides e ajuste à janela. No PDF (print) nada disso vale. */
 @media screen{
@@ -49,131 +52,120 @@ img,svg{display:block}
   .slide{margin:0}
 }
 
-/* Tipografia */
-.h1,.h2,.h3,.big{font-family:var(--disp);font-weight:800;letter-spacing:-.035em;line-height:1.02}
-.h1{position:absolute;font-size:104px;width:1100px}
-.h2{position:absolute;font-size:92px;width:1100px}
-.h3{position:absolute;font-size:72px;letter-spacing:-.03em;width:800px}
-.kick{position:absolute;font:800 30px/1.1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao)}
+/* Utilitários de posição */
+.abs{position:absolute}
+.clip{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden}
+.nw{white-space:nowrap}
+.lima-t{color:var(--lima)}
+.roxo-t{color:var(--roxo)}
+.acao-t{color:var(--acao)}
+
+/* Tipografia de impacto: Bricolage 800, entrelinha justa. Tamanho vai inline (110 a 200 px nos títulos) */
+.d{position:absolute;font-family:var(--disp);font-weight:800;letter-spacing:-.035em;line-height:1}
+.dd{font-family:var(--disp);font-weight:800;letter-spacing:-.035em;line-height:1}
+.kick{position:absolute;font:800 32px/1.1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao)}
 .noite .kick{color:var(--lima)}
 .roxo .kick{color:#fff}
-.l{position:absolute;font:600 40px/1.3 var(--txt);color:var(--n700);width:900px}
-.noite .l{color:#E8E3EB}
-.roxo .l{color:#fff}
+.lima .kick{color:var(--noite)}
+.l{position:absolute;font:700 44px/1.25 var(--txt);color:var(--n700)}
+.noite .l,.roxo .l{color:#fff}
+.lima .l{color:var(--noite)}
 
 /* Marca-texto (palavra-chave) */
 .mark{position:relative;display:inline-block;isolation:isolate;color:var(--noite);white-space:nowrap}
-.mark::before{content:"";position:absolute;z-index:-1;left:-.12em;right:-.12em;top:.1em;bottom:.02em;background:var(--lima);transform:skewX(-8deg);border-radius:.12em}
+.mark::before{content:"";position:absolute;z-index:-1;left:-.1em;right:-.1em;top:.08em;bottom:0;background:var(--lima);transform:skewX(-8deg);border-radius:.1em}
 
-/* Adesivo "Em breve" */
-.tag{display:inline-block;background:var(--lima);color:var(--noite);font:800 30px/1 var(--txt);letter-spacing:.02em;padding:14px 28px;border-radius:12px;transform:rotate(-4deg);box-shadow:4px 4px 0 var(--noite)}
-.noite .tag{box-shadow:4px 4px 0 var(--roxo)}
+/* Adesivos (sombra dura, sempre inclinados) */
+.tag{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 36px/1 var(--txt);letter-spacing:.02em;padding:16px 30px;border-radius:14px;transform:rotate(-4deg);box-shadow:5px 5px 0 var(--noite)}
+.noite .tag{box-shadow:5px 5px 0 var(--roxo)}
+.stk{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 48px/1.05 var(--disp);letter-spacing:-.02em;padding:20px 34px;border-radius:16px;transform:rotate(-5deg);box-shadow:7px 7px 0 var(--noite);white-space:nowrap}
+.noite .stk{box-shadow:7px 7px 0 var(--roxo)}
+.pill{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 36px/1 var(--txt);padding:18px 32px;border-radius:16px}
+.chip{display:inline-block;background:var(--n800);color:#fff;font:700 36px/1 var(--txt);padding:18px 30px;border-radius:16px}
 
-/* Etiqueta simples */
-.chip{position:absolute;display:inline-block;background:var(--studio);color:var(--n700);font:700 30px/1 var(--txt);padding:16px 28px;border-radius:14px}
-.noite .chip{background:var(--n800);color:#E8E3EB}
-
-/* Lista com barra inclinada (assinatura da marca) */
-.pts{position:absolute;list-style:none;display:grid;gap:26px;width:800px}
-.pts li{position:relative;padding-left:64px;font:600 36px/1.3 var(--txt);color:var(--n700)}
-.noite .pts li{color:#fff}
-.pts li::before{content:"";position:absolute;left:0;top:.46em;width:40px;height:14px;border-radius:7px;background:var(--roxo);transform:skewX(-8deg)}
-.noite .pts li::before{background:var(--lima)}
-.pts li b{font-weight:800;color:var(--noite)}
-.noite .pts li b{color:#fff}
-
-/* Progresso dos passos (barras inclinadas) */
+/* Progresso (barras inclinadas do kit) */
 .prog{position:absolute;display:flex;gap:12px}
-.prog i{display:block;width:70px;height:18px;border-radius:9px;background:var(--n300);transform:skewX(-8deg)}
+.prog i{display:block;width:92px;height:18px;border-radius:9px;background:var(--n300);transform:skewX(-8deg)}
 .prog i.on{background:var(--roxo)}
-.prog.w92 i{width:92px}
-.noite .prog i{background:#443C4C}
+.noite .prog i{background:var(--n700)}
 .noite .prog i.on{background:var(--lima)}
+.roxo .prog i{background:rgba(255,255,255,.38)}
+.roxo .prog i.on{background:#fff}
 
-/* Rodapé: logo + número da página */
-.foot{position:absolute;left:120px;bottom:60px;display:flex;align-items:center;gap:32px;z-index:5}
+/* Logo no rodapé (sem número de página: quem lê não conta slides) */
+.foot{position:absolute;left:120px;bottom:56px;z-index:5}
 .foot.r{left:auto;right:120px}
 .foot img{height:44px;width:auto}
-.foot .num{font:700 28px/1 var(--txt);color:var(--n600)}
-.noite .foot .num{color:var(--n300)}
-.roxo .foot .num{color:#fff}
 
 /* Símbolo da marca (sprite inline em cada HTML) */
 .sim{position:absolute}
 
-/* Cartões brancos (sobre roxo) */
-.cards{position:absolute;left:120px;top:370px;width:1680px;display:flex;gap:48px}
-.card{flex:1;height:520px;background:#fff;color:var(--noite);border-radius:28px;padding:40px 36px}
-.card .n{width:56px;height:56px;border-radius:14px;background:var(--lima);color:var(--noite);font:800 36px/56px var(--disp);text-align:center}
-.card h3{font:800 44px/1.1 var(--disp);letter-spacing:-.03em;margin:28px 0 18px}
-.card p{font:600 32px/1.35 var(--txt);color:var(--n700)}
+/* Lista com barra inclinada (assinatura da marca) */
+.pts{position:absolute;list-style:none;display:grid;gap:26px}
+.pts li{position:relative;padding-left:64px;font:700 38px/1.25 var(--txt);color:var(--n700)}
+.pts li::before{content:"";position:absolute;left:0;top:.5em;width:40px;height:14px;border-radius:7px;background:var(--roxo);transform:skewX(-8deg)}
+.noite .pts li{color:#fff}
+.noite .pts li::before{background:var(--lima)}
 
-/* Colunas de texto sobre fundo escuro (problema) */
-.pcol{position:absolute;top:470px;width:520px;border-top:6px solid #443C4C;padding-top:30px}
-.pcol .n{font:800 150px/1 var(--disp);letter-spacing:-.04em;color:var(--lima)}
-.pcol h3{font:800 46px/1.1 var(--txt);margin:18px 0 14px}
-.pcol p{font:600 34px/1.35 var(--txt);color:var(--n300)}
+/* Balões de conversa (dor do lojista) */
+.bub{position:absolute;border-radius:48px;padding:30px 52px;white-space:nowrap}
+.bub.in{background:var(--n800);color:#fff;font:600 60px/1.15 var(--txt);border-bottom-left-radius:12px}
+.bub.out{background:var(--lima);color:var(--noite);font:800 150px/1 var(--disp);letter-spacing:-.035em;padding:44px 66px 52px;border-bottom-right-radius:14px}
 
-/* Colunas de passos (papel) */
-.scol{position:absolute;top:380px;width:384px;border-top:8px solid var(--noite);padding-top:20px}
-.scol .n{font:800 200px/1 var(--disp);letter-spacing:-.04em;color:var(--roxo)}
-.scol h3{font:800 46px/1.1 var(--txt);margin:14px 0 16px;color:var(--noite)}
-.scol p{font:600 34px/1.35 var(--txt);color:var(--n700)}
+/* Captura recortada: .shotwrap leva a sombra dura; .shot recorta (overflow:hidden); a <img> tem largura = 390 x escala (celular)
+   ou 1440 x escala (computador) e deslocamento negativo = origem do recorte x escala. Resolução-independente: com captura em
+   alta resolução (mesmo aspecto), nada muda. */
+.shotwrap{position:absolute;border-radius:48px;box-shadow:16px 16px 0 var(--noite)}
+.roxo .shotwrap{box-shadow:16px 16px 0 var(--noite)}
+.noite .shotwrap{box-shadow:16px 16px 0 var(--roxo)}
+.shotwrap.nosh{box-shadow:none}
+.shot{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;border-radius:inherit;background:var(--noite)}
+.shot img{position:absolute;max-width:none}
+/* Cobertura de dado de demonstração (horário, nome de produto de seed). Recalibrar se a captura mudar. */
+.patch{position:absolute;display:flex;align-items:center}
+.ring{position:absolute;border:6px solid var(--lima);border-radius:22px;box-shadow:0 0 0 5px var(--noite)}
 
-/* Janela de computador (captura do painel) */
-.win{position:absolute;background:#fff;border:3px solid var(--noite);border-radius:24px;overflow:hidden}
-.win .bar{height:44px;background:var(--studio);border-bottom:3px solid var(--noite);display:flex;align-items:center;gap:10px;padding:0 18px}
-.win .bar i{width:14px;height:14px;border-radius:50%;background:var(--n400)}
-.win .view{position:relative;overflow:hidden;background:#fff}
-.win .view img{position:absolute;max-width:none}
-.hl{position:absolute;border:6px solid var(--lima);border-radius:16px;box-shadow:0 0 0 5px var(--noite)}
-.patch{position:absolute;background:#fff}
+/* Ilustração do kit em cartão */
+.tile{position:absolute;overflow:hidden;border-radius:44px;box-shadow:9px 9px 0 var(--noite)}
+.tile img,.tile svg{width:100%;height:100%}
 
-/* Celular (captura do app / painel no celular). --w = largura da tela */
-.phone{position:absolute;--w:400px;background:var(--n800);border:3px solid var(--noite);border-radius:58px;padding:14px}
-.phone .scr{position:relative;width:var(--w);height:calc(var(--w) * 2.1641);border-radius:44px;overflow:hidden;background:#fff}
-.phone .scr img{position:absolute;left:0;top:0;width:100%;height:100%}
-.phone .patch{background:var(--papel);display:flex;align-items:center;justify-content:center;font:600 15px/1 var(--txt);color:var(--n600)}
+/* Quadrantes de perguntas e respostas (lojista, slide 6) */
+.quad{position:absolute;width:960px;height:540px;padding:60px 90px;display:flex;flex-direction:column;justify-content:center}
+.quad .qq{display:flex;align-items:center;gap:22px;font:700 44px/1.2 var(--txt)}
+.quad .qq::before{content:"";flex:none;width:56px;height:14px;border-radius:7px;background:currentColor;transform:skewX(-8deg)}
+.quad .aa{font:800 140px/.96 var(--disp);letter-spacing:-.04em;margin-top:36px}
+.quad .ss{font:700 56px/1.15 var(--txt);margin-top:24px}
 
-/* Figura em cartão (ilustração do kit) */
-.sticker{position:absolute;overflow:hidden;border-radius:40px;box-shadow:8px 8px 0 var(--noite);transform:rotate(4deg)}
-.sticker img{width:100%;height:100%}
+/* Linhas de preenchimento à mão (campo vazio = linha) */
+.fill{display:flex;align-items:flex-end;gap:22px;height:64px;margin-bottom:20px}
+.fill:last-child{margin-bottom:0}
+.fill span{flex:none;font:800 36px/1 var(--txt);color:var(--noite)}
+.fill i{flex:1;display:block;height:52px;border-bottom:4px solid var(--noite)}
 
 /* Exemplo de venda */
-.bar3{position:absolute;display:flex;gap:6px;height:52px}
-.bar3 span{display:block;border-radius:26px}
+.bar3{position:absolute;display:flex;gap:6px;height:56px;transform:skewX(-8deg)}
+.bar3 span{display:block;border-radius:28px}
 .ledger{position:absolute;list-style:none}
-.ledger li{display:flex;align-items:center;gap:20px;height:100px;border-bottom:3px solid var(--n200)}
-.ledger .mk{flex:none;width:28px;height:28px;border-radius:8px;border:3px solid var(--noite)}
-.ledger .lb{flex:1;font:600 36px/1.2 var(--txt);color:var(--n700)}
-.ledger .vl{font:800 52px/1 var(--txt);font-variant-numeric:tabular-nums;color:var(--noite);white-space:nowrap}
-.panel{position:absolute;background:var(--roxo);color:#fff;border-radius:36px;padding:52px}
+.ledger li{display:flex;align-items:center;gap:22px;height:96px;border-bottom:3px solid var(--n200)}
+.ledger .mk{flex:none;width:30px;height:30px;border-radius:8px;border:3px solid var(--noite)}
+.ledger .lb{flex:1;font:600 40px/1.2 var(--txt);color:var(--n700)}
+.ledger .vl{font:800 48px/1 var(--txt);font-variant-numeric:tabular-nums;color:var(--noite);white-space:nowrap}
 
-/* Cartões de perguntas */
-.faq{position:absolute;left:120px;top:250px;width:1680px;display:grid;grid-template-columns:repeat(3,540px);gap:30px}
-.q{height:330px;background:#fff;border:3px solid var(--n200);border-radius:24px;padding:30px}
-.q h3{font:800 32px/1.2 var(--txt);color:var(--noite);margin-bottom:14px;padding-left:0}
-.q h3::before{content:"";display:block;width:56px;height:14px;border-radius:7px;background:var(--roxo);transform:skewX(-8deg);margin-bottom:16px}
-.q p{font:600 30px/1.35 var(--txt);color:var(--n700)}
-
-/* Bloco de contato (último slide). Campo vazio = linha para escrever à mão */
+/* Bloco de contato. Campo vazio = linha para escrever à mão */
 .contact{position:absolute;background:#fff;color:var(--noite);border-radius:36px;padding:56px}
-.contact h3{font:800 64px/1.05 var(--disp);letter-spacing:-.03em;margin-bottom:34px}
+.contact h3{font:800 64px/1.05 var(--disp);letter-spacing:-.03em;margin-bottom:34px;white-space:nowrap}
 .crow{margin-bottom:26px}
 .crow:last-child{margin-bottom:0}
-.crow .lbl{display:block;font:800 28px/1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao);margin-bottom:8px}
+.crow .lbl{display:block;font:800 32px/1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao);margin-bottom:8px}
 .crow .val{display:block;font:700 44px/1.15 var(--txt);min-height:56px;overflow-wrap:anywhere}
 .crow .val.blank{border-bottom:3px solid var(--n600);height:56px}
 
-/* Passos numerados (cadastro, próximos passos) */
-.steps{position:absolute;list-style:none;display:grid;gap:12px}
-.steps li{display:flex;align-items:center;gap:20px;min-height:70px;font:700 36px/1.15 var(--txt);color:var(--noite)}
-.steps li b{flex:none;width:52px;height:52px;border-radius:14px;background:var(--roxo);color:#fff;font:800 30px/52px var(--disp);text-align:center}
-.roxo .steps li{color:#fff}
-.roxo .steps li b{background:#fff;color:var(--noite)}
-
-.docs{position:absolute;background:#fff;border:3px solid var(--n200);border-radius:28px;padding:32px}
-.docs .kick{position:static;display:block;margin-bottom:16px}
-.docs h4{font:800 34px/1.2 var(--txt);color:var(--noite);margin-bottom:6px}
-.docs p{font:600 30px/1.35 var(--txt);color:var(--n700);margin-bottom:20px}
-.docs p:last-child{margin-bottom:0;color:var(--n600)}
+/* Cartões da parte 2 */
+.doc{position:absolute;background:#fff;border:3px solid var(--n200);border-radius:28px;padding:30px 32px}
+.doc .kick{position:static;display:block;margin-bottom:14px}
+.doc h4{font:800 46px/1.1 var(--disp);letter-spacing:-.03em;color:var(--noite);margin-bottom:10px}
+.doc p{font:600 34px/1.3 var(--txt);color:var(--n700)}
+.stage{position:absolute;display:flex;align-items:center;gap:34px;padding:0 44px;border-radius:36px}
+.stage .nm{flex:none;width:92px;height:92px;border-radius:24px;font:800 56px/92px var(--disp);text-align:center}
+.stage h3{font:800 72px/1 var(--disp);letter-spacing:-.035em}
+.stage p{font:600 38px/1.2 var(--txt);margin-top:10px}
