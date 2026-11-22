@@ -1,4 +1,4 @@
-import type { BulkRequest, BulkResult, ImportResult, Product, ProductPage, ProductSummary, Section, SectionList, SetVariantsRequest, StockAdjustBody, UpdateProductRequest } from '@webag/shared';
+import type { BulkPreviewItem, BulkRequest, BulkResult, ImportResult, Product, ProductPage, ProductSummary, Section, SectionList, SetVariantsRequest, StockAdjustBody, UpdateProductRequest } from '@webag/shared';
 import { apiRequest } from './client';
 import { ApiError } from './errors';
 import { saveErrorMessage } from './messages';
@@ -7,7 +7,7 @@ import { saveErrorMessage } from './messages';
  * Catálogo do lojista (Onda 2B, WB-060 a 066). Os tipos vêm do cliente gerado em `@webag/shared` (openapi.yaml); a chamada
  * passa pelo BFF (`/api/proxy/lojista/...`), que guarda o token no cookie HttpOnly, como o resto do painel.
  */
-export type { BulkResult, ImportResult, Product, ProductSummary, Section };
+export type { BulkPreviewItem, BulkResult, ImportResult, Product, ProductSummary, Section };
 export type ProductStatus = ProductSummary['status'];
 export type ModerationStatus = ProductSummary['moderationStatus'];
 export type ProductVariantView = Product['variants'][number];
@@ -53,7 +53,12 @@ export const catalogApi = {
   publish: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/publish`, { method: 'POST' }),
   pause: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/pause`, { method: 'POST' }),
   resume: (storeId: string, productId: string) => apiRequest<Product>(L, `${base(storeId)}/products/${productId}/resume`, { method: 'POST' }),
-  bulk: (storeId: string, body: BulkRequest) => apiRequest<BulkResult>(L, `${base(storeId)}/products/bulk`, { method: 'POST', body }),
+  /**
+   * Ação em massa. `price_adjust` sem `dryRun` EXIGE `idempotencyKey` (uma por intenção, reaproveitada na retentativa) e
+   * `expectedVersions` da prévia (contrato R1.2, tech-lead B2); pausar, reativar e mover de seção são estados absolutos e dispensam.
+   */
+  bulk: (storeId: string, body: BulkRequest, idempotencyKey?: string) =>
+    apiRequest<BulkResult>(L, `${base(storeId)}/products/bulk`, { method: 'POST', body, ...(idempotencyKey ? { idempotencyKey } : {}) }),
   sections: (storeId: string) => apiRequest<SectionList>(L, `${base(storeId)}/sections`),
   createSection: (storeId: string, name: string) => apiRequest<Section>(L, `${base(storeId)}/sections`, { method: 'POST', body: { name } }),
   renameSection: (storeId: string, sectionId: string, name: string) => apiRequest<Section>(L, `${base(storeId)}/sections/${sectionId}`, { method: 'PATCH', body: { name } }),
@@ -100,6 +105,14 @@ export function catalogErrorMessage(error: unknown, fallback = 'Não foi possív
       return 'O máximo é 8 fotos por produto.';
     case 'BULK_BLOCKED':
       return detail ?? 'Algum preço sairia da faixa permitida. Nada foi alterado. Ajuste o valor e tente de novo.';
+    case 'BULK_VERSION_CONFLICT':
+      return bulkConflictMessage(error);
+    case 'BULK_NEEDS_CONFIRMATION':
+      return 'Algum preço muda muito. Confira os valores novos, marque "Conferi os valores novos" e aplique de novo. Nada foi alterado.';
+    case 'IDEMPOTENCY_IN_PROGRESS':
+      return 'Esta ação ainda está sendo aplicada. Espere alguns segundos e toque em tentar de novo. Nada será aplicado duas vezes.';
+    case 'IDEMPOTENCY_KEY_REUSED':
+      return 'Esta ação mudou depois da prévia. Conferimos os valores de novo; revise e aplique.';
     case 'IMPORT_FILE_INVALID':
       return detail ?? 'Use o modelo do Webag, em CSV.';
     case 'PRODUCT_INCOMPLETE':
@@ -109,4 +122,13 @@ export function catalogErrorMessage(error: unknown, fallback = 'Não foi possív
     default:
       return saveErrorMessage(error, fallback);
   }
+}
+
+/** 409 `BULK_VERSION_CONFLICT`: nomeia até 3 produtos que mudaram depois da prévia (a lista vem em `conflicts`). */
+export function bulkConflictMessage(error: ApiError): string {
+  const raw = error.problem['conflicts'];
+  const names = Array.isArray(raw) ? raw.map((item) => (item && typeof item === 'object' ? (item as { name?: unknown }).name : null)).filter((name): name is string => typeof name === 'string') : [];
+  const who = names.length === 0 ? 'Alguns produtos' : names.length === 1 ? names[0] : `${names.slice(0, 3).join(', ')}${names.length > 3 ? ` e mais ${names.length - 3}` : ''}`;
+  const verb = names.length <= 1 && names.length !== 0 ? 'mudou' : 'mudaram';
+  return `${who} ${verb} depois da prévia (outra pessoa ou outro aparelho editou). Nada foi aplicado. Atualizamos a prévia com os valores de agora; confira e aplique de novo.`;
 }

@@ -11,8 +11,10 @@ export class ApiError extends Error {
   readonly detail: string | undefined;
   readonly fields: FieldError[];
   readonly retryAfterSeconds: number | null;
+  /** Corpo completo do problem+json: extensões por código (ex.: `conflicts` do 409 `BULK_VERSION_CONFLICT`). */
+  readonly problem: Record<string, unknown>;
 
-  constructor(init: { status: number; code: string; title: string; detail?: string; fields?: FieldError[]; retryAfterSeconds?: number | null }) {
+  constructor(init: { status: number; code: string; title: string; detail?: string; fields?: FieldError[]; retryAfterSeconds?: number | null; problem?: Record<string, unknown> }) {
     super(init.detail ?? init.title);
     this.name = 'ApiError';
     this.status = init.status;
@@ -21,6 +23,7 @@ export class ApiError extends Error {
     this.detail = init.detail;
     this.fields = init.fields ?? [];
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
+    this.problem = init.problem ?? {};
   }
 
   get isNetwork(): boolean {
@@ -42,6 +45,7 @@ interface ProblemBody {
   code?: string;
   detail?: string;
   errors?: FieldError[];
+  [extension: string]: unknown;
 }
 
 export async function toApiError(response: Response): Promise<ApiError> {
@@ -59,6 +63,7 @@ export async function toApiError(response: Response): Promise<ApiError> {
     detail: body.detail,
     fields: Array.isArray(body.errors) ? body.errors : [],
     retryAfterSeconds: Number.isFinite(retry) && retry > 0 ? retry : null,
+    problem: body && typeof body === 'object' ? (body as Record<string, unknown>) : {},
   });
 }
 

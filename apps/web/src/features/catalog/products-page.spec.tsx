@@ -145,21 +145,46 @@ describe('Produtos: lista (K1)', () => {
     expect(screen.queryByTestId('lojista.produtos.bulk-bar')).not.toBeInTheDocument();
   });
 
-  it('mudar preço mostra a prévia e bloqueia o que ficaria abaixo de R$ 0,01', async () => {
-    vi.stubGlobal('fetch', setup([camiseta, bone]).impl);
+  it('mudar preço pede a prévia ao servidor, mostra o resultado e bloqueia quando o servidor bloqueia', async () => {
+    const preview = (blocked: { productId: string; name: string; reason: string }[]) =>
+      json({
+        dryRun: true,
+        willChange: blocked.length > 0 ? 0 : 2,
+        changed: 0,
+        blocked,
+        requiresConfirmation: false,
+        batchId: null,
+        undoUntil: null,
+        preview: blocked.length > 0 ? [] : [
+          { productId: 'p1', name: 'Camiseta Básica', version: 3, fromCents: 5990, toCents: 6589, changePct: 10, youReceiveCents: 5500, exceedsLimit: false },
+          { productId: 'p3', name: 'Boné', version: 1, fromCents: 4990, toCents: 5489, changePct: 10, youReceiveCents: null, exceedsLimit: false },
+        ],
+      });
+    const { impl } = setup([camiseta, bone], [
+      (url, init) => {
+        if (!url.pathname.endsWith('/products/bulk') || init.method !== 'POST') return undefined;
+        const body = JSON.parse(String(init.body)) as { action: { value: number } };
+        return body.action.value < 0 ? preview([{ productId: 'p3', name: 'Boné', reason: 'O preço ficaria menor que R$ 0,01.' }]) : preview([]);
+      },
+    ]);
+    vi.stubGlobal('fetch', impl);
     renderLojista(<ProductsPage />);
     await userEvent.click(await screen.findByTestId('lojista.produtos.select-p1'));
     await userEvent.click(screen.getByTestId('lojista.produtos.select-p3'));
     await userEvent.click(screen.getByTestId('lojista.produtos.bulk-price'));
     await userEvent.type(screen.getByTestId('lojista.produtos.bulk-value'), '10');
-    const preview = screen.getByTestId('lojista.produtos.bulk-preview');
-    expect(preview).toHaveTextContent('2 produtos serão alterados.');
-    expect(preview).toHaveTextContent('Camiseta Básica: R$ 59,90 → R$ 65,89');
+    expect(screen.getByTestId('lojista.produtos.bulk-confirm')).toBeDisabled();
+    const preview1 = await screen.findByText('2 produtos serão alterados.', undefined, { timeout: 3000 });
+    expect(preview1).toBeInTheDocument();
+    const box = screen.getByTestId('lojista.produtos.bulk-preview');
+    expect(box).toHaveTextContent('Camiseta Básica: R$ 59,90 → R$ 65,89');
+    expect(box).toHaveTextContent('você recebe R$ 55,00');
     expect(screen.getByTestId('lojista.produtos.bulk-confirm')).toHaveTextContent('Aumentar preço de 2 produtos');
+    expect(screen.getByTestId('lojista.produtos.bulk-confirm')).toBeEnabled();
     await userEvent.click(screen.getByTestId('lojista.produtos.bulk-direction-down'));
     await userEvent.clear(screen.getByTestId('lojista.produtos.bulk-value'));
     await userEvent.type(screen.getByTestId('lojista.produtos.bulk-value'), '100');
-    expect(screen.getByTestId('lojista.produtos.bulk-blocked')).toBeInTheDocument();
+    expect(await screen.findByTestId('lojista.produtos.bulk-blocked', undefined, { timeout: 3000 })).toHaveTextContent('Boné (O preço ficaria menor que R$ 0,01.)');
     expect(screen.queryByTestId('lojista.produtos.bulk-confirm')).not.toBeInTheDocument();
     expect(screen.getByTestId('lojista.produtos.bulk-adjust-again')).toBeInTheDocument();
   });

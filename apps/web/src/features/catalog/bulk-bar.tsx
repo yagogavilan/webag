@@ -1,12 +1,13 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { Banner, Button, Dialog, RadioCards, SelectField, TextField, ui, useToast, cx } from '@/components/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Banner, Button, CheckboxField, Dialog, RadioCards, SelectField, TextField, ui, useToast, cx } from '@/components/ui';
 import { catalogApi, catalogErrorMessage, catalogKeys, type BulkResult, type ProductSummary } from '@/lib/api/catalog';
 import { formatCents } from '@/lib/format';
-import { adjustPrice, MAX_PRICE_CENTS, MIN_PRICE_CENTS } from '@/lib/catalog/helpers';
+import { canApplyPreview, newIdempotencyKey, priceAdjustApplyBody, priceAdjustPreviewBody, type PriceAdjustIntent } from '@/lib/catalog/bulk';
 import { parseCents, parseDecimal } from '@/lib/money';
+import { ApiError } from '@/lib/api/errors';
 import { ltid } from '@/lib/testid';
 import { useOnline } from '@/lib/use-online';
 import s from './catalog.module.css';
@@ -26,6 +27,16 @@ interface Props {
 }
 
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+/** Espera o lojista parar de digitar antes de pedir a prévia ao servidor (uma chamada por valor, não por tecla). */
+function useDebounced<T>(value: T, ms = 400): T {
+  const [state, setState] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setState(value), ms);
+    return () => clearTimeout(timer);
+  }, [value, ms]);
+  return state;
+}
 
 /** Ação em massa (K6): barra com a seleção e as folhas de confirmação, sempre com verbo + contagem no botão. */
 export function BulkBar({ storeId, selected, canChangePrice, onClear, onDone }: Props) {
@@ -63,50 +74,82 @@ function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; 
   const [showAll, setShowAll] = useState(false);
   const sections = useQuery({ queryKey: catalogKeys.sections(storeId), queryFn: () => catalogApi.sections(storeId), enabled: mode === 'move' });
 
-  const price = useMemo(() => {
-    const raw = unit === 'percent' ? parseDecimal(valueText) : parseCents(valueText);
-    if (raw === null || raw <= 0) return { valid: false as const, signed: 0, lines: [], blocked: [] as ProductSummary[] };
-    const signed = direction === 'up' ? raw : -raw;
-    const priced = selected.filter((product) => product.basePriceCents !== null);
-    const lines = priced.map((product) => {
-      const next = adjustPrice(product.basePriceCents as number, unit, signed);
-      return { product, from: product.basePriceCents as number, to: next };
-    });
-    return { valid: true as const, signed, lines, blocked: lines.filter((line) => line.to < MIN_PRICE_CENTS || line.to > MAX_PRICE_CENTS).map((line) => line.product) };
-  }, [selected, direction, unit, valueText]);
+  // Reajuste (WB-377): quem calcula é o servidor (`dryRun`). Produto sem preço próprio fica de fora, como na 1.0.
+  const pricedIds = useMemo(() => selected.filter((product) => product.basePriceCents !== null).map((product) => product.id), [selected]);
+  const withoutPrice = count - pricedIds.length;
+  const typed = unit === 'percent' ? parseDecimal(valueText) : parseCents(valueText);
+  const typedValid = typed !== null && typed > 0;
+  const intent: PriceAdjustIntent | null = typedValid ? { productIds: pricedIds, unit, value: direction === 'up' ? typed : -typed } : null;
+  const intentId = intent ? `${intent.unit}:${intent.value}:${intent.productIds.join(',')}` : '';
+  const settledId = useDebounced(intentId);
+  const settled = settledId !== '' && settledId === intentId ? intent : null;
+  const previewQuery = useQuery({
+    queryKey: ['lojista', 'catalog-bulk-preview', storeId, settledId],
+    queryFn: () => catalogApi.bulk(storeId, priceAdjustPreviewBody(settled as PriceAdjustIntent)),
+    enabled: mode === 'price' && settled !== null && pricedIds.length > 0 && online,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+  const preview = settled ? previewQuery.data : undefined;
+  const previewStamp = previewQuery.dataUpdatedAt;
+  const waitingPreview = mode === 'price' && intent !== null && (settled === null || previewQuery.isFetching);
+  const [confirmedStamp, setConfirmedStamp] = useState(0);
+  const confirmed = confirmedStamp === previewStamp && previewStamp !== 0;
+  // Uma `Idempotency-Key` por prévia: a retentativa do MESMO envio a reaproveita; prévia nova (ou valor novo) é outra intenção.
+  const keyRef = useRef<{ stamp: number; key: string } | null>(null);
+  const prices = preview?.preview ?? [];
+  const blocked = preview?.blocked ?? [];
 
   const ids = selected.map((product) => product.id);
   const verb = mode === 'pause' ? 'Pausar' : mode === 'resume' ? 'Reativar' : mode === 'move' ? 'Mover' : direction === 'up' ? 'Aumentar preço de' : 'Diminuir preço de';
-  const confirmLabel = `${verb} ${plural(count, 'produto', 'produtos')}`;
+  const confirmCount = mode === 'price' ? (prices.length > 0 ? prices.length : pricedIds.length) : count;
+  const confirmLabel = `${verb} ${plural(confirmCount, 'produto', 'produtos')}`;
   const title = mode === 'pause' ? 'Pausar produtos' : mode === 'resume' ? 'Reativar produtos' : mode === 'move' ? 'Mover de seção' : 'Mudar preço';
-  const canConfirm = mode === 'price' ? price.valid && price.blocked.length === 0 && count > 0 : true;
+  const hasBlocked = mode === 'price' && blocked.length > 0;
+  const canConfirm = mode === 'price' ? canApplyPreview(preview, confirmed) && !waitingPreview && online : true;
 
   async function confirm() {
     if (!online) return setError('Conecte-se para alterar vários produtos.');
     setBusy(true);
     setError(null);
     try {
-      const action =
-        mode === 'pause' ? ({ type: 'pause' } as const)
-        : mode === 'resume' ? ({ type: 'resume' } as const)
-        : mode === 'move' ? ({ type: 'move_section', sectionId: sectionId === '' ? null : sectionId } as const)
-        : ({ type: 'price_adjust', mode: unit, value: price.signed } as const);
-      const result = await catalogApi.bulk(storeId, { productIds: ids, action });
+      let result: BulkResult;
+      let affected = ids;
+      if (mode === 'price') {
+        if (!settled || !preview) return;
+        if (keyRef.current?.stamp !== previewStamp) keyRef.current = { stamp: previewStamp, key: newIdempotencyKey() };
+        const body = priceAdjustApplyBody(settled, preview, confirmed);
+        affected = body.productIds;
+        result = await catalogApi.bulk(storeId, body, keyRef.current.key);
+      } else {
+        const action =
+          mode === 'pause' ? ({ type: 'pause' } as const)
+          : mode === 'resume' ? ({ type: 'resume' } as const)
+          : ({ type: 'move_section', sectionId: sectionId === '' ? null : sectionId } as const);
+        result = await catalogApi.bulk(storeId, { productIds: ids, action });
+      }
       await client.invalidateQueries({ queryKey: catalogKeys.all });
       if (result.blocked.length > 0) {
         setPartial(result);
         return;
       }
       toast.show(`${plural(result.changed, 'produto atualizado', 'produtos atualizados')}.`);
-      onDone(ids);
+      onDone(affected);
     } catch (caught) {
       setError(catalogErrorMessage(caught, 'Não foi possível salvar. Tentar de novo.'));
+      // Prévia velha (alguém editou, ou pede confirmação): nada foi aplicado; refaz a prévia e deixa a mensagem na tela.
+      if (mode === 'price' && caught instanceof ApiError && ['BULK_VERSION_CONFLICT', 'BULK_NEEDS_CONFIRMATION', 'BULK_BLOCKED', 'IDEMPOTENCY_KEY_REUSED'].includes(caught.code)) {
+        keyRef.current = null;
+        void client.invalidateQueries({ queryKey: catalogKeys.all });
+        void previewQuery.refetch();
+      }
     } finally {
       setBusy(false);
     }
   }
 
-  const lines = showAll ? price.lines : price.lines.slice(0, 5);
+  const lines = showAll ? prices : prices.slice(0, 5);
   return (
     <Dialog
       title={title}
@@ -119,12 +162,12 @@ function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; 
           <Button onClick={() => onDone(ids.filter((id) => !partial.blocked.some((b) => b.productId === id)))}>Fechar</Button>
         ) : (
           <>
-            {canConfirm ? (
-              <Button variant={mode === 'pause' ? 'destructive' : 'primary'} onClick={() => void confirm()} loading={busy} loadingLabel="Salvando…" data-testid={T('bulk-confirm')}>
+            {hasBlocked ? (
+              <Button variant="secondary" onClick={() => { setValueText(''); setError(null); }} data-testid={T('bulk-adjust-again')}>Ajustar de novo</Button>
+            ) : (
+              <Button variant={mode === 'pause' ? 'destructive' : 'primary'} onClick={() => void confirm()} loading={busy} loadingLabel="Salvando…" disabled={!canConfirm} data-testid={T('bulk-confirm')}>
                 {confirmLabel}
               </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => setValueText('')} data-testid={T('bulk-adjust-again')}>Ajustar de novo</Button>
             )}
             <Button variant="text" onClick={onClose} disabled={busy}>Cancelar</Button>
           </>
@@ -161,36 +204,60 @@ function BulkDialog({ mode, storeId, selected, onClose, onDone }: { mode: Mode; 
                 legend="O que fazer com o preço"
                 name="bulk-direction"
                 value={direction}
-                onChange={setDirection}
+                onChange={(next) => { setDirection(next); setError(null); }}
                 options={[
                   { value: 'up', label: 'Aumentar', testId: T('bulk-direction-up') },
                   { value: 'down', label: 'Diminuir', testId: T('bulk-direction-down') },
                 ]}
               />
               <div className={s.bulkApply}>
-                <TextField label="Valor" inputMode="decimal" value={valueText} onChange={(event) => setValueText(event.target.value)} data-testid={T('bulk-value')} />
-                <SelectField label="Unidade" value={unit} onChange={(event) => setUnit(event.target.value as 'percent' | 'amount')} data-testid={T('bulk-unit')}>
+                <TextField label="Valor" inputMode="decimal" value={valueText} onChange={(event) => { setValueText(event.target.value); setError(null); }} data-testid={T('bulk-value')} />
+                <SelectField label="Unidade" value={unit} onChange={(event) => { setUnit(event.target.value as 'percent' | 'amount'); setError(null); }} data-testid={T('bulk-unit')}>
                   <option value="percent">%</option>
                   <option value="amount">R$</option>
                 </SelectField>
               </div>
-              {price.valid ? (
-                <div data-testid={T('bulk-preview')} className={ui.stack}>
-                  {price.blocked.length > 0 ? (
-                    <Banner tone="danger" testId={T('bulk-blocked')}>
-                      {plural(price.blocked.length, 'produto ficaria', 'produtos ficariam')} com preço fora da faixa (de R$ 0,01 a R$ 99.999,99): {price.blocked.map((p) => p.name).join(', ')}.
+              {withoutPrice > 0 ? (
+                <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }}>
+                  {plural(withoutPrice, 'produto selecionado não tem preço próprio e fica de fora', 'produtos selecionados não têm preço próprio e ficam de fora')}.
+                </p>
+              ) : null}
+              {intent ? (
+                <div data-testid={T('bulk-preview')} className={ui.stack} aria-busy={waitingPreview}>
+                  {waitingPreview ? <p className={cx('wb-text-caption', ui.muted)} style={{ margin: 0 }} role="status">Calculando como os preços ficam…</p> : null}
+                  {!waitingPreview && previewQuery.isError ? (
+                    <Banner tone="danger" testId={T('bulk-preview-error')}>
+                      {catalogErrorMessage(previewQuery.error, 'Não foi possível calcular a prévia.')}{' '}
+                      <button type="button" className={s.linkButton} onClick={() => void previewQuery.refetch()}>Tentar de novo</button>
                     </Banner>
                   ) : null}
-                  <p className="wb-text-body-strong" style={{ margin: 0 }}>{plural(price.lines.length, 'produto será alterado', 'produtos serão alterados')}.</p>
-                  <ul className={s.previewList}>
-                    {lines.map((line) => (
-                      <li key={line.product.id} className="wb-text-body">
-                        {line.product.name}: {formatCents(line.from)} → {formatCents(Math.max(0, line.to))}
-                      </li>
-                    ))}
-                  </ul>
-                  {price.lines.length > 5 ? (
-                    <button type="button" className={s.linkButton} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Ver menos' : 'Ver todos'}</button>
+                  {!waitingPreview && blocked.length > 0 ? (
+                    <Banner tone="danger" testId={T('bulk-blocked')}>
+                      {plural(blocked.length, 'produto impede', 'produtos impedem')} o reajuste e nada seria alterado: {blocked.map((item) => `${item.name} (${item.reason})`).join(' ')}
+                    </Banner>
+                  ) : null}
+                  {!waitingPreview && preview && prices.length > 0 ? (
+                    <>
+                      <p className="wb-text-body-strong" style={{ margin: 0 }}>{plural(prices.length, 'produto será alterado', 'produtos serão alterados')}.</p>
+                      <ul className={s.previewList}>
+                        {lines.map((line) => (
+                          <li key={line.productId} className="wb-text-body">
+                            {line.name}: {formatCents(line.fromCents)} → {formatCents(line.toCents)}
+                            {line.youReceiveCents !== null ? ` (você recebe ${formatCents(line.youReceiveCents)})` : ''}
+                            {line.exceedsLimit ? ' · variação grande' : ''}
+                          </li>
+                        ))}
+                      </ul>
+                      {prices.length > 5 ? (
+                        <button type="button" className={s.linkButton} onClick={() => setShowAll((v) => !v)}>{showAll ? 'Ver menos' : 'Ver todos'}</button>
+                      ) : null}
+                      {preview.requiresConfirmation && blocked.length === 0 ? (
+                        <div className={ui.stack} data-testid={T('bulk-large-change')}>
+                          <Banner tone="warning">Reajuste grande em pelo menos um produto. Confira os valores antes de aplicar.</Banner>
+                          <CheckboxField label="Conferi os valores novos" checked={confirmed} onChange={(event) => setConfirmedStamp(event.target.checked ? previewStamp : 0)} data-testid={T('bulk-large-confirm')} />
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               ) : (
