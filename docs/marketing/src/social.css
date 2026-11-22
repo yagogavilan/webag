@@ -82,7 +82,7 @@ svg, img { display: block; }
 /* ---------- post 0: "Aquela loja que você gosta agora entrega." (a frase termina na tela real) ----------
    Linhas de 160 px: "você gosta" = 10 x 0,5 x 160 = 800 px (cabe em 936). */
 .p0 h1 { position: absolute; left: 72px; top: 132px; font-size: 160px; }
-.p0 .shot { left: 72px; top: 770px; width: 900px; height: 504px; border-radius: 34px; background: var(--lima); box-shadow: 12px 12px 0 var(--noite); }
+.p0 .shot { left: 72px; top: 756px; width: 936px; height: 524px; border-radius: 34px; background: var(--lima); box-shadow: 12px 12px 0 var(--noite); }
 
 /* ---------- post 1: momento do dia (tela real grande, duas peças empilhadas) ---------- */
 .p1 .eyebrow { position: absolute; left: 72px; top: 144px; font: 800 44px/52px var(--texto); color: var(--lima); }
@@ -94,8 +94,8 @@ svg, img { display: block; }
 
 /* ---------- post 2: lojista recruta (pedido chegando no painel) ---------- */
 .p2 .emb { color: var(--noite); }
-.p2 h1 { position: absolute; left: 72px; top: 124px; font-size: 140px; }
-.p2 .shot { left: 72px; top: 556px; width: 820px; height: 646px; border-radius: 34px; background: var(--noite); box-shadow: 12px 12px 0 var(--roxo); }
+.p2 h1 { position: absolute; left: 72px; top: 124px; font-size: 132px; }
+.p2 .shot { left: 72px; top: 520px; width: 860px; height: 678px; border-radius: 34px; background: var(--noite); box-shadow: 12px 12px 0 var(--roxo); }
 .p2 .sticker { left: 716px; top: 150px; font-size: 50px; }
 .p2 .cta { position: absolute; left: 72px; top: 1236px; font: 800 42px/50px var(--texto); }
 
