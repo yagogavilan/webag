@@ -150,7 +150,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
 
     it('C17: nome com espaços, 1 caractere, 81 caracteres, NUL, controle e emoji nunca dá 500 e o nome gravado é texto limpo', async () => {
       const img = await uploadReady();
-      const names: [string, string | 'reject'][] = [
+      const names: [string, string][] = [
         ['  ', 'reject'],
         ['A', 'reject'],
         ['x'.repeat(81), 'reject'],
@@ -244,7 +244,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
         expect(Number(created) + rejected.length, JSON.stringify(res.body).slice(0, 300)).toBe(100);
         expect(await draftCount(id)).toBe(Number(created));
         const names = (await ctx.db.select({ n: products.name }).from(products).where(eq(products.storeId, id))).map((r) => r.n);
-        expect(names.some((n) => /[\u0000‮]/.test(n))).toBe(false);
+        expect(names.some((n) => n.includes('\u0000') || n.includes('\u202E'))).toBe(false);
       }
     });
   });
@@ -351,11 +351,6 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       const req = ctx.http.post(`${base(id)}/products/import`).query(query).set(as(merchant)).set('Content-Type', contentType);
       return (key ? req.set('Idempotency-Key', key) : req).send(body);
     };
-    let categoryName: string;
-    beforeAll(async () => {
-      categoryName = (await ctx.http.get('/v1/categories')).body.data?.[0]?.name ?? 'Geral';
-    });
-
     it('células com fórmula entram como texto literal e não quebram (=, +, -, @, tab); linha ruim vira erro da linha; nunca 500', async () => {
       const { merchant, id } = await freshStore();
       const cat = (await ctx.db.execute<{ name: string }>(sql`select name from categories where id = ${categoryId}`)).rows[0]!.name;
@@ -376,7 +371,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       const empty = await post(merchant, id, '', { mode: 'preview' });
       const only = await post(merchant, id, header, { mode: 'preview' });
       const asJson = await post(merchant, id, '{"a":1}', { mode: 'preview' }, 'application/json');
-      const bom = await post(merchant, id, `﻿${lines(2)}`, { mode: 'preview' });
+      const bom = await post(merchant, id, `\uFEFF${lines(2)}`, { mode: 'preview' });
       evidence(`[QA] CSV limites: 501 linhas=${over.status}, 1MB+1=${big.status}, vazio=${empty.status}, só cabeçalho=${only.status}, json=${asJson.status}, BOM=${bom.status} (${JSON.stringify(bom.body).slice(0, 160)})`);
       for (const r of [over, big, empty, only, asJson, bom]) expect(r.status).toBeLessThan(500);
       expect(over.status).toBeGreaterThanOrEqual(400);
@@ -610,7 +605,7 @@ describe('QA R1.1 + R1.2: exploratório do back-end', () => {
       const all = Object.values(dump).join('\n');
       const deliveryCode = (await ctx.db.execute<Record<string, unknown>>(sql`select * from orders where id = ${activeOrderId}`)).rows[0]!;
       const codeColumns = Object.entries(deliveryCode).filter(([k, v]) => /code|pin/i.test(k) && typeof v === 'string' && String(v).length >= 4).map(([k, v]) => [k, v as string] as const);
-      const baits = [buyerRow!.email, '11988887777', 'Souzaisca', 'Rua Teste', '07900-100', '07900100', buyer.user.userId, String(orderRow.address.lat ?? '#none#'), String(orderRow.address.lng ?? '#none#'), ...codeColumns.map(([, v]) => v)];
+      const baits = [buyerRow!.email, '11988887777', 'Souzaisca', 'Rua Teste', '07900-100', '07900100', buyer.user.userId, String((orderRow.address.lat as number | null) ?? '#none#'), String((orderRow.address.lng as number | null) ?? '#none#'), ...codeColumns.map(([, v]) => v)];
       for (const bait of baits) {
         if (bait === '#none#' || bait.length < 7) continue; // isca curta ("-12") casa com pedaço de UUID: seria falso positivo
         expect(all.includes(bait), `isca "${bait}" apareceu na visão`).toBe(false);
