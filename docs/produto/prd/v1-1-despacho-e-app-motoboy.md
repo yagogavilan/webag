@@ -1,6 +1,7 @@
 # PRD v1.1: Despacho, rota e app do motoboy
 
-Status: pronta para sprint (lado do PO; flags desligadas; liga só com J8 e J26; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-MOT-*, DEC-103 D-05, DEC-110 e DEC-111) | Histórias: WB-380 a WB-389
+Status: pronta para sprint (lado do PO; flags desligadas; liga só com J8 e J26; ver `backlog.md` §10.7) | Dono: product-owner | Data: 2026-11-22 | Atualizado: 2026-11-22 (DoR: controles C-MOT-*, DEC-103 D-05, DEC-110 e DEC-111); **2026-11-23 (DoR da R3: RN-D13 a RN-D15, WB-380 C1 e C6, WB-381 C12, WB-382 C7 e C8; WB-388 C2 passa à WB-391 C21; ver `backlog.md` §10.9)** | Histórias: WB-380 a WB-389
+**Escopo por release.** **R3 (sem app, sem GPS):** WB-380, 381, 382 e a operação despachando por WhatsApp (modo operação, RN-D13). **R4 (app, GPS, J8 e J26):** WB-383 a 389. Onde um critério abaixo cita app, GPS ou "motoboy em corrida" com posição, ele **só vale na R4**.
 Base: `prd/logistica.md` (WB-229 a 262), `regras-de-negocio.md` RN-18 (estados e lote) e RN-19 (ETA); DEC-036, DEC-053, DEC-064, DEC-076; backlog §6.1 (WB-300 a 309; este PRD absorve WB-301, WB-308 e parte de WB-302 e WB-304: ver backlog §10); `v1-1-pesquisa.md` §6 a §9. Rastreio e confirmação da loja: `prd/v1-1-rastreio-e-notificacoes.md`.
 
 ## Problema
@@ -81,6 +82,21 @@ Base: `prd/logistica.md` (WB-229 a 262), `regras-de-negocio.md` RN-18 (estados e
 
 **RN-D12 O que a operação enxerga do motoboy fora da corrida (DEC-111; a RN-D7 vence a WB-380 C1).** Nenhuma coleta de GPS em "Disponível". A lista mostra estado (Disponível, Em corrida, Sem sinal, Offline), "disponível há N min" e "última entrega concluída: bairro e hora" (dado da corrida já guardada, não é rastreio); o mapa só tem pino de motoboy **com corrida ativa**. A operação pode atribuir a motoboy "sem posição" (a tela avisa, não bloqueia). O perfil suporte vê só a posição atual de corrida ativa, sem histórico. O servidor descarta ponto enviado fora de corrida aceita (C-MOT-11). Revisar no gatilho de 3 motoboys. **Endereço sem ponto:** a operação não corrige endereço nem ponto; liga ao cliente; a parada fica fora do cálculo e na lista (gatilho de volta: > 5% dos pedidos sem ponto).
 
+**RN-D13 Modo operação (R3, sem app) (2026-11-23).** Quem despacha é a **operação da Webag** (perfis Operação e Super admin, RN-13; Suporte só vê; Financeiro só lê). A operação gera o lote, **envia por WhatsApp** (link `wa.me` com o texto pronto; **não há envio automático de WhatsApp**, DEC-003) e **registra no painel, em nome do motoboy**, o que ele responder: "aceitou", "recusou" (com motivo), "chegou à loja", e depois "entregue" (com o código que o cliente informa). Cada registro grava fonte `admin`, ator e hora (RN-07). O estado do motoboy na lista é só **Disponível** (sem rota ativa) ou **Em corrida** (com rota ativa); "Sem sinal" e "Offline" existem só com o app (R4). Não há posição de motoboy em nenhuma tela da R3 (RN-D7, RN-D12). Parâmetros: `courier_accept_timeout_min` (3).
+
+**RN-D14 Motoboy não aceita ou some (2026-11-23).**
+| Situação | O que acontece (R3; na R4 o app faz o registro) | Quem decide |
+|---|---|---|
+| **Recusa** | Operação registra "recusou" + motivo (Sem moto, Longe, Outro). O **lote inteiro** volta a PRONTA_PARA_COLETA **na mesma posição da fila** (o prazo restante e os alertas de 10 e 20 min contam do "pronto", **nunca reiniciam**). Nenhuma nota, contagem exibida ou penalidade ao motoboy (RN-D7, J8); a operação pode oferecer a outro | Operação |
+| **Sem resposta em 3 min** | Mesma volta à fila, com alerta "Sem resposta do Carlos em 3 minutos. A rota voltou para a fila." O 3 vale para o WhatsApp e para o app; a operação pode subir o parâmetro (para 5, por exemplo) se as expirações forem frequentes (`courier_offer_expired`, `[HIPÓTESE]` sem dado do piloto) | Operação |
+| **Aceitou e não chega** (sem "chegou" nem saída) | Alerta à operação em `motoboy_a_caminho_alerta_min` = 20 `[HIPÓTESE]` contados do aceite (R3, sem GPS); na R4 vira "ETA da loja + 10 min". Sem mudança de estado; a operação liga e, se preciso, **reatribui** com motivo "Motoboy sem resposta" | Operação |
+| **Sumiu depois de pegar** (saída registrada) | **Não reatribui** (RN-D11): a operação usa "Marcar problema" (NAO_ENTREGUE ou DEVOLVIDA_A_LOJA, RN-18, com motivo). O cliente recebe a mensagem de não entregue e a regra de estorno (RN-08). Quem arca com a mercadoria **não está definido**: pergunta F-R3-2 ao fundador | Operação; fundador |
+| **Corrida cancelada com motoboy a caminho** | Operação cancela; a tela mostra "Avise o Carlos: pedido #1042 cancelado, não precisa ir à loja" com botão de WhatsApp (R3); push no app (R4) | Operação |
+| **Aceite parcial** | Não existe: **oferta tudo ou nada** (RN-D11). Tirar 1 corrida: antes de enviar, ou "Reatribuir" antes da saída registrada | Operação |
+| **Aceite e expiração no mesmo instante, ou dois registros da operação** | Vale a primeira transição; a segunda recebe 409 e a tela mostra o estado atual | Sistema |
+
+**RN-D15 A rota é sugestão e o texto diz isso (J8, 2026-11-23).** A mensagem ao motoboy abre com "Sugestão de ordem" e traz paradas, links e dados de RN-18; **não traz horário-limite por parada, valor da corrida nem a faixa prometida ao cliente**. O horário previsto por parada existe só na tela da operação. O motoboy pode recusar ou seguir outra ordem, sem registro de "descumprimento". Pedir ao advogado que o J8 cubra explicitamente "rota sugerida por WhatsApp pela operação" (não só o app).
+
 **RN-D8 Dados do cliente no app.** Primeiro nome, endereço de entrega, observação e volumes; telefone do cliente só durante a corrida ativa e por botão de ligar (nunca copiável em tela); sem CPF, e-mail, itens ou valores (alinha RN-18 "Dados").
 
 **RN-D9 Custo.** Segue RN-18: o admin registra o custo da corrida; o app não calcula nem mostra ganhos.
@@ -104,6 +120,8 @@ Como operação, quero ver pedidos e motoboys no mapa, para decidir quem leva o 
 - **C3** Dado o mapa sem rede de tiles, então a lista segue funcionando com a mensagem "Mapa indisponível".
 - **C4** Dado o mapa, então mostra "© OpenStreetMap" e carrega tiles do armazenamento do próprio projeto (nenhuma requisição aos servidores da fundação OSM, teste de rede).
 - **C5** Dado destino dentro do raio, então o pino usa o ponto do endereço confirmado (ADR-015); sem ponto, o destino aparece "sem posição" e não entra no cálculo de rota.
+- **C6** (R3, 2026-11-23) Dado a R3 (sem app), então o mapa mostra lojas, destinos e a rota proposta, **sem nenhum pino de motoboy** e sem "última posição" (a segunda metade do C1 só vale na R4); o cartão do motoboy mostra "Disponível" ou "Em corrida" (RN-D13).
+- **C7** Dado nenhuma corrida pronta, então o mapa mostra o estado vazio "Nenhum pedido pronto agora" (texto do spec) e a lista idem; dado erro de carga, "Não conseguimos carregar agora" com "Tentar de novo".
 
 ### WB-381 Admin: agrupar e gerar rota — Must — dep: WB-256, WB-249
 Como operação, quero que o sistema proponha a ordem das paradas, para entregar mais por hora sem pensar na ordem.
@@ -118,6 +136,9 @@ Como operação, quero que o sistema proponha a ordem das paradas, para entregar
 - **C9** Dado 1 corrida só, então "Gerar rota" mostra a parada da coleta e da entrega (rota simples).
 - **C10** (C-MOT-14) Dado a geração da rota, então o servidor a monta só a partir de ids de corridas, validando cidade e capacidade; corrida de outra cidade enviada pela API retorna 422; a reordenação é auditada.
 - **C11** (RN-D11) Dado a atribuição, então cada lote vai a 1 motoboy; motoboy com rota ativa e 1 oferta pendente não recebe outra ("Carlos já tem uma rota ativa"); para usar 2 motoboys a operação gera 2 lotes.
+- **C12** (R3, RN-D13) Dado a rota confirmada, então as corridas vão a AGUARDANDO_MOTOBOY e a tela mostra os botões "Carlos aceitou" e "Carlos recusou" (motivo obrigatório: Sem moto, Longe, Outro) e a contagem de 3 minutos; o comportamento de cada resposta é o da WB-391 C16 a C19.
+- **C13** (R3) Dado o lote de 3 corridas e uma 2ª seleção de 2 corridas logo depois para o Rafael, então a operação gera o 2º lote sem refazer o 1º (cada lote <= 90 s); não existe "dividir a seleção" em uma só tela (DEC-111).
+- **C14** (R3) Dado o perfil Suporte ou Financeiro, então vê fila, mapa e histórico **sem** botão de atribuir, aceitar, recusar ou reordenar (403 se chamar a API).
 
 ### WB-382 Rota por link: abrir no Maps ou Waze — Must — dep: WB-381, WB-232
 Como motoboy sem o app, quero abrir cada parada no meu aplicativo de mapa, para navegar sem digitar endereço.
@@ -127,6 +148,8 @@ Como motoboy sem o app, quero abrir cada parada no meu aplicativo de mapa, para 
 - **C4** Dado iPhone e Android, então os links abrem o app de mapa do aparelho (teste manual em aparelho; limite de paradas por link: pergunta L6).
 - **C5** Dado o app do motoboy instalado, então a mensagem também chega por push e a de WhatsApp só em contingência.
 - **C6** (C-MOT-13) Dado o gerador de link do Maps e do Waze, então um teste garante que a URL leva só coordenadas ou o endereço da parada, sem nome nem telefone do cliente (o histórico do Google não recebe dado pessoal).
+- **C7** (RN-D15, J8) Dado a mensagem de WhatsApp da rota, então abre com "Sugestão de ordem" e **não** traz horário-limite por parada, valor da corrida, faixa prometida, código de entrega, CPF, e-mail nem itens (teste de snapshot do template).
+- **C8** (R3) Dado a rota com 1 a 4 corridas, então a mensagem cabe em um único `wa.me` (limite de caracteres do link: o mobile-dev confirma na L6; acima do limite, a tela oferece "Copiar mensagem"); dado corrida cancelada depois do envio, então a tela oferece o texto "Pedido #1042 cancelado, não precisa ir à loja" para o mesmo motoboy.
 
 ### WB-383 Cadastro e convite do motoboy — Must — dep: WB-231, parecer J8 e J26
 Como operação, quero convidar o motoboy, para ele entrar no app sem senha compartilhada.
