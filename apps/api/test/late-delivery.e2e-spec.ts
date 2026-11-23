@@ -421,7 +421,19 @@ describe('Atraso da entrega: aviso, cancelamento sem custo e compensação (RN-1
     const plain = await outForDelivery();
     await late(r.orderId, 20);
     expect((await cancelLate(r)).status).toBe(200); // em saída, o cancelamento por atraso vira PEDIDO à operação
-    const find = async () => ((await ctx.http.get(`${base}/deliveries`).query({ limit: '50' }).set(bearer(ops.accessToken)).expect(200)).body.data as { id: string; lateAlertedAt: string | null; lateCancelRequest: { status: string; requestedAt: string; respondBy: string } | null }[]);
+    // A lista do admin é paginada (50 por página) e o banco de teste é compartilhado: com muitas corridas de outros arquivos a deste teste pode cair numa página seguinte, então segue o cursor.
+    type Run = { id: string; lateAlertedAt: string | null; lateCancelRequest: { status: string; requestedAt: string; respondBy: string; decidedAt: string | null; decidedBy: string | null } | null };
+    const find = async (): Promise<Run[]> => {
+      const all: Run[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        const body = (await ctx.http.get(`${base}/deliveries`).query({ limit: '50', ...(cursor ? { cursor } : {}) }).set(bearer(ops.accessToken)).expect(200)).body as { data: Run[]; nextCursor: string | null };
+        all.push(...body.data);
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+      return all;
+    };
     const mine = (await find()).find((d) => d.id === r.delivery.id)!;
     expect(mine.lateCancelRequest).toMatchObject({ status: 'pending', decidedAt: null, decidedBy: null });
     expect(Date.parse(mine.lateCancelRequest!.respondBy) - Date.parse(mine.lateCancelRequest!.requestedAt)).toBe(10 * 60_000); // entrega_cancel_resposta_min

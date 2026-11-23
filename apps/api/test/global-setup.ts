@@ -30,6 +30,28 @@ async function ensureRoles(admin: pg.Client): Promise<boolean> {
   }
 }
 
+/**
+ * Disco (DT-116): execução que morre no meio (ENOSPC, kill, timeout) deixa o banco `<db>_<pid>_test` para trás (~30 MB cada) e, com o tempo, o disco enche. Apaga os bancos de execuções
+ * ANTERIORES cujo processo (pid do nome) não existe mais e sem conexão aberta. Nunca toca o desta execução, nem os de nome fixo por TEST_DB_NAME (QA e Security os guardam para inspeção).
+ */
+async function dropStaleRunDatabases(admin: pg.Client, current: string): Promise<void> {
+  try {
+    const { rows } = await admin.query<{ datname: string }>(`SELECT datname FROM pg_database d WHERE datname ~ '_[0-9]+_test$' AND datname <> $1 AND NOT EXISTS (SELECT 1 FROM pg_stat_activity a WHERE a.datname = d.datname)`, [current]);
+    for (const { datname } of rows) {
+      const pid = Number(/_(\d+)_test$/.exec(datname)?.[1]);
+      let alive = true;
+      try {
+        process.kill(pid, 0);
+      } catch (error) {
+        alive = (error as NodeJS.ErrnoException).code === 'EPERM'; // ESRCH: o processo morreu
+      }
+      if (!alive && /^[a-z0-9_]+$/.test(datname)) await admin.query(`DROP DATABASE IF EXISTS "${datname}" WITH (FORCE)`);
+    }
+  } catch (error) {
+    console.warn(`[e2e] limpeza de bancos de teste antigos ignorada: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /** Extensões, posse do banco e acesso, com o MESMO arquivo que a infra usa em produção (`infra/postgres/40-roles-grants.sql`). */
 async function provisionDatabaseRoles(databaseUrl: string): Promise<void> {
   const db = new pg.Client({ connectionString: databaseUrl });
@@ -56,6 +78,7 @@ export default async function setup(): Promise<() => Promise<void>> {
   await admin.connect();
   let rolesReady: boolean;
   try {
+    await dropStaleRunDatabases(admin, dbName);
     rolesReady = await ensureRoles(admin);
     // SEC-212: no CI (REQUIRE_DB_ROLES=1) sem os papéis a execução inteira falha já aqui, antes de qualquer teste de papel ser "verde" por estar pulado.
     if (!rolesReady && process.env.REQUIRE_DB_ROLES === '1') throw new Error('REQUIRE_DB_ROLES=1, mas os papéis webag_migrator e webag_app não puderam ser criados (o usuário do teste precisa ser superusuário)');

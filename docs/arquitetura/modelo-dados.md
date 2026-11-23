@@ -218,6 +218,8 @@ O razão financeiro (`ledger_*`) NÃO recebe lançamento da campanha (o desconto
 | `orders_updated_idx (updated_at)` e `orders_paid_idx (paid_at) WHERE paid_at IS NOT NULL` | R4: o job de agregação (R2.3) não varre `orders` | índice |
 | Gatilho `product_price_history_close_only` (só `ended_at` de nulo para valor) e `REVOKE DELETE, TRUNCATE` em `coupon_reservations` e `product_price_history` (`NO_DELETE_TABLES` em `app-grants.ts`) | SEC-230, S6 | gatilho e privilégio |
 
+**R2.2: nenhuma migração.** O motor (`modules/campaigns`) grava nas tabelas da 0064 e a função `campaign_budget_violations()` (0066) é o invariante: vazia depois de cada cenário dos testes. As varreduras (1 minuto) ligam `scheduled -> active` repetindo as conferências, encerram por validade, orçamento ou usos e expurgam `coupon_fraud_claims`, `coupon_identifier_sightings` e `coupon_fraud_signals` acima de `cupom_fraude_retencao_meses`.
+
 **Posse (B2):** `coupons` e `coupon_redemptions` são do módulo `campaigns` (a definição Drizzle está em `campaigns/db/schema.ts`; as tabelas são as da 0004, nada migra). Privacidade: `coupon_fraud_claims` e `coupon_identifier_sightings` entram no `PRIVACY_MAP` (SEC-231).
 
 ## Mapa das migrações (0000 a 0053)
