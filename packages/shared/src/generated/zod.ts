@@ -15,9 +15,10 @@
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
  * Permissões do admin (WB-355): TODA operação `/v1/admin/*` declara `x-admin-permission` (chave da tabela única `permissions.ts`; `admin-self` = qualquer perfil de admin, só nas rotas do próprio TOTP). Rota nova sem a chave falha no CI; o teste de matriz percorre todas as rotas reais com os 4 perfis, um lojista e um cliente.
  * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
+ * Mudanças de 0.4.0 para 0.5.0 (v1.1, R2, ADR-019): só adições (campanhas e cupons por fonte de custo, painéis prontos, funil e porta falsa dos acessos, convites e cupom próprio da loja, vitrine de cupons da sacola, código de barras, elegibilidade do "de/por"); operações novas levam `x-planned: v1.1 R2` até serem implementadas. Campos novos em `CartCoupon`, `CartSummary`, `Order`, `ProductVariant` e nos corpos de variação são opcionais (o app publicado ignora). **Comportamento que muda sem mudar o formato:** `originalPrice` e `discountPercent` (vitrine, produto e variação) passam a vir nulos quando o preço "de" não foi praticado por 30 dias (RN-C8, `getPromotionEligibility`); campo estranho em `applyCartCoupon` ou `createOrder` (`discountCents`, fonte de custo, `campaignId`) é 422 `FIELD_NOT_EDITABLE`. Nenhum campo, parâmetro ou rota do contrato majora preço, frete ou taxa por causa de cupom (DEC-088, F1).
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
  *
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import * as zod from 'zod';
 
@@ -6194,7 +6195,8 @@ export const CreateProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6415,7 +6417,8 @@ export const GetProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6516,7 +6519,8 @@ export const UpdateProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6568,6 +6572,7 @@ export const setProductVariantsBodyAttributesMax = 5;
 
 export const setProductVariantsBodyVariantsItemAttributesMaxOne = 40;
 
+export const setProductVariantsBodyVariantsItemBarcodeRegExp = new RegExp('^[0-9]{8}$|^[0-9]{12,14}$');
 export const setProductVariantsBodyVariantsItemSkuMax = 40;
 
 export const setProductVariantsBodyVariantsMax = 300;
@@ -6579,6 +6584,7 @@ export const SetProductVariantsBody = zod.object({
   "variants": zod.array(zod.object({
   "id": zod.uuid().optional(),
   "attributes": zod.record(zod.string(), zod.string().max(setProductVariantsBodyVariantsItemAttributesMaxOne)),
+  "barcode": zod.string().regex(setProductVariantsBodyVariantsItemBarcodeRegExp).nullish().describe('v1.1 R2 (WB-373): código de barras da variação; inválido: 422 `BARCODE_INVALID`; já usado por outro produto da loja: 409 `BARCODE_IN_USE` (com `productId`). Campo novo opcional'),
   "stock": zod.int().optional(),
   "priceCents": zod.int().nullish(),
   "sku": zod.string().max(setProductVariantsBodyVariantsItemSkuMax).nullish()
@@ -6630,7 +6636,8 @@ export const SetProductVariantsResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6693,7 +6700,8 @@ export const AdjustVariantStockResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 }).and(zod.object({
   "productVersion": zod.int().min(1).describe('Versão do produto depois do ajuste (o ajuste manual de estoque é edição de catálogo e sobe 1); o `If-Match` da próxima escrita')
 })).describe('v1.1 R1 (DEC-132): a variação como sempre, mais a versão do produto depois do ajuste. Campo aditivo: cliente antigo ignora `productVersion`')
@@ -6768,7 +6776,8 @@ export const SetProductImagesResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6847,7 +6856,8 @@ export const PublishProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -6954,7 +6964,8 @@ export const QuickPublishProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -7026,7 +7037,8 @@ export const PauseProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -7098,7 +7110,8 @@ export const ResumeProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -8618,6 +8631,15 @@ export const GetCartQueryParams = zod.object({
   "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
 })
 
+export const getCartResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const getCartResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const getCartResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
+
 export const GetCartResponse = zod.object({
   "id": zod.uuid().nullable(),
   "revision": zod.int().describe('Sobe a cada mudança; o checkout confere para nunca cobrar valor que o cliente não viu'),
@@ -8674,7 +8696,22 @@ export const GetCartResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(getCartResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(getCartResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(getCartResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -8719,7 +8756,13 @@ export const GetCartResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -8751,6 +8794,15 @@ export const ClearCartQueryParams = zod.object({
   "mode": zod.enum(['delivery', 'pickup']).default(clearCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
   "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
 })
+
+export const clearCartResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const clearCartResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const clearCartResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const ClearCartResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -8808,7 +8860,22 @@ export const ClearCartResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(clearCartResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(clearCartResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(clearCartResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -8853,7 +8920,13 @@ export const ClearCartResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -8898,6 +8971,15 @@ export const SetCartItemBody = zod.object({
   "quantity": zod.int().min(1).max(setCartItemBodyQuantityMax),
   "replaceStore": zod.boolean().optional().describe('Confirma \'Esvaziar e continuar\' ao trocar de loja (WB-021)')
 })
+
+export const setCartItemResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const setCartItemResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const setCartItemResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const SetCartItemResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -8955,7 +9037,22 @@ export const SetCartItemResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(setCartItemResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(setCartItemResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(setCartItemResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9000,7 +9097,13 @@ export const SetCartItemResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -9036,6 +9139,15 @@ export const RemoveCartItemQueryParams = zod.object({
   "mode": zod.enum(['delivery', 'pickup']).default(removeCartItemQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
   "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
 })
+
+export const removeCartItemResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const removeCartItemResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const removeCartItemResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const RemoveCartItemResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -9093,7 +9205,22 @@ export const RemoveCartItemResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(removeCartItemResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(removeCartItemResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(removeCartItemResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9138,7 +9265,13 @@ export const RemoveCartItemResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -9161,7 +9294,7 @@ export const RemoveCartItemResponse = zod.object({
 
 
 /**
- * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP.
+ * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP. **v1.1 R2 (ADR-019 D5):** o corpo só aceita `code` (até 32 caracteres, letras, números e hífen; C-CUP-01): qualquer outro campo (`discountCents`, fonte de custo, `campaignId`, `storeSharePct`) é 422 `FIELD_NOT_EDITABLE`, e o total é sempre o do servidor. Códigos novos de 422 (a sacola não muda): `COUPON_SHORTFALL` ("Faltam R$ X": `Cart.coupon.shortfall` também vem na leitura; o total não muda), `COUPON_UNAVAILABLE` (margem do pedido <= 0: "Cupom não disponível para este pedido"), `COUPON_EXHAUSTED_TODAY` ("Cupom esgotado hoje": o pedido segue sem cupom se o cliente confirmar), `COUPON_NOT_APPLICABLE` (qualquer sinal do antifraude: CPF de outra conta, aparelho, endereço, velocidade ou suspeito aberto; texto neutro "Não foi possível aplicar este cupom a este pedido" com "Falar com o suporte", e o cliente NUNCA vê qual identificador casou, RN-C11). `COUPON_NOT_FOUND` cobre também código de campanha segmentada, privada, de outro público ou de loja sem aceite: o MESMO texto "Cupom inválido" (C-CUP-06); `COUPON_FIRST_PURCHASE_ONLY` ("Cupom válido só na primeira compra") só para a conta com pedido pago anterior. O celular do perfil NÃO é critério (DEC-103 D-01); o e-mail confirmado é (`COUPON_EMAIL_UNVERIFIED`). Tentativas: 10 por hora por conta, 30 por hora por IP e 10 por hora por aparelho (`X-Device-Id`); a seguinte é 429 `COUPON_RATE_LIMITED` com `Retry-After` de 1 hora e texto neutro. A aplicação NÃO reserva orçamento: a reserva é atômica na criação do pedido (`createOrder`).
  * @summary Aplicar ou trocar o cupom (WB-022)
  */
 export const applyCartCouponQueryModeDefault = `delivery`;
@@ -9178,6 +9311,15 @@ export const applyCartCouponBodyCodeMax = 30;
 export const ApplyCartCouponBody = zod.object({
   "code": zod.string().min(1).max(applyCartCouponBodyCodeMax)
 })
+
+export const applyCartCouponResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const applyCartCouponResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const applyCartCouponResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const ApplyCartCouponResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -9235,7 +9377,22 @@ export const ApplyCartCouponResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(applyCartCouponResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(applyCartCouponResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(applyCartCouponResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9280,7 +9437,13 @@ export const ApplyCartCouponResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -9311,6 +9474,15 @@ export const RemoveCartCouponQueryParams = zod.object({
   "mode": zod.enum(['delivery', 'pickup']).default(removeCartCouponQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
   "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
 })
+
+export const removeCartCouponResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const removeCartCouponResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const removeCartCouponResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const RemoveCartCouponResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -9368,7 +9540,22 @@ export const RemoveCartCouponResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(removeCartCouponResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(removeCartCouponResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(removeCartCouponResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9413,7 +9600,13 @@ export const RemoveCartCouponResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -9445,6 +9638,15 @@ export const AcknowledgeCartQueryParams = zod.object({
   "mode": zod.enum(['delivery', 'pickup']).default(acknowledgeCartQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
   "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
 })
+
+export const acknowledgeCartResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const acknowledgeCartResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const acknowledgeCartResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const AcknowledgeCartResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -9502,7 +9704,22 @@ export const AcknowledgeCartResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(acknowledgeCartResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(acknowledgeCartResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(acknowledgeCartResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9547,7 +9764,13 @@ export const AcknowledgeCartResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -9592,6 +9815,15 @@ export const MergeCartBody = zod.object({
   "quantity": zod.int().min(1).max(mergeCartBodyItemsItemQuantityMax)
 })).max(mergeCartBodyItemsMax)
 })
+
+export const mergeCartResponseCouponTwoBreakdownOneTotalCentsMin = 0;
+
+export const mergeCartResponseCouponTwoBreakdownOneStoreCentsMin = 0;
+
+export const mergeCartResponseCouponTwoBreakdownOneWebagCentsMin = 0;
+
+
+
 
 export const MergeCartResponse = zod.object({
   "id": zod.uuid().nullable(),
@@ -9649,7 +9881,22 @@ export const MergeCartResponse = zod.object({
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "scope": zod.enum(['store', 'platform']),
   "applied": zod.boolean(),
-  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)')
+  "rejection": zod.string().nullable().describe('Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional().describe('v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional'),
+  "breakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(mergeCartResponseCouponTwoBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(mergeCartResponseCouponTwoBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(mergeCartResponseCouponTwoBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional'),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
   "logisticsOpensAt": zod.iso.datetime({"offset":true}).nullish().describe('BUG-016/021: com o bloqueio `LOGISTICS_CLOSED` por horário (inclui o fim da faixa depois do fechamento), quando a entrega volta ("Entrega volta às HH:MM"); nulo em pausa do admin.'),
@@ -9694,7 +9941,13 @@ export const MergeCartResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "checkout": zod.object({
   "canCheckout": zod.boolean(),
@@ -10528,6 +10781,8 @@ export const CancelOrderByStoreResponse = zod.object({
  * **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  *
  * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
+ *
+ * **v1.1 R2 (ADR-019 D4, D6, D7):** a primeira compra passa a ser travada POR IDENTIFICADOR (HMAC de conta, aparelho, endereço normalizado e documento do pagador, `pg_advisory_xact_lock` em ordem fixa), valendo ENTRE campanhas; o celular não é identificador. Com cupom de campanha, o desconto é composto no servidor (`desconto_loja` + `desconto_webag`, RN-C2) e o **orçamento é reservado na MESMA transação do pedido**, sob a trava da linha da campanha (e da adesão da loja quando há parte da loja): orçamento total, do dia (America/Sao_Paulo), usos, teto mensal da loja, estado `active` e aceite são reconferidos ali, sem confiar na cotação nem no cache (C-CUP-02, C-CUP-10). Campanha pausada entre a cotação e o pedido (C-CUP-10): o pedido NUNCA sai com o cupom; como o total muda e `expectedTotalCents` é obrigatório, a criação responde 409 `CART_CHANGED` com `DISCOUNT_CHANGED` (nada reservado, nada cobrado) e o pedido sem cupom só nasce depois de o cliente ver o total novo. Sem saldo de orçamento, de usos ou do teto da loja: o mesmo 409 `CART_CHANGED` com `DISCOUNT_CHANGED`. O corpo continua sem desconto, fonte ou campanha (422 `FIELD_NOT_EDITABLE`). A reserva vira gasto ao pagamento aprovado e volta ao expirar, cancelar ou estornar (parcial: proporcional, RN-08), uma única vez.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrderHeaderIdempotencyKeyMin = 8;
@@ -10569,6 +10824,12 @@ export const CreateOrderBody = zod.object({
   "payerDocument": zod.string().regex(createOrderBodyPayerDocumentRegExp).optional().describe('CPF (11 dígitos) quando o provedor exigir (`PAYER_DOCUMENT_REQUIRED`). Vai só ao provedor; não é guardado pelo Webag além do necessário para a conciliação.')
 })
 
+
+export const createOrderResponseCouponBreakdownOneTotalCentsMin = 0;
+
+export const createOrderResponseCouponBreakdownOneStoreCentsMin = 0;
+
+export const createOrderResponseCouponBreakdownOneWebagCentsMin = 0;
 
 
 
@@ -10686,9 +10947,23 @@ export const CreateOrderResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "couponCode": zod.string().nullable(),
+  "couponBreakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(createOrderResponseCouponBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(createOrderResponseCouponBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(createOrderResponseCouponBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional'),
   "delivery": zod.union([zod.null(),zod.object({
   "address": zod.object({
   "id": zod.uuid(),
@@ -10814,6 +11089,12 @@ export const GetOrderParams = zod.object({
 })
 
 
+export const getOrderResponseCouponBreakdownOneTotalCentsMin = 0;
+
+export const getOrderResponseCouponBreakdownOneStoreCentsMin = 0;
+
+export const getOrderResponseCouponBreakdownOneWebagCentsMin = 0;
+
 
 
 export const GetOrderResponse = zod.object({
@@ -10930,9 +11211,23 @@ export const GetOrderResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "couponCode": zod.string().nullable(),
+  "couponBreakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(getOrderResponseCouponBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(getOrderResponseCouponBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(getOrderResponseCouponBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional'),
   "delivery": zod.union([zod.null(),zod.object({
   "address": zod.object({
   "id": zod.uuid(),
@@ -11039,6 +11334,12 @@ export const CancelOrderLateBody = zod.object({
 
 })
 
+
+export const cancelOrderLateResponseCouponBreakdownOneTotalCentsMin = 0;
+
+export const cancelOrderLateResponseCouponBreakdownOneStoreCentsMin = 0;
+
+export const cancelOrderLateResponseCouponBreakdownOneWebagCentsMin = 0;
 
 
 
@@ -11156,9 +11457,23 @@ export const CancelOrderLateResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "couponCode": zod.string().nullable(),
+  "couponBreakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(cancelOrderLateResponseCouponBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(cancelOrderLateResponseCouponBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(cancelOrderLateResponseCouponBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional'),
   "delivery": zod.union([zod.null(),zod.object({
   "address": zod.object({
   "id": zod.uuid(),
@@ -11478,6 +11793,12 @@ export const CancelOrderBody = zod.object({
 })
 
 
+export const cancelOrderResponseCouponBreakdownOneTotalCentsMin = 0;
+
+export const cancelOrderResponseCouponBreakdownOneStoreCentsMin = 0;
+
+export const cancelOrderResponseCouponBreakdownOneWebagCentsMin = 0;
+
 
 
 export const CancelOrderResponse = zod.object({
@@ -11594,9 +11915,23 @@ export const CancelOrderResponse = zod.object({
   "missingForMinimum": zod.union([zod.object({
   "amount": zod.int().describe('Centavos'),
   "currency": zod.enum(['BRL'])
-}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\'')
+}).describe('Valor monetário em centavos.'),zod.null()]).describe('\'Faltam R$ X para o pedido mínimo\''),
+  "lines": zod.array(zod.object({
+  "key": zod.enum(['subtotal', 'delivery', 'service_fee', 'coupon_discount', 'total']),
+  "label": zod.string(),
+  "amountCents": zod.int().describe('Com sinal: o desconto é negativo'),
+  "origin": zod.union([zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),zod.null()]).optional()
+})).optional().describe('v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como \'Entrega: Grátis\'. Campo novo opcional (o app antigo usa os campos acima)')
 }).describe('Total = subtotal - cupom + frete + taxa de serviço (RN-05, RN-10), em centavos. É a MESMA conta que o pedido usa.'),
   "couponCode": zod.string().nullable(),
+  "couponBreakdown": zod.union([zod.object({
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "totalCents": zod.int().min(cancelOrderResponseCouponBreakdownOneTotalCentsMin),
+  "storeCents": zod.int().min(cancelOrderResponseCouponBreakdownOneStoreCentsMin),
+  "webagCents": zod.int().min(cancelOrderResponseCouponBreakdownOneWebagCentsMin),
+  "appliesTo": zod.enum(['items', 'delivery']),
+  "label": zod.string().describe('Texto pt-BR da linha ("Desconto Webag (entrega)")')
+}).describe('Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional'),
   "delivery": zod.union([zod.null(),zod.object({
   "address": zod.object({
   "id": zod.uuid(),
@@ -14419,7 +14754,7 @@ export const ListPlatformCouponsResponse = zod.object({
 
 
 /**
- * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado. **v1.1 R2:** com a flag `campanhas_cupom` ligada a criação de cupom da plataforma por esta rota passa a responder 409 `USE_CAMPAIGNS` (o cupom da plataforma é uma campanha `webag`, com orçamento e reserva: `createCampaign`); os cupons já existentes seguem pela regra de hoje até serem encerrados e ficam fora do orçamento (ADR-019 D13).
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCouponBodyCodeMin = 4;
@@ -15712,7 +16047,8 @@ export const CreateProductDraftResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -15765,6 +16101,7 @@ export const createProductDraftsBatchBodyItemsItemVariantsItemStockDefault = 1;
 export const createProductDraftsBatchBodyItemsItemVariantsItemStockMin = 0;
 export const createProductDraftsBatchBodyItemsItemVariantsItemStockMax = 99999;
 
+export const createProductDraftsBatchBodyItemsItemVariantsItemBarcodeRegExp = new RegExp('^[0-9]{8}$|^[0-9]{12,14}$');
 export const createProductDraftsBatchBodyItemsItemVariantsMax = 100;
 
 export const createProductDraftsBatchBodyItemsMax = 100;
@@ -15782,7 +16119,8 @@ export const CreateProductDraftsBatchBody = zod.object({
   "variants": zod.array(zod.object({
   "attributes": zod.record(zod.string(), zod.string().max(createProductDraftsBatchBodyItemsItemVariantsItemAttributesMaxOne)),
   "stock": zod.int().min(createProductDraftsBatchBodyItemsItemVariantsItemStockMin).max(createProductDraftsBatchBodyItemsItemVariantsItemStockMax).default(createProductDraftsBatchBodyItemsItemVariantsItemStockDefault),
-  "priceCents": zod.int().nullish().describe('Preço próprio quando difere do produto (linhas juntadas com preços diferentes)')
+  "priceCents": zod.int().nullish().describe('Preço próprio quando difere do produto (linhas juntadas com preços diferentes)'),
+  "barcode": zod.string().regex(createProductDraftsBatchBodyItemsItemVariantsItemBarcodeRegExp).nullish().describe('v1.1 R2 (WB-373). Campo novo opcional')
 })).max(createProductDraftsBatchBodyItemsItemVariantsMax).optional(),
   "categoryId": zod.uuid().nullish()
 })).min(1).max(createProductDraftsBatchBodyItemsMax)
@@ -15865,7 +16203,8 @@ export const DuplicateProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -16430,7 +16769,8 @@ export const RestoreAdminStoreHistoryEntryResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -16836,7 +17176,8 @@ export const CreateAdminProductDraftResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -16911,7 +17252,8 @@ export const GetAdminStoreProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17018,7 +17360,8 @@ export const EditAdminStoreProductResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17058,6 +17401,7 @@ export const setAdminStoreProductVariantsBodyDataAttributesMax = 5;
 
 export const setAdminStoreProductVariantsBodyDataVariantsItemAttributesMaxOne = 40;
 
+export const setAdminStoreProductVariantsBodyDataVariantsItemBarcodeRegExp = new RegExp('^[0-9]{8}$|^[0-9]{12,14}$');
 export const setAdminStoreProductVariantsBodyDataVariantsItemSkuMax = 40;
 
 export const setAdminStoreProductVariantsBodyDataVariantsMax = 300;
@@ -17076,6 +17420,7 @@ export const SetAdminStoreProductVariantsBody = zod.object({
   "variants": zod.array(zod.object({
   "id": zod.uuid().optional(),
   "attributes": zod.record(zod.string(), zod.string().max(setAdminStoreProductVariantsBodyDataVariantsItemAttributesMaxOne)),
+  "barcode": zod.string().regex(setAdminStoreProductVariantsBodyDataVariantsItemBarcodeRegExp).nullish().describe('v1.1 R2 (WB-373): código de barras da variação; inválido: 422 `BARCODE_INVALID`; já usado por outro produto da loja: 409 `BARCODE_IN_USE` (com `productId`). Campo novo opcional'),
   "stock": zod.int().optional(),
   "priceCents": zod.int().nullish(),
   "sku": zod.string().max(setAdminStoreProductVariantsBodyDataVariantsItemSkuMax).nullish()
@@ -17129,7 +17474,8 @@ export const SetAdminStoreProductVariantsResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17224,7 +17570,8 @@ export const AdjustAdminStoreVariantStockResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17318,7 +17665,8 @@ export const SetAdminStoreProductImagesResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17408,7 +17756,8 @@ export const SetAdminStoreProductStatusResponse = zod.object({
   "reserved": zod.int(),
   "available": zod.int().describe('estoque menos reservado'),
   "soldOut": zod.boolean(),
-  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja')
+  "low": zod.boolean().describe('Disponível maior que zero e menor ou igual ao limite da loja'),
+  "barcode": zod.string().nullish().describe('v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional')
 })),
   "images": zod.array(zod.object({
   "id": zod.uuid().describe('Id do upload (`/uploads`)'),
@@ -17513,6 +17862,9 @@ export const BulkAdminStoreProductsResponse = zod.object({
  * @summary Enviar eventos de navegação, sem identificar a conta (WB-361)
  */
 export const ingestAnalyticsEventsBodyEventsItemOneAppVersionRegExp = new RegExp('^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$');
+export const ingestAnalyticsEventsBodyEventsItemFiveSessionIdMin = 16;
+export const ingestAnalyticsEventsBodyEventsItemFiveSessionIdMax = 64;
+
 export const ingestAnalyticsEventsBodyEventsMax = 100;
 
 
@@ -17548,7 +17900,13 @@ export const IngestAnalyticsEventsBody = zod.object({
   "occurredAt": zod.iso.datetime({"offset":true}),
   "storeId": zod.uuid(),
   "productId": zod.uuid()
-})])).min(1).max(ingestAnalyticsEventsBodyEventsMax)
+}),zod.object({
+  "name": zod.enum(['checkout_started']),
+  "eventId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "sessionId": zod.string().min(ingestAnalyticsEventsBodyEventsItemFiveSessionIdMin).max(ingestAnalyticsEventsBodyEventsItemFiveSessionIdMax),
+  "storeId": zod.uuid()
+}).describe('v1.1 R2 (WB-362 C3): início do checkout. Mesmas regras de privacidade dos demais eventos (sem conta, sem valor, sem endereço). Só passa a existir na coleta quando a R1.4 for construída com ele (ADR-019 pendência 5).')])).min(1).max(ingestAnalyticsEventsBodyEventsMax)
 })
 
 export const IngestAnalyticsEventsResponse = zod.object({
@@ -17633,4 +17991,2643 @@ export const GetAdminAnalyticsAccessResponse = zod.object({
   "unknown_store": zod.int().min(getAdminAnalyticsAccessResponseDiscardsUnknownStoreMin),
   "flag_off": zod.int().min(getAdminAnalyticsAccessResponseDiscardsFlagOffMin)
 }).optional().describe('Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento')
+})
+
+
+/**
+ * Permissão `coupons:read` (super admin, operação e financeiro; suporte 403). Cartão por campanha: estado, fonte em texto, convites aceitos, gasto total e do dia contra o orçamento (números exatos do servidor, a barra é só o desenho), usos e, se encerrada, o motivo. Inclui campanhas de loja (`owner: store`), sem orçamento da Webag. Mais recentes primeiro, keyset por `(createdAt, id)`. Os alertas ficam em `listCampaignAlerts`.
+ * @summary Listar campanhas com barra de orçamento (WB-340, WB-342 C4, WB-349)
+ */
+export const listCampaignsQueryCursorMax = 200;
+
+export const listCampaignsQueryLimitDefault = 20;
+export const listCampaignsQueryLimitMax = 50;
+
+
+
+export const ListCampaignsQueryParams = zod.object({
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).optional(),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).optional(),
+  "owner": zod.enum(['webag', 'store']).optional(),
+  "cursor": zod.string().max(listCampaignsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listCampaignsQueryLimitMax).default(listCampaignsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+
+export const listCampaignsResponseDataItemStoreSharePctMin = 0;
+export const listCampaignsResponseDataItemStoreSharePctMax = 100;
+
+export const listCampaignsResponseDataItemBudgetReservedCentsMin = 0;
+
+export const listCampaignsResponseDataItemBudgetSpentCentsMin = 0;
+
+export const listCampaignsResponseDataItemBudgetDailyReservedCentsMin = 0;
+
+export const listCampaignsResponseDataItemBudgetDailySpentCentsMin = 0;
+
+export const listCampaignsResponseDataItemBudgetUsesReservedMin = 0;
+
+export const listCampaignsResponseDataItemBudgetUsesConfirmedMin = 0;
+
+export const listCampaignsResponseDataItemEnrollmentsInvitedMin = 0;
+
+export const listCampaignsResponseDataItemEnrollmentsAcceptedMin = 0;
+
+export const listCampaignsResponseDataItemEnrollmentsDeclinedMin = 0;
+
+export const listCampaignsResponseDataItemEnrollmentsLeftMin = 0;
+
+export const listCampaignsResponseDataItemEnrollmentsExpiredMin = 0;
+
+
+
+export const ListCampaignsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(listCampaignsResponseDataItemStoreSharePctMin).max(listCampaignsResponseDataItemStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(listCampaignsResponseDataItemBudgetReservedCentsMin),
+  "spentCents": zod.int().min(listCampaignsResponseDataItemBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(listCampaignsResponseDataItemBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(listCampaignsResponseDataItemBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(listCampaignsResponseDataItemBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(listCampaignsResponseDataItemBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(listCampaignsResponseDataItemEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(listCampaignsResponseDataItemEnrollmentsAcceptedMin),
+  "declined": zod.int().min(listCampaignsResponseDataItemEnrollmentsDeclinedMin),
+  "left": zod.int().min(listCampaignsResponseDataItemEnrollmentsLeftMin),
+  "expired": zod.int().min(listCampaignsResponseDataItemEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão `coupons:write` (super admin e operação; financeiro 403). Sempre nasce `draft`: criar NÃO ativa nem gasta (C6). Só existem 4 fontes (`webag`, `store`, `split`, `self_funded`) e a porcentagem da loja segue a fonte (RN-C2): webag 0, store 100, split 1 a 99, self_funded 0; frete grátis só com `webag` ou `self_funded` (422 `FREE_SHIPPING_FUNDING_INVALID`: "O frete é da Webag.", C3). **Não existe campo para majorar preço, frete ou taxa** (DEC-088): o corpo é estrito e campo fora da lista é 422 `FIELD_NOT_EDITABLE`. Código opcional: sem código a campanha não aparece sozinha; código de campanha `segmented` ou `private` é gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06): enviar `code` com `codeVisibility: private` é 422; código público ("vaidade") 4 a 20 letras e números, único (409 `COUPON_CODE_TAKEN`). Campanha de loja (`owner: store`) NÃO nasce aqui, só por `createStoreCoupon` (C-CUP-07). O valor de fonte `store` ou `split` só desconta de lojas com aceite (RN-C5). `reason` (3 a 200) vai ao `audit_log` com antes e depois (C7). `Idempotency-Key` obrigatória.
+ * @summary Criar campanha em rascunho com fonte de custo (WB-340 C2, C3, C6, C7)
+ */
+export const createCampaignHeaderIdempotencyKeyMin = 8;
+export const createCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createCampaignHeaderIdempotencyKeyMin).max(createCampaignHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const createCampaignBodyNameMin = 2;
+export const createCampaignBodyNameMax = 80;
+
+export const createCampaignBodyStoreSharePctMax = 99;
+
+export const createCampaignBodyValueMin = 0;
+
+
+export const createCampaignBodyMinOrderCentsMin = 0;
+export const createCampaignBodyMinOrderCentsMax = 1000000;
+
+export const createCampaignBodyReactivationDaysDefault = 30;
+export const createCampaignBodyReactivationDaysMin = 7;
+export const createCampaignBodyReactivationDaysMax = 365;
+
+
+
+
+export const createCampaignBodyPerCustomerLimitDefault = 1;
+export const createCampaignBodyPerCustomerLimitMax = 100;
+
+export const createCampaignBodyCodeMin = 4;
+export const createCampaignBodyCodeMax = 20;
+
+
+export const createCampaignBodyCodeRegExp = new RegExp('^[A-Z0-9]+$');
+export const createCampaignBodyCodeVisibilityDefault = `public`;
+export const createCampaignBodyReasonMin = 3;
+export const createCampaignBodyReasonMax = 200;
+
+
+
+export const CreateCampaignBody = zod.object({
+  "name": zod.string().min(createCampaignBodyNameMin).max(createCampaignBodyNameMax).describe('Texto puro; exibido como texto e escapado no CSV'),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "storeSharePct": zod.int().min(1).max(createCampaignBodyStoreSharePctMax).optional(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(createCampaignBodyValueMin).optional(),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(createCampaignBodyMinOrderCentsMin).max(createCampaignBodyMinOrderCentsMax).optional(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int().min(createCampaignBodyReactivationDaysMin).max(createCampaignBodyReactivationDaysMax).default(createCampaignBodyReactivationDaysDefault),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "startsAt": zod.iso.datetime({"offset":true}).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "budgetTotalCents": zod.int().min(1).nullish().describe('Obrigatório para ATIVAR campanha com `desconto_webag > 0` (RN-C4); opcional em rascunho'),
+  "budgetDailyCents": zod.int().min(1).nullish().describe('Idem; o dia vira à meia-noite de America/Sao_Paulo'),
+  "maxUses": zod.int().min(1).nullish().describe('WB-342 C6: exige este limite OU o orçamento'),
+  "perCustomerLimit": zod.int().min(1).max(createCampaignBodyPerCustomerLimitMax).default(createCampaignBodyPerCustomerLimitDefault),
+  "code": zod.string().min(createCampaignBodyCodeMin).max(createCampaignBodyCodeMax).regex(createCampaignBodyCodeRegExp).nullish().describe('Só código público ("vaidade"). Sem código, o cupom não aparece sozinho (campanha automática sem código é Could e não existe na R2)'),
+  "codeVisibility": zod.enum(['public', 'private']).default(createCampaignBodyCodeVisibilityDefault).describe('`private`: o servidor gera o código (8 ou mais caracteres aleatórios, C-CUP-06); enviar `code` junto é 422'),
+  "reason": zod.string().min(createCampaignBodyReasonMin).max(createCampaignBodyReasonMax)
+})
+
+
+export const createCampaignResponseOneStoreSharePctMin = 0;
+export const createCampaignResponseOneStoreSharePctMax = 100;
+
+export const createCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const createCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const createCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const createCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const createCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const createCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const createCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const createCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const createCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const createCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const createCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const createCampaignResponseTwoValueMin = 0;
+
+export const createCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const CreateCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(createCampaignResponseOneStoreSharePctMin).max(createCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(createCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(createCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(createCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(createCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(createCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(createCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(createCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(createCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(createCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(createCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(createCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(createCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(createCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Não grava nada; serve ao formulário enquanto o admin digita (a tabela é o centro da tela). Uma linha por faixa da tabela de entrega vigente MAIS a retirada. Para cada faixa: taxa de entrega, **custo previsto do motoboy** (`courierCostCents`, F4: vem de `DeliveryFeeTier.expectedCostCents`; `courierCostSource` diz `delivery_fee_table` ou `provisional` e, enquanto o fundador não cotar, `provisional: true` e a tela mostra "custo previsto: tabela provisória"), comissão no pedido de referência, margem prevista (RN-C3, pode ser negativa), desconto da Webag e da loja, **quanto sobra no pedido** (`remainingCents`; negativo = prejuízo, mostrado em texto) e, no `self_funded`, o **pedido mínimo necessário** (`minOrderNeededCents`; nulo = o cupom não se aplica nesta faixa, margem <= 0). O pedido de referência é o mínimo necessário ou R$ 80,00 (`referenceSubtotalCents`). `worstCase` traz o pior caso por pedido do percentual com teto (CU-2 da spec). `globalBudget` mostra o orçamento mensal global da Webag contra o já comprometido (C10, C11). `blockers` repete o que impediria ativar (mesmo formato do `activation` da campanha). Cálculo no servidor com a tabela vigente, centavos inteiros, `round_half_up` (RN-C2).
+ * @summary Simular "quanto isso custa por pedido" por faixa de entrega (WB-340 C1, C2; WB-341 C11)
+ */
+export const simulateCampaignBodyStoreSharePctMax = 99;
+
+export const simulateCampaignBodyValueMin = 0;
+
+
+export const simulateCampaignBodyMinOrderCentsMin = 0;
+export const simulateCampaignBodyMinOrderCentsMax = 1000000;
+
+
+
+
+export const simulateCampaignBodyReferenceSubtotalCentsMin = 1000;
+export const simulateCampaignBodyReferenceSubtotalCentsMax = 1000000;
+
+
+
+export const SimulateCampaignBody = zod.object({
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "storeSharePct": zod.int().min(1).max(simulateCampaignBodyStoreSharePctMax).optional(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(simulateCampaignBodyValueMin).optional(),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(simulateCampaignBodyMinOrderCentsMin).max(simulateCampaignBodyMinOrderCentsMax).optional(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}).optional(),
+  "budgetTotalCents": zod.int().min(1).nullish(),
+  "budgetDailyCents": zod.int().min(1).nullish(),
+  "maxUses": zod.int().min(1).nullish(),
+  "referenceSubtotalCents": zod.int().min(simulateCampaignBodyReferenceSubtotalCentsMin).max(simulateCampaignBodyReferenceSubtotalCentsMax).optional().describe('Pedido de referência; sem ele vale o mínimo necessário ou R$ 80,00')
+})
+
+export const simulateCampaignResponseAutofinTetoPctMin = 0;
+export const simulateCampaignResponseAutofinTetoPctMax = 100;
+
+export const simulateCampaignResponseRowsItemDeliveryFeeCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemCourierCostCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemCommissionCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemServiceFeeCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemDiscountGrossCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemDiscountStoreCentsMin = 0;
+
+export const simulateCampaignResponseRowsItemDiscountWebagCentsMin = 0;
+
+export const simulateCampaignResponseGlobalBudgetMonthlyBudgetCentsMin = 0;
+
+export const simulateCampaignResponseGlobalBudgetCommittedCentsMin = 0;
+
+export const simulateCampaignResponseGlobalBudgetSpentMonthCentsMin = 0;
+
+export const simulateCampaignResponseGlobalBudgetAutofinTetoPctMin = 0;
+export const simulateCampaignResponseGlobalBudgetAutofinTetoPctMax = 100;
+
+
+
+export const SimulateCampaignResponse = zod.object({
+  "referenceSubtotalCents": zod.int(),
+  "commissionPct": zod.number().describe('Comissão padrão usada na referência (a real é por loja e categoria)'),
+  "autofinTetoPct": zod.int().min(simulateCampaignResponseAutofinTetoPctMin).max(simulateCampaignResponseAutofinTetoPctMax).describe('Parâmetro global `autofin_teto_pct` (padrão 50); não existe por campanha'),
+  "courierCostSource": zod.enum(['delivery_fee_table', 'provisional']),
+  "provisional": zod.boolean(),
+  "rows": zod.array(zod.object({
+  "band": zod.object({
+  "id": zod.string().describe('`pickup` ou `tier-<n>` na ordem da tabela de entrega'),
+  "label": zod.string().describe('"Retirada", "Até 2 km", "2 a 4 km"...'),
+  "fromM": zod.int().nullable(),
+  "toM": zod.int().nullable(),
+  "pickup": zod.boolean()
+}),
+  "deliveryFeeCents": zod.int().min(simulateCampaignResponseRowsItemDeliveryFeeCentsMin),
+  "courierCostCents": zod.int().min(simulateCampaignResponseRowsItemCourierCostCentsMin).describe('Custo previsto do motoboy da faixa (retirada: 0)'),
+  "commissionCents": zod.int().min(simulateCampaignResponseRowsItemCommissionCentsMin),
+  "serviceFeeCents": zod.int().min(simulateCampaignResponseRowsItemServiceFeeCentsMin),
+  "marginCents": zod.int().describe('RN-C3: comissão + taxa de serviço + taxa de entrega - custo previsto do motoboy; PODE ser negativa (seed)'),
+  "discountGrossCents": zod.int().min(simulateCampaignResponseRowsItemDiscountGrossCentsMin),
+  "discountStoreCents": zod.int().min(simulateCampaignResponseRowsItemDiscountStoreCentsMin),
+  "discountWebagCents": zod.int().min(simulateCampaignResponseRowsItemDiscountWebagCentsMin),
+  "remainingCents": zod.int().describe('Quanto sobra no pedido para a Webag depois do desconto dela (margem - desconto Webag); negativo = prejuízo'),
+  "loss": zod.boolean().describe('`remainingCents < 0`: a tela escreve "Prejuízo de R$ X" (nunca só cor)'),
+  "minOrderNeededCents": zod.int().nullable().describe('Só `self_funded`: subtotal mínimo para o desconto valer inteiro; nulo = não se aplica nesta faixa (margem <= 0)'),
+  "applicable": zod.boolean()
+})),
+  "worstCase": zod.object({
+  "discountWebagCents": zod.int(),
+  "band": zod.object({
+  "id": zod.string().describe('`pickup` ou `tier-<n>` na ordem da tabela de entrega'),
+  "label": zod.string().describe('"Retirada", "Até 2 km", "2 a 4 km"...'),
+  "fromM": zod.int().nullable(),
+  "toM": zod.int().nullable(),
+  "pickup": zod.boolean()
+})
+}).describe('Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2)'),
+  "maxCostCents": zod.int().nullable(),
+  "estimatedOrders": zod.int().nullable().describe('"Com R$ 800,00 dá para cerca de 100 pedidos com cupom": orçamento / desconto de referência'),
+  "globalBudget": zod.object({
+  "monthlyBudgetCents": zod.int().min(simulateCampaignResponseGlobalBudgetMonthlyBudgetCentsMin).describe('Parâmetro `cupom_orcamento_mensal_webag_cents`; padrão 0 (F2)'),
+  "committedCents": zod.int().min(simulateCampaignResponseGlobalBudgetCommittedCentsMin).describe('Soma do que as campanhas ativas ainda podem gastar'),
+  "spentMonthCents": zod.int().min(simulateCampaignResponseGlobalBudgetSpentMonthCentsMin),
+  "remainingCents": zod.int().describe('Pode ficar negativo se o orçamento foi reduzido depois de ativar campanhas'),
+  "monthStart": zod.iso.date(),
+  "autofinTetoPct": zod.int().min(simulateCampaignResponseGlobalBudgetAutofinTetoPctMin).max(simulateCampaignResponseGlobalBudgetAutofinTetoPctMax),
+  "webagFundingEnabled": zod.boolean().describe('`false` enquanto o orçamento for R$ 0: só "Loja paga" ativa'),
+  "courierCostProvisional": zod.boolean()
+}),
+  "aboveMargin": zod.boolean().describe('Desconto da Webag acima da margem prevista em alguma faixa: só o super admin ativa (C5)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+})
+
+
+/**
+ * `activation` é a caixa "Para ativar" da tela: `blockers` lista o que falta, em texto e com o código estável (a tela nunca esconde o botão sem dizer o motivo). Histórico de alterações (autor, antes, depois, motivo) sai de `GET /v1/admin/audit` com `targetType=campaign`; nenhum dado pessoal aqui.
+ * @summary Detalhe da campanha, orçamento e o que falta para ativar (WB-340 C4, C10)
+ */
+export const GetCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+
+export const getCampaignResponseOneStoreSharePctMin = 0;
+export const getCampaignResponseOneStoreSharePctMax = 100;
+
+export const getCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const getCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const getCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const getCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const getCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const getCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const getCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const getCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const getCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const getCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const getCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const getCampaignResponseTwoValueMin = 0;
+
+export const getCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const GetCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(getCampaignResponseOneStoreSharePctMin).max(getCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(getCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(getCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(getCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(getCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(getCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(getCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(getCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(getCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(getCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(getCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(getCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(getCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(getCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Só em `draft` ou `scheduled`. Campanha `active` ou `paused` NÃO muda de regra (nem orçamento): encerrar e duplicar (ADR-019 D3), para o que o cliente viu e o que a loja aceitou continuarem valendo; tentativa: 409 `CAMPAIGN_IMMUTABLE`. `ended` não reabre (409). Confere `expectedVersion` (409 `CAMPAIGN_VERSION_CONFLICT` com a versão atual). Mesmas validações da criação. Alterar uma campanha `scheduled` com convites aceitos zera os aceites (a regra mudou; o lojista aceita de novo). `reason` obrigatório; antes e depois no `audit_log`.
+ * @summary Editar rascunho ou campanha agendada (WB-340 C7)
+ */
+export const UpdateCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const updateCampaignBodyNameMin = 2;
+export const updateCampaignBodyNameMax = 80;
+
+export const updateCampaignBodyStoreSharePctMax = 99;
+
+export const updateCampaignBodyValueMin = 0;
+
+
+export const updateCampaignBodyMinOrderCentsMin = 0;
+export const updateCampaignBodyMinOrderCentsMax = 1000000;
+
+export const updateCampaignBodyReactivationDaysMin = 7;
+export const updateCampaignBodyReactivationDaysMax = 365;
+
+
+
+
+export const updateCampaignBodyPerCustomerLimitMax = 100;
+
+export const updateCampaignBodyCodeMin = 4;
+export const updateCampaignBodyCodeMax = 20;
+
+
+export const updateCampaignBodyCodeRegExp = new RegExp('^[A-Z0-9]+$');
+export const updateCampaignBodyReasonMin = 3;
+export const updateCampaignBodyReasonMax = 200;
+
+
+
+
+export const UpdateCampaignBody = zod.object({
+  "name": zod.string().min(updateCampaignBodyNameMin).max(updateCampaignBodyNameMax).optional(),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).optional().describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "storeSharePct": zod.int().min(1).max(updateCampaignBodyStoreSharePctMax).optional(),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']).optional(),
+  "value": zod.int().min(updateCampaignBodyValueMin).optional(),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(updateCampaignBodyMinOrderCentsMin).max(updateCampaignBodyMinOrderCentsMax).optional(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).optional().describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int().min(updateCampaignBodyReactivationDaysMin).max(updateCampaignBodyReactivationDaysMax).optional(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}).optional(),
+  "startsAt": zod.iso.datetime({"offset":true}).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "budgetTotalCents": zod.int().min(1).nullish(),
+  "budgetDailyCents": zod.int().min(1).nullish(),
+  "maxUses": zod.int().min(1).nullish(),
+  "perCustomerLimit": zod.int().min(1).max(updateCampaignBodyPerCustomerLimitMax).optional(),
+  "code": zod.string().min(updateCampaignBodyCodeMin).max(updateCampaignBodyCodeMax).regex(updateCampaignBodyCodeRegExp).nullish(),
+  "codeVisibility": zod.enum(['public', 'private']).optional(),
+  "reason": zod.string().min(updateCampaignBodyReasonMin).max(updateCampaignBodyReasonMax),
+  "expectedVersion": zod.int().min(1)
+}).describe('Todos os campos de `CampaignCreate` são opcionais aqui (só os enviados mudam), mais a versão')
+
+
+export const updateCampaignResponseOneStoreSharePctMin = 0;
+export const updateCampaignResponseOneStoreSharePctMax = 100;
+
+export const updateCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const updateCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const updateCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const updateCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const updateCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const updateCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const updateCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const updateCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const updateCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const updateCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const updateCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const updateCampaignResponseTwoValueMin = 0;
+
+export const updateCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const UpdateCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(updateCampaignResponseOneStoreSharePctMin).max(updateCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(updateCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(updateCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(updateCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(updateCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(updateCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(updateCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(updateCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(updateCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(updateCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(updateCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(updateCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(updateCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(updateCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto "Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. "Webag paga" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` ("pode gerar prejuízo por pedido"). Flag `campanhas_cupom` desligada: 409 `CAMPAIGNS_DISABLED`. `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois.
+ * @summary Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
+ */
+export const ActivateCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const activateCampaignHeaderIdempotencyKeyMin = 8;
+export const activateCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const ActivateCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(activateCampaignHeaderIdempotencyKeyMin).max(activateCampaignHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const activateCampaignBodyReasonMin = 3;
+export const activateCampaignBodyReasonMax = 200;
+
+
+
+
+export const ActivateCampaignBody = zod.object({
+  "reason": zod.string().min(activateCampaignBodyReasonMin).max(activateCampaignBodyReasonMax),
+  "expectedVersion": zod.int().min(1),
+  "acknowledgeLossRisk": zod.boolean().optional().describe('Obrigatório (e só o super admin) quando "Webag paga" fica acima da margem prevista: "pode gerar prejuízo por pedido"')
+})
+
+
+export const activateCampaignResponseOneStoreSharePctMin = 0;
+export const activateCampaignResponseOneStoreSharePctMax = 100;
+
+export const activateCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const activateCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const activateCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const activateCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const activateCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const activateCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const activateCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const activateCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const activateCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const activateCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const activateCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const activateCampaignResponseTwoValueMin = 0;
+
+export const activateCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const ActivateCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(activateCampaignResponseOneStoreSharePctMin).max(activateCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(activateCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(activateCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(activateCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(activateCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(activateCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(activateCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(activateCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(activateCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(activateCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(activateCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(activateCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(activateCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(activateCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Qualquer admin com permissão de cupom pausa (super admin e operação), com motivo. Vale na hora: a criação do pedido reconfere `state = active` SOB A TRAVA da campanha, sem cache (C-CUP-10); a vitrine e a sacola refletem em até 1 minuto. Pedidos já criados mantêm o desconto e as reservas (a pausa não devolve nada). Pausar campanha já pausada é idempotente (200). Campanha de loja pausada pelo admin: `pausedBy: admin` e o lojista é avisado; ele NÃO retoma (409 `PAUSED_BY_ADMIN` em `updateStoreCoupon`).
+ * @summary Pausar na hora (WB-349 C1, C5)
+ */
+export const PauseCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const pauseCampaignHeaderIdempotencyKeyMin = 8;
+export const pauseCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const PauseCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(pauseCampaignHeaderIdempotencyKeyMin).max(pauseCampaignHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const pauseCampaignBodyReasonMin = 3;
+export const pauseCampaignBodyReasonMax = 200;
+
+
+
+export const PauseCampaignBody = zod.object({
+  "reason": zod.string().min(pauseCampaignBodyReasonMin).max(pauseCampaignBodyReasonMax)
+})
+
+
+export const pauseCampaignResponseOneStoreSharePctMin = 0;
+export const pauseCampaignResponseOneStoreSharePctMax = 100;
+
+export const pauseCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const pauseCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const pauseCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const pauseCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const pauseCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const pauseCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const pauseCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const pauseCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const pauseCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const pauseCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const pauseCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const pauseCampaignResponseTwoValueMin = 0;
+
+export const pauseCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const PauseCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(pauseCampaignResponseOneStoreSharePctMin).max(pauseCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(pauseCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(pauseCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(pauseCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(pauseCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(pauseCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(pauseCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(pauseCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(pauseCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(pauseCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(pauseCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(pauseCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(pauseCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(pauseCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Retomar volta a gastar dinheiro: mesma permissão e mesma reautenticação recente da ativação (403 `REAUTH_REQUIRED`), e as mesmas conferências (`ACTIVATION_BLOCKED`). Só de `paused` (409 `CAMPAIGN_STATE_INVALID`). Validade vencida: 409 `CAMPAIGN_EXPIRED`.
+ * @summary Retomar campanha pausada
+ */
+export const ResumeCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const resumeCampaignHeaderIdempotencyKeyMin = 8;
+export const resumeCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const ResumeCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(resumeCampaignHeaderIdempotencyKeyMin).max(resumeCampaignHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const resumeCampaignBodyReasonMin = 3;
+export const resumeCampaignBodyReasonMax = 200;
+
+
+
+
+export const ResumeCampaignBody = zod.object({
+  "reason": zod.string().min(resumeCampaignBodyReasonMin).max(resumeCampaignBodyReasonMax),
+  "expectedVersion": zod.int().min(1),
+  "acknowledgeLossRisk": zod.boolean().optional().describe('Obrigatório (e só o super admin) quando "Webag paga" fica acima da margem prevista: "pode gerar prejuízo por pedido"')
+})
+
+
+export const resumeCampaignResponseOneStoreSharePctMin = 0;
+export const resumeCampaignResponseOneStoreSharePctMax = 100;
+
+export const resumeCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const resumeCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const resumeCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const resumeCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const resumeCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const resumeCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const resumeCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const resumeCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const resumeCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const resumeCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const resumeCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const resumeCampaignResponseTwoValueMin = 0;
+
+export const resumeCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const ResumeCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(resumeCampaignResponseOneStoreSharePctMin).max(resumeCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(resumeCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(resumeCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(resumeCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(resumeCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(resumeCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(resumeCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(resumeCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(resumeCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(resumeCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(resumeCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(resumeCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(resumeCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(resumeCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Super admin e financeiro, com reautenticação recente quando há custo da Webag (403 `REAUTH_REQUIRED`). `ended` é terminal: a campanha NÃO reabre; para repetir, `duplicateCampaign`. Reservas em aberto seguem seu curso (pedido criado mantém o desconto). Encerra com `endReason: admin`. Encerrada por orçamento esgotado, usos ou validade é feito pelo servidor (varredura de 1 minuto), sem esta rota. Idempotente.
+ * @summary Encerrar campanha, sem reabrir (WB-349 C2, WB-340 C6)
+ */
+export const EndCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const endCampaignHeaderIdempotencyKeyMin = 8;
+export const endCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const EndCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(endCampaignHeaderIdempotencyKeyMin).max(endCampaignHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const endCampaignBodyReasonMin = 3;
+export const endCampaignBodyReasonMax = 200;
+
+
+
+export const EndCampaignBody = zod.object({
+  "reason": zod.string().min(endCampaignBodyReasonMin).max(endCampaignBodyReasonMax)
+})
+
+
+export const endCampaignResponseOneStoreSharePctMin = 0;
+export const endCampaignResponseOneStoreSharePctMax = 100;
+
+export const endCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const endCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const endCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const endCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const endCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const endCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const endCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const endCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const endCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const endCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const endCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const endCampaignResponseTwoValueMin = 0;
+
+export const endCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const EndCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(endCampaignResponseOneStoreSharePctMin).max(endCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(endCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(endCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(endCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(endCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(endCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(endCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(endCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(endCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(endCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(endCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(endCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(endCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(endCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * Cria `draft` com as regras (tipo, valor, público, alvo, pedido mínimo, fonte, usos por cliente) e **sem** orçamento, validade nem código, e sem convites ou aceites (DEC-107). Vale para qualquer estado; campanha de loja não duplica pelo admin (404). `Idempotency-Key` obrigatória.
+ * @summary Duplicar como rascunho (WB-349 C6)
+ */
+export const DuplicateCampaignParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const duplicateCampaignHeaderIdempotencyKeyMin = 8;
+export const duplicateCampaignHeaderIdempotencyKeyMax = 80;
+
+
+
+export const DuplicateCampaignHeader = zod.object({
+  "Idempotency-Key": zod.string().min(duplicateCampaignHeaderIdempotencyKeyMin).max(duplicateCampaignHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const duplicateCampaignBodyReasonMin = 3;
+export const duplicateCampaignBodyReasonMax = 200;
+
+
+
+export const DuplicateCampaignBody = zod.object({
+  "reason": zod.string().min(duplicateCampaignBodyReasonMin).max(duplicateCampaignBodyReasonMax)
+})
+
+
+export const duplicateCampaignResponseOneStoreSharePctMin = 0;
+export const duplicateCampaignResponseOneStoreSharePctMax = 100;
+
+export const duplicateCampaignResponseOneBudgetReservedCentsMin = 0;
+
+export const duplicateCampaignResponseOneBudgetSpentCentsMin = 0;
+
+export const duplicateCampaignResponseOneBudgetDailyReservedCentsMin = 0;
+
+export const duplicateCampaignResponseOneBudgetDailySpentCentsMin = 0;
+
+export const duplicateCampaignResponseOneBudgetUsesReservedMin = 0;
+
+export const duplicateCampaignResponseOneBudgetUsesConfirmedMin = 0;
+
+export const duplicateCampaignResponseOneEnrollmentsInvitedMin = 0;
+
+export const duplicateCampaignResponseOneEnrollmentsAcceptedMin = 0;
+
+export const duplicateCampaignResponseOneEnrollmentsDeclinedMin = 0;
+
+export const duplicateCampaignResponseOneEnrollmentsLeftMin = 0;
+
+export const duplicateCampaignResponseOneEnrollmentsExpiredMin = 0;
+
+export const duplicateCampaignResponseTwoValueMin = 0;
+
+export const duplicateCampaignResponseTwoMinOrderCentsMin = 0;
+
+
+
+export const DuplicateCampaignResponse = zod.object({
+  "id": zod.uuid(),
+  "owner": zod.enum(['webag', 'store']),
+  "name": zod.string(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "version": zod.int().min(1),
+  "fundingSource": zod.enum(['webag', 'store', 'split', 'self_funded']).describe('As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.'),
+  "fundingLabel": zod.string().describe('"Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec)'),
+  "storeSharePct": zod.int().min(duplicateCampaignResponseOneStoreSharePctMin).max(duplicateCampaignResponseOneStoreSharePctMax),
+  "endReason": zod.union([zod.enum(['budget', 'uses', 'expired', 'admin']),zod.null()]),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(duplicateCampaignResponseOneBudgetReservedCentsMin),
+  "spentCents": zod.int().min(duplicateCampaignResponseOneBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(duplicateCampaignResponseOneBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(duplicateCampaignResponseOneBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(duplicateCampaignResponseOneBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(duplicateCampaignResponseOneBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "enrollments": zod.object({
+  "invited": zod.int().min(duplicateCampaignResponseOneEnrollmentsInvitedMin).describe('Lojas ainda `pending`'),
+  "accepted": zod.int().min(duplicateCampaignResponseOneEnrollmentsAcceptedMin),
+  "declined": zod.int().min(duplicateCampaignResponseOneEnrollmentsDeclinedMin),
+  "left": zod.int().min(duplicateCampaignResponseOneEnrollmentsLeftMin),
+  "expired": zod.int().min(duplicateCampaignResponseOneEnrollmentsExpiredMin)
+}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+}).and(zod.object({
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int().min(duplicateCampaignResponseTwoValueMin),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int().min(duplicateCampaignResponseTwoMinOrderCentsMin),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "reactivationDays": zod.int(),
+  "target": zod.object({
+  "kind": zod.enum(['all', 'city', 'store', 'category']),
+  "cityId": zod.uuid().nullish(),
+  "storeId": zod.uuid().nullish(),
+  "categoryId": zod.uuid().nullish()
+}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "codes": zod.array(zod.object({
+  "code": zod.string(),
+  "visibility": zod.enum(['public', 'private']),
+  "active": zod.boolean()
+})),
+  "activation": zod.object({
+  "canActivate": zod.boolean().describe('Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta'),
+  "requiresStepUp": zod.boolean().describe('Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min'),
+  "requiresSuperAdmin": zod.boolean(),
+  "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
+  "blockers": zod.array(zod.object({
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
+  "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
+  "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
+}))
+}),
+  "courierCostProvisional": zod.boolean().describe('F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória"'),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "activatedAt": zod.iso.datetime({"offset":true}).nullable()
+}))
+
+
+/**
+ * "2 de 5 lojas aceitaram". Estados: `pending`, `accepted`, `declined`, `left`, `expired` (7 dias sem resposta, sem aceite tácito, C7). Sem dado pessoal do lojista (só `acceptedByStaff: true`); o aceite (usuário, hora, versão, hash do texto, teto) fica em `campaign_acceptances` e sai na auditoria interna. Paginado.
+ * @summary Lojas convidadas e o estado de cada aceite (WB-343)
+ */
+export const ListCampaignStoresParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const listCampaignStoresQueryCursorMax = 200;
+
+export const listCampaignStoresQueryLimitDefault = 20;
+export const listCampaignStoresQueryLimitMax = 50;
+
+
+
+export const ListCampaignStoresQueryParams = zod.object({
+  "cursor": zod.string().max(listCampaignStoresQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listCampaignStoresQueryLimitMax).default(listCampaignStoresQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listCampaignStoresResponseDataItemSpentThisMonthCentsMin = 0;
+
+
+
+export const ListCampaignStoresResponse = zod.object({
+  "data": zod.array(zod.object({
+  "enrollmentId": zod.uuid(),
+  "storeId": zod.uuid(),
+  "storeName": zod.string(),
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']),
+  "invitedAt": zod.iso.datetime({"offset":true}),
+  "expiresAt": zod.iso.datetime({"offset":true}),
+  "respondedAt": zod.iso.datetime({"offset":true}).nullable(),
+  "monthlyCapCents": zod.int().nullable(),
+  "spentThisMonthCents": zod.int().min(listCampaignStoresResponseDataItemSpentThisMonthCentsMin),
+  "acceptedByStaff": zod.boolean().describe('A lista do admin NÃO traz o nome de quem aceitou')
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Só campanha `webag`-owner com fonte `store` ou `split`, em `draft`, `scheduled` ou `active`. Convite por painel e e-mail do lojista (fila de e-mail existente); validade de 7 dias (`campanha_convite_validade_dias`). **O admin só convida; nunca registra aceite em nome da loja** (C-CUP-07): não existe rota de admin que aceite, e o aceite exige membro da loja com permissão `coupons` (`acceptCampaignInvite`). Nunca existe aceite automático nem "padrão para novas campanhas" (RN-C5). Até 50 lojas por chamada; loja já convidada é ignorada (`alreadyInvited`). `Idempotency-Key` obrigatória.
+ * @summary Convidar lojas para campanha com parte da loja (WB-343 C1, C8)
+ */
+export const InviteCampaignStoresParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const inviteCampaignStoresHeaderIdempotencyKeyMin = 8;
+export const inviteCampaignStoresHeaderIdempotencyKeyMax = 80;
+
+
+
+export const InviteCampaignStoresHeader = zod.object({
+  "Idempotency-Key": zod.string().min(inviteCampaignStoresHeaderIdempotencyKeyMin).max(inviteCampaignStoresHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const inviteCampaignStoresBodyStoreIdsMax = 50;
+
+export const inviteCampaignStoresBodyReasonMin = 3;
+export const inviteCampaignStoresBodyReasonMax = 200;
+
+
+
+export const InviteCampaignStoresBody = zod.object({
+  "storeIds": zod.array(zod.uuid()).min(1).max(inviteCampaignStoresBodyStoreIdsMax),
+  "reason": zod.string().min(inviteCampaignStoresBodyReasonMin).max(inviteCampaignStoresBodyReasonMax)
+})
+
+export const inviteCampaignStoresResponseInvitedMin = 0;
+
+export const inviteCampaignStoresResponseAlreadyInvitedMin = 0;
+
+
+
+export const InviteCampaignStoresResponse = zod.object({
+  "invited": zod.int().min(inviteCampaignStoresResponseInvitedMin),
+  "alreadyInvited": zod.int().min(inviteCampaignStoresResponseAlreadyInvitedMin),
+  "ineligible": zod.array(zod.object({
+  "storeId": zod.uuid(),
+  "reason": zod.enum(['NOT_APPROVED', 'NOT_IN_TARGET', 'UNKNOWN_STORE'])
+}))
+})
+
+
+/**
+ * **Custo real da Webag** = soma de `desconto_webag` dos pedidos com pagamento aprovado MENOS o devolvido em cancelamento e estorno (RN-C9, C1), com "devolvido em cancelamentos" em campo separado; vem das reservas `confirmed` (`coupon_reservations`) e bate com a soma dos pedidos pagos e com o razão (`reconciled: true|false`, C5; divergência vira alerta). Por loja: quanto a Webag e a loja pagaram (C2). Pedidos, GMV, ticket com cupom e **ticket sem cupom da mesma loja no período**, clientes novos (1º pedido pago com a campanha), custo por cliente novo e recompra em 30 dias (`null` até fechar 30 dias, C3). Margem de contribuição = receita Webag - custo de logística - desconto Webag, `partial: true` quando há corrida sem custo lançado (C4, RN-18). Sem nome, telefone nem endereço: só ids opacos (C8, C-CUP-12). Campanha sem uso: zeros e `empty: true` ("Nenhum pedido ainda", C7). Lê agregados e reservas; não escaneia `orders` inteira (índice por `campaign_id`). Cache de 60 s.
+ * @summary Relatório de custo real da campanha (WB-345)
+ */
+export const GetCampaignReportParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const getCampaignReportResponseReturnedCentsMin = 0;
+
+export const getCampaignReportResponseOrdersPaidMin = 0;
+
+export const getCampaignReportResponseOrdersCancelledMin = 0;
+
+export const getCampaignReportResponseGmvCentsMin = 0;
+
+export const getCampaignReportResponseNewCustomersMin = 0;
+
+export const getCampaignReportResponseBudgetReservedCentsMin = 0;
+
+export const getCampaignReportResponseBudgetSpentCentsMin = 0;
+
+export const getCampaignReportResponseBudgetDailyReservedCentsMin = 0;
+
+export const getCampaignReportResponseBudgetDailySpentCentsMin = 0;
+
+export const getCampaignReportResponseBudgetUsesReservedMin = 0;
+
+export const getCampaignReportResponseBudgetUsesConfirmedMin = 0;
+
+export const getCampaignReportResponseByStoreMax = 100;
+
+
+
+export const GetCampaignReportResponse = zod.object({
+  "campaignId": zod.uuid(),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "period": zod.object({
+  "from": zod.iso.date().nullable(),
+  "to": zod.iso.date().nullable()
+}),
+  "generatedAt": zod.iso.datetime({"offset":true}).describe('`atualizado_em`'),
+  "cached": zod.boolean().describe('`em_cache`'),
+  "empty": zod.boolean(),
+  "reconciled": zod.boolean().describe('A soma das reservas confirmadas bate com a dos pedidos pagos e com o razão (WB-345 C5)'),
+  "webagCostCents": zod.int().describe('Custo real da Webag: confirmado menos o devolvido, só pedidos pagos'),
+  "returnedCents": zod.int().min(getCampaignReportResponseReturnedCentsMin).describe('Devolvido em cancelamentos e estornos, separado (C1)'),
+  "ordersPaid": zod.int().min(getCampaignReportResponseOrdersPaidMin),
+  "ordersCancelled": zod.int().min(getCampaignReportResponseOrdersCancelledMin),
+  "gmvCents": zod.int().min(getCampaignReportResponseGmvCentsMin),
+  "ticketWithCouponCents": zod.int().nullable(),
+  "ticketWithoutCouponCents": zod.int().nullable().describe('Das MESMAS lojas e do mesmo período, sem cupom (C3)'),
+  "newCustomers": zod.int().min(getCampaignReportResponseNewCustomersMin),
+  "costPerNewCustomerCents": zod.int().nullable(),
+  "repeat30dPct": zod.number().nullable(),
+  "repeat30dReadyAt": zod.iso.datetime({"offset":true}).nullable().describe('Preenche 30 dias depois (C3)'),
+  "contributionMarginCents": zod.int().nullable(),
+  "marginPartial": zod.boolean().describe('Há corrida sem custo de entrega lançado (RN-18, C4)'),
+  "budget": zod.object({
+  "totalCents": zod.int().nullable(),
+  "reservedCents": zod.int().min(getCampaignReportResponseBudgetReservedCentsMin),
+  "spentCents": zod.int().min(getCampaignReportResponseBudgetSpentCentsMin),
+  "remainingCents": zod.int().nullable(),
+  "dailyCents": zod.int().nullable(),
+  "dailyReservedCents": zod.int().min(getCampaignReportResponseBudgetDailyReservedCentsMin),
+  "dailySpentCents": zod.int().min(getCampaignReportResponseBudgetDailySpentCentsMin),
+  "dailyRemainingCents": zod.int().nullable(),
+  "day": zod.iso.date().describe('Dia corrente em America/Sao_Paulo'),
+  "maxUses": zod.int().nullable(),
+  "usesReserved": zod.int().min(getCampaignReportResponseBudgetUsesReservedMin),
+  "usesConfirmed": zod.int().min(getCampaignReportResponseBudgetUsesConfirmedMin)
+}).describe('Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).'),
+  "byStore": zod.array(zod.object({
+  "storeId": zod.uuid(),
+  "storeName": zod.string(),
+  "orders": zod.int(),
+  "webagPaidCents": zod.int(),
+  "storePaidCents": zod.int()
+})).max(getCampaignReportResponseByStoreMax)
+})
+
+
+/**
+ * Valores em reais com vírgula, separador `;`, UTF-8 com BOM; célula iniciada por `=`, `+`, `-` ou `@` sai com apóstrofo (helper do SEC-156). Uma linha por loja mais a linha de total; sem dado pessoal. Cada exportação é auditada (`campaign.report.export`). Até 10 por minuto por admin (429).
+ * @summary Exportar o relatório em CSV (WB-345 C6, C8)
+ */
+export const ExportCampaignReportCsvParams = zod.object({
+  "campaignId": zod.uuid()
+})
+
+export const ExportCampaignReportCsvResponse = zod.unknown()
+
+
+/**
+ * Tipos: `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado.
+ * @summary Alertas de campanha no topo da lista (WB-342 C4, WB-349 C3 e C4, WB-344 C7, WB-346 C8)
+ */
+export const listCampaignAlertsQueryCursorMax = 200;
+
+export const listCampaignAlertsQueryLimitDefault = 20;
+export const listCampaignAlertsQueryLimitMax = 50;
+
+
+
+export const ListCampaignAlertsQueryParams = zod.object({
+  "cursor": zod.string().max(listCampaignAlertsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listCampaignAlertsQueryLimitMax).default(listCampaignAlertsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const ListCampaignAlertsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['budget_80', 'budget_100', 'no_use_30d', 'suspect_over_20pct', 'store_concentration_30pct', 'store_coupon_concentration', 'report_unreconciled']),
+  "campaignId": zod.uuid(),
+  "campaignName": zod.string(),
+  "severity": zod.enum(['info', 'warning', 'critical']),
+  "scope": zod.union([zod.literal('total'),zod.literal('day'),zod.literal(null)]).nullish().describe('`budget_*`: total ou do dia'),
+  "valueCents": zod.int().nullish(),
+  "detail": zod.string().describe('Texto pt-BR sem dado pessoal'),
+  "createdAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Mostra o orçamento mensal global (parâmetro `cupom_orcamento_mensal_webag_cents`, padrão **R$ 0**: sem ele só campanha "Loja paga" ativa), o comprometido pelas campanhas ativas (soma dos orçamentos totais restantes), o gasto confirmado no mês (America/Sao_Paulo) e `autofinTetoPct`. Somente leitura. A alteração é do super admin pelas rotas de parâmetros existentes (`parameters:write`, `audit_log` com antes e depois, C9): operação e financeiro recebem 403 lá.
+ * @summary Orçamento mensal global de cupons da Webag (WB-340 C9, C10, C11; DEC-102 F2)
+ */
+export const getCampaignBudgetResponseMonthlyBudgetCentsMin = 0;
+
+export const getCampaignBudgetResponseCommittedCentsMin = 0;
+
+export const getCampaignBudgetResponseSpentMonthCentsMin = 0;
+
+export const getCampaignBudgetResponseAutofinTetoPctMin = 0;
+export const getCampaignBudgetResponseAutofinTetoPctMax = 100;
+
+
+
+export const GetCampaignBudgetResponse = zod.object({
+  "monthlyBudgetCents": zod.int().min(getCampaignBudgetResponseMonthlyBudgetCentsMin).describe('Parâmetro `cupom_orcamento_mensal_webag_cents`; padrão 0 (F2)'),
+  "committedCents": zod.int().min(getCampaignBudgetResponseCommittedCentsMin).describe('Soma do que as campanhas ativas ainda podem gastar'),
+  "spentMonthCents": zod.int().min(getCampaignBudgetResponseSpentMonthCentsMin),
+  "remainingCents": zod.int().describe('Pode ficar negativo se o orçamento foi reduzido depois de ativar campanhas'),
+  "monthStart": zod.iso.date(),
+  "autofinTetoPct": zod.int().min(getCampaignBudgetResponseAutofinTetoPctMin).max(getCampaignBudgetResponseAutofinTetoPctMax),
+  "webagFundingEnabled": zod.boolean().describe('`false` enquanto o orçamento for R$ 0: só "Loja paga" ativa'),
+  "courierCostProvisional": zod.boolean()
+})
+
+
+/**
+ * Só ids opacos: número do pedido, campanha e o sinal (`device_accounts`: 3 contas no mesmo aparelho em 24 h; `address_accounts`; `payer_accounts`; `cancellations`: 3 cancelamentos com cupom em 7 dias). **Nenhum nome, telefone, e-mail, endereço, CPF ou id de aparelho, nem em claro nem em HMAC** (C-CUP-05, C-CUP-12). NÃO existe "revelar" nesta rota: quem precisa do dado abre a ficha do pedido (`getAdminOrder`, mascarada e auditada, WB-352 C14; DEC-071 cortou o "Revelar" completo), pedido a pedido (ADR-019 pendência Security 1). O próximo pedido da conta fica sem cupom enquanto o sinal estiver `open`. Paginado.
+ * @summary Suspeitos de uso indevido de cupom (WB-344 C6, C12)
+ */
+export const listCouponSuspectsQueryStateDefault = `open`;
+export const listCouponSuspectsQueryCursorMax = 200;
+
+export const listCouponSuspectsQueryLimitDefault = 20;
+export const listCouponSuspectsQueryLimitMax = 50;
+
+
+
+export const ListCouponSuspectsQueryParams = zod.object({
+  "state": zod.enum(['open', 'released']).default(listCouponSuspectsQueryStateDefault),
+  "campaignId": zod.uuid().optional(),
+  "cursor": zod.string().max(listCouponSuspectsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listCouponSuspectsQueryLimitMax).default(listCouponSuspectsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const ListCouponSuspectsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "orderNumber": zod.string().describe('Número público do pedido (opaco, sem dado pessoal)'),
+  "campaignId": zod.uuid(),
+  "campaignName": zod.string(),
+  "signal": zod.enum(['device_accounts', 'address_accounts', 'payer_accounts', 'cancellations', 'account_velocity']),
+  "state": zod.enum(['open', 'released']),
+  "detectedAt": zod.iso.datetime({"offset":true}),
+  "releasedAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * A conta volta a poder usar cupom. Motivo obrigatório (3 a 200); `audit_log` com o admin, o sinal e o motivo (sem dado pessoal). Idempotente. Libera o sinal, não apaga o HMAC do antifraude.
+ * @summary Liberar cliente bloqueado por engano (WB-344 C9)
+ */
+export const ReleaseCouponSuspectParams = zod.object({
+  "suspectId": zod.uuid()
+})
+
+export const releaseCouponSuspectHeaderIdempotencyKeyMin = 8;
+export const releaseCouponSuspectHeaderIdempotencyKeyMax = 80;
+
+
+
+export const ReleaseCouponSuspectHeader = zod.object({
+  "Idempotency-Key": zod.string().min(releaseCouponSuspectHeaderIdempotencyKeyMin).max(releaseCouponSuspectHeaderIdempotencyKeyMax).optional().describe('Opcional. Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`')
+})
+
+export const releaseCouponSuspectBodyReasonMin = 3;
+export const releaseCouponSuspectBodyReasonMax = 200;
+
+
+
+export const ReleaseCouponSuspectBody = zod.object({
+  "reason": zod.string().min(releaseCouponSuspectBodyReasonMin).max(releaseCouponSuspectBodyReasonMax)
+})
+
+export const ReleaseCouponSuspectResponse = zod.object({
+  "id": zod.uuid(),
+  "orderNumber": zod.string().describe('Número público do pedido (opaco, sem dado pessoal)'),
+  "campaignId": zod.uuid(),
+  "campaignName": zod.string(),
+  "signal": zod.enum(['device_accounts', 'address_accounts', 'payer_accounts', 'cancellations', 'account_velocity']),
+  "state": zod.enum(['open', 'released']),
+  "detectedAt": zod.iso.datetime({"offset":true}),
+  "releasedAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Os 4 perfis chamam; cada um recebe **só as métricas da sua sensibilidade** (`general`: os 4; `operational`: super admin, operação e financeiro; `financial`: super admin e financeiro, ADR-019 D9). Métrica sem permissão não aparece (não vaza que existe, C3). Cada métrica traz a definição em uma frase (RN-15, C1), a unidade, a polaridade (cancelamento subindo é ruim), as dimensões COMPATÍVEIS (a matriz métrica x dimensão do PRD; combinação incompatível é 422 em `queryDashboardMetric`, C2) e os tipos de gráfico permitidos. **Não existe dimensão de cliente, motoboy, endereço nem bairro** (C-DSH-04, teste da lista fechada). Métricas de acesso trazem `availability: requires_flag` até a coleta ligar. Os ids de `MetricId` e `DimensionId` são enums do contrato, gerados do registro do servidor (um teste compara os dois). Limites em `limits`. Resposta pequena e cacheável por perfil (`Cache-Control: private, max-age=300`).
+ * @summary Catálogo fechado de métricas e dimensões (WB-356 C1, C2, C3, C7)
+ */
+export const GetDashboardCatalogResponse = zod.object({
+  "metrics": zod.array(zod.object({
+  "id": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "name": zod.string(),
+  "definition": zod.string().describe('Definição em UMA frase (RN-15), igual em toda tela'),
+  "sensitivity": zod.enum(['general', 'operational', 'financial']).describe('`general`: os 4 perfis; `operational`: super admin, operação e financeiro; `financial` (receita, take rate, custo de logística, custo e desconto da Webag): super admin e financeiro'),
+  "unit": zod.enum(['money_cents', 'count', 'percent', 'seconds']),
+  "polarity": zod.enum(['up_good', 'down_good', 'neutral']).describe('Cancelamento subindo é ruim: a cor da variação segue a polaridade, sempre com a palavra Subiu ou Caiu'),
+  "aggregation": zod.enum(['additive', 'ratio', 'quantile', 'distinct']).describe('`quantile`: mediana e p90 por histograma fixo (aproximação documentada, `MetricResult.approximate`); `distinct`: só períodos pré-calculados'),
+  "dimensions": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')).describe('Compatíveis (matriz do PRD). `time` aceita dia, semana ou mês; recompra só `time` mensal e `city`'),
+  "chartTypes": zod.array(zod.enum(['number', 'line', 'bar', 'stacked_bar', 'donut', 'table'])),
+  "minSample": zod.object({
+  "kind": zod.enum(['rate', 'quantile', 'access', 'none']),
+  "n": zod.int().describe('20 para taxa, ticket e comparação; 5 para mediana e p90 (DEC-108); 5 sessões nas métricas de acesso')
+}),
+  "availability": zod.enum(['available', 'requires_flag']).describe('`requires_flag`: métricas de acesso até `coleta_eventos` ligar')
+})),
+  "dimensions": zod.array(zod.object({
+  "id": zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).'),
+  "name": zod.string(),
+  "granularities": zod.array(zod.enum(['day', 'week', 'month'])).describe('Só `time`; vazio nas demais')
+})),
+  "limits": zod.object({
+  "maxPeriodDays": zod.int(),
+  "maxDimensions": zod.int(),
+  "maxFilters": zod.int(),
+  "maxPoints": zod.int(),
+  "maxCategories": zod.int(),
+  "maxWidgetsPerDashboard": zod.int(),
+  "maxDashboardsPerUser": zod.int(),
+  "queriesPerMinute": zod.int(),
+  "concurrentQueries": zod.int(),
+  "timeoutSeconds": zod.int(),
+  "cacheSeconds": zod.int(),
+  "lowSampleRate": zod.int(),
+  "lowSampleQuantile": zod.int()
+}),
+  "generatedAt": zod.iso.datetime({"offset":true}).describe('Última atualização dos agregados (`atualizado_em`)')
+})
+
+
+/**
+ * **Sem SQL livre** (DEC-091): o corpo é `{metricId, dimensionIds[], filters[{dimensionId, op: eq|in, values}], period, compare}`; ids vêm dos enums, o SQL sai SÓ do registro do servidor e os valores vão como parâmetro (C-DSH-01; `sql.raw` com entrada é barrado por lint no módulo). Id desconhecido, dimensão incompatível, filtro fora da lista ou `__proto__`: 422 `QUERY_NOT_ALLOWED` e **zero consultas executadas** (C5, C6). A permissão por sensibilidade é checada ANTES de ler o cache (403 `METRIC_FORBIDDEN`, C-DSH-02, C8); a chave do cache traz métrica e parâmetros normalizados, nunca o perfil nem dado pessoal. **Limites no servidor (C-DSH-03, C9):** período até 400 dias (401: 422 `PERIOD_TOO_LONG`, "Período máximo de 400 dias"), 2 dimensões, 5 filtros, 5.000 pontos, 10 categorias mais "Outros"; **30 consultas por minuto e 2 simultâneas por usuário** (a 31ª: 429 `DASHBOARD_RATE_LIMITED` com `Retry-After`); transação somente leitura, `statement_timeout` de 5 s, **pool separado de 2 conexões**, só sobre agregados diários (nunca `orders`); consulta cancelada: 503 `QUERY_TOO_HEAVY` ("Muito pesado: reduza o período ou o filtro"). **Frescor e amostra (C11):** `generatedAt` (atualizado_em: última atualização dos agregados, não a hora da resposta), `cached` (em_cache: cache de 5 min por métrica e parâmetros) e, por célula, `n` (amostra) e `suppressed`. Baixa amostra (DEC-108): taxa, ticket médio e comparação pedem 20 pedidos; mediana e p90 pedem 5; abaixo disso `lowSample: true` e SEM percentual de variação. Métrica de acesso: célula com menos de 5 sessões vem `suppressed: true`, sem valor e sem `n`. Período sem dado: `rows: []` (a tela mostra "Sem dados no período", nunca zero enganoso). Fuso America/Sao_Paulo, semana começa na segunda. Métrica de contagem distinta (`active_customers`, `repeat_30d`) só aceita os períodos pré-calculados (dia, 7 ou 30 dias terminando em um dia fechado; mês-calendário): outro período é 422 `PERIOD_NOT_SUPPORTED`.
+ * @summary Consultar uma métrica do catálogo (WB-356 C5 a C11)
+ */
+export const queryDashboardMetricBodyDimensionIdsMax = 2;
+
+export const queryDashboardMetricBodyFiltersItemValuesItemMax = 64;
+
+export const queryDashboardMetricBodyFiltersItemValuesMax = 50;
+
+export const queryDashboardMetricBodyFiltersMax = 5;
+
+export const queryDashboardMetricBodyCompareDefault = false;
+
+export const QueryDashboardMetricBody = zod.object({
+  "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "dimensionIds": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')).max(queryDashboardMetricBodyDimensionIdsMax).optional(),
+  "filters": zod.array(zod.object({
+  "dimensionId": zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).'),
+  "op": zod.enum(['eq', 'in']),
+  "values": zod.array(zod.string().max(queryDashboardMetricBodyFiltersItemValuesItemMax)).min(1).max(queryDashboardMetricBodyFiltersItemValuesMax)
+})).max(queryDashboardMetricBodyFiltersMax).optional(),
+  "period": zod.object({
+  "preset": zod.enum(['today', 'last_7d', 'last_28d', 'last_30d', 'last_90d', 'this_month', 'last_month']).optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}).describe('Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)'),
+  "granularity": zod.enum(['day', 'week', 'month']).optional().describe('Só com a dimensão `time`'),
+  "compare": zod.boolean().default(queryDashboardMetricBodyCompareDefault).describe('Compara com o período anterior de mesmo tamanho (linha tracejada e variação)')
+})
+
+export const queryDashboardMetricResponseRowsMax = 5000;
+
+
+
+export const QueryDashboardMetricResponse = zod.object({
+  "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "unit": zod.enum(['money_cents', 'count', 'percent', 'seconds']),
+  "period": zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date()
+}),
+  "previousPeriod": zod.object({
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}).nullable(),
+  "granularity": zod.union([zod.literal('day'),zod.literal('week'),zod.literal('month'),zod.literal(null)]).nullable(),
+  "dimensionIds": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')),
+  "rows": zod.array(zod.object({
+  "dimensions": zod.record(zod.string(), zod.object({
+  "key": zod.string().nullable(),
+  "label": zod.string()
+})).describe('Uma entrada por dimensão pedida (chave = `DimensionId`)'),
+  "isOther": zod.boolean().describe('Linha "Outros" (além das 10 maiores categorias)'),
+  "cell": zod.object({
+  "value": zod.number().nullable().describe('Na unidade da métrica (`money_cents`: centavos inteiros; `percent`: 0 a 100 com 1 casa; `seconds`)'),
+  "n": zod.int().nullable(),
+  "lowSample": zod.boolean(),
+  "suppressed": zod.boolean(),
+  "variationPct": zod.number().nullable().describe('Variação sobre o período anterior; nula em baixa amostra ou sem comparação')
+}).describe('`suppressed: true` (acesso com menos de 5 sessões): `value` e `n` nulos. `lowSample: true` (DEC-108): a tarja "Poucos dados" e `variationPct` nulo. `n` é o tamanho da amostra (pedidos ou sessões); nunca identifica ninguém.'),
+  "previous": zod.union([zod.object({
+  "value": zod.number().nullable().describe('Na unidade da métrica (`money_cents`: centavos inteiros; `percent`: 0 a 100 com 1 casa; `seconds`)'),
+  "n": zod.int().nullable(),
+  "lowSample": zod.boolean(),
+  "suppressed": zod.boolean(),
+  "variationPct": zod.number().nullable().describe('Variação sobre o período anterior; nula em baixa amostra ou sem comparação')
+}).describe('`suppressed: true` (acesso com menos de 5 sessões): `value` e `n` nulos. `lowSample: true` (DEC-108): a tarja "Poucos dados" e `variationPct` nulo. `n` é o tamanho da amostra (pedidos ou sessões); nunca identifica ninguém.'),zod.null()])
+})).max(queryDashboardMetricResponseRowsMax),
+  "approximate": zod.boolean().describe('Mediana e p90 saem de histograma de faixas fixas: aproximação, dita na tela'),
+  "generatedAt": zod.iso.datetime({"offset":true}).describe('`atualizado_em`: última atualização dos agregados (a tela diz "Atualizado às HH:MM" e avisa defasagem)'),
+  "cached": zod.boolean().describe('`em_cache`')
+})
+
+
+/**
+ * Os painéis prontos (Visão geral, Vendas, Lojas, Entrega, Cupons e, com a coleta de acessos, Acessos) pertencem ao sistema: **duplicáveis, nenhum editável** (`editable: false`). Painéis do usuário são **privados** (`owner_admin_id = :me`, C-DSH-05): nunca aparecem os de outro admin. O painel pronto só traz os widgets que o perfil pode ver; `someWidgetsHidden` avisa sem dizer quais (a tela não renderiza o que não pode). Até 6 prontos e 20 do usuário; paginado por convenção (a lista cabe numa página).
+ * @summary Painéis prontos e os meus (WB-357 C6)
+ */
+export const listDashboardsQueryCursorMax = 200;
+
+export const listDashboardsQueryLimitDefault = 20;
+export const listDashboardsQueryLimitMax = 50;
+
+
+
+export const ListDashboardsQueryParams = zod.object({
+  "cursor": zod.string().max(listDashboardsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listDashboardsQueryLimitMax).default(listDashboardsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listDashboardsResponseDataItemNameMax = 80;
+
+export const listDashboardsResponseDataItemWidgetsItemPositionMin = 0;
+export const listDashboardsResponseDataItemWidgetsItemPositionMax = 11;
+
+export const listDashboardsResponseDataItemWidgetsItemTitleMax = 80;
+
+export const listDashboardsResponseDataItemWidgetsItemDimensionIdsMax = 2;
+
+export const listDashboardsResponseDataItemWidgetsItemFiltersItemValuesItemMax = 64;
+
+export const listDashboardsResponseDataItemWidgetsItemFiltersItemValuesMax = 50;
+
+export const listDashboardsResponseDataItemWidgetsItemFiltersMax = 5;
+
+export const listDashboardsResponseDataItemWidgetsMax = 12;
+
+
+
+export const ListDashboardsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['preset', 'user']),
+  "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
+  "name": zod.string().max(listDashboardsResponseDataItemNameMax),
+  "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
+  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "widgets": zod.array(zod.object({
+  "id": zod.uuid(),
+  "position": zod.int().min(listDashboardsResponseDataItemWidgetsItemPositionMin).max(listDashboardsResponseDataItemWidgetsItemPositionMax),
+  "title": zod.string().max(listDashboardsResponseDataItemWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
+  "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "dimensionIds": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')).max(listDashboardsResponseDataItemWidgetsItemDimensionIdsMax),
+  "chartType": zod.enum(['number', 'line', 'bar', 'stacked_bar', 'donut', 'table']),
+  "filters": zod.array(zod.object({
+  "dimensionId": zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).'),
+  "op": zod.enum(['eq', 'in']),
+  "values": zod.array(zod.string().max(listDashboardsResponseDataItemWidgetsItemFiltersItemValuesItemMax)).min(1).max(listDashboardsResponseDataItemWidgetsItemFiltersItemValuesMax)
+})).max(listDashboardsResponseDataItemWidgetsItemFiltersMax),
+  "period": zod.object({
+  "preset": zod.enum(['today', 'last_7d', 'last_28d', 'last_30d', 'last_90d', 'this_month', 'last_month']).optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}).describe('Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)'),
+  "compare": zod.boolean()
+})).max(listDashboardsResponseDataItemWidgetsMax),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Devolve a definição (widgets, filtros globais padrão: período, cidade, loja, categoria, modo, campanha); **os dados vêm de `queryDashboardMetric`, um widget por chamada** (widgets carregam independentes: um lento não trava o painel). Painel de outro admin: 404 (nunca 403, C-DSH-05).
+ * @summary Abrir um painel (WB-357 C1 a C5)
+ */
+export const GetDashboardParams = zod.object({
+  "dashboardId": zod.uuid()
+})
+
+export const getDashboardResponseNameMax = 80;
+
+export const getDashboardResponseWidgetsItemPositionMin = 0;
+export const getDashboardResponseWidgetsItemPositionMax = 11;
+
+export const getDashboardResponseWidgetsItemTitleMax = 80;
+
+export const getDashboardResponseWidgetsItemDimensionIdsMax = 2;
+
+export const getDashboardResponseWidgetsItemFiltersItemValuesItemMax = 64;
+
+export const getDashboardResponseWidgetsItemFiltersItemValuesMax = 50;
+
+export const getDashboardResponseWidgetsItemFiltersMax = 5;
+
+export const getDashboardResponseWidgetsMax = 12;
+
+
+
+export const GetDashboardResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['preset', 'user']),
+  "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
+  "name": zod.string().max(getDashboardResponseNameMax),
+  "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
+  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "widgets": zod.array(zod.object({
+  "id": zod.uuid(),
+  "position": zod.int().min(getDashboardResponseWidgetsItemPositionMin).max(getDashboardResponseWidgetsItemPositionMax),
+  "title": zod.string().max(getDashboardResponseWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
+  "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "dimensionIds": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')).max(getDashboardResponseWidgetsItemDimensionIdsMax),
+  "chartType": zod.enum(['number', 'line', 'bar', 'stacked_bar', 'donut', 'table']),
+  "filters": zod.array(zod.object({
+  "dimensionId": zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).'),
+  "op": zod.enum(['eq', 'in']),
+  "values": zod.array(zod.string().max(getDashboardResponseWidgetsItemFiltersItemValuesItemMax)).min(1).max(getDashboardResponseWidgetsItemFiltersItemValuesMax)
+})).max(getDashboardResponseWidgetsItemFiltersMax),
+  "period": zod.object({
+  "preset": zod.enum(['today', 'last_7d', 'last_28d', 'last_30d', 'last_90d', 'this_month', 'last_month']).optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}).describe('Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)'),
+  "compare": zod.boolean()
+})).max(getDashboardResponseWidgetsMax),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Cria uma cópia EDITÁVEL e privada do painel pronto ou do próprio (o original fica intacto). Widgets de métrica que o perfil não pode ver ficam de fora da cópia. Painel de outro admin: 404. Limite de 20 painéis por usuário (422 `DASHBOARD_LIMIT`, "Limite de 20 painéis"); nome até 80 caracteres, exibido como texto e escapado no CSV (C-DSH-06). Criar, renomear, reordenar, excluir widgets e "Enviar cópia" são do construtor (R3, WB-358) e não estão neste contrato.
+ * @summary Duplicar para editar (WB-357 C4; WB-358 C6 na R3)
+ */
+export const DuplicateDashboardParams = zod.object({
+  "dashboardId": zod.uuid()
+})
+
+export const duplicateDashboardHeaderIdempotencyKeyMin = 8;
+export const duplicateDashboardHeaderIdempotencyKeyMax = 80;
+
+
+
+export const DuplicateDashboardHeader = zod.object({
+  "Idempotency-Key": zod.string().min(duplicateDashboardHeaderIdempotencyKeyMin).max(duplicateDashboardHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const duplicateDashboardBodyNameMax = 80;
+
+
+
+export const DuplicateDashboardBody = zod.object({
+  "name": zod.string().min(1).max(duplicateDashboardBodyNameMax).optional().describe('Padrão: o nome do original com " (cópia)"')
+})
+
+export const duplicateDashboardResponseNameMax = 80;
+
+export const duplicateDashboardResponseWidgetsItemPositionMin = 0;
+export const duplicateDashboardResponseWidgetsItemPositionMax = 11;
+
+export const duplicateDashboardResponseWidgetsItemTitleMax = 80;
+
+export const duplicateDashboardResponseWidgetsItemDimensionIdsMax = 2;
+
+export const duplicateDashboardResponseWidgetsItemFiltersItemValuesItemMax = 64;
+
+export const duplicateDashboardResponseWidgetsItemFiltersItemValuesMax = 50;
+
+export const duplicateDashboardResponseWidgetsItemFiltersMax = 5;
+
+export const duplicateDashboardResponseWidgetsMax = 12;
+
+
+
+export const DuplicateDashboardResponse = zod.object({
+  "id": zod.uuid(),
+  "kind": zod.enum(['preset', 'user']),
+  "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
+  "name": zod.string().max(duplicateDashboardResponseNameMax),
+  "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
+  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "widgets": zod.array(zod.object({
+  "id": zod.uuid(),
+  "position": zod.int().min(duplicateDashboardResponseWidgetsItemPositionMin).max(duplicateDashboardResponseWidgetsItemPositionMax),
+  "title": zod.string().max(duplicateDashboardResponseWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
+  "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
+  "dimensionIds": zod.array(zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).')).max(duplicateDashboardResponseWidgetsItemDimensionIdsMax),
+  "chartType": zod.enum(['number', 'line', 'bar', 'stacked_bar', 'donut', 'table']),
+  "filters": zod.array(zod.object({
+  "dimensionId": zod.enum(['time', 'city', 'store', 'category', 'mode', 'payment_method', 'campaign', 'distance_band', 'origin']).describe('Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).'),
+  "op": zod.enum(['eq', 'in']),
+  "values": zod.array(zod.string().max(duplicateDashboardResponseWidgetsItemFiltersItemValuesItemMax)).min(1).max(duplicateDashboardResponseWidgetsItemFiltersItemValuesMax)
+})).max(duplicateDashboardResponseWidgetsItemFiltersMax),
+  "period": zod.object({
+  "preset": zod.enum(['today', 'last_7d', 'last_28d', 'last_30d', 'last_90d', 'this_month', 'last_month']).optional(),
+  "from": zod.iso.date().optional(),
+  "to": zod.iso.date().optional()
+}).describe('Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)'),
+  "compare": zod.boolean()
+})).max(duplicateDashboardResponseWidgetsMax),
+  "createdAt": zod.iso.datetime({"offset":true}),
+  "updatedAt": zod.iso.datetime({"offset":true})
+})
+
+
+/**
+ * Etapas: visita à loja, abriu produto, sacola, início do checkout, pedido pago, cada uma com a conversão da etapa anterior (não só a final). Lê só o agregado diário (nunca o bruto, C-ANA-04); célula com menos de 5 sessões vem `suppressed: true` sem valor nem `n` (C-ANA-05); suporte 403 (C6); sem dado: 200 com `empty: true` ("Ainda sem dados: o app precisa ser atualizado", C7). Períodos fechados terminando ontem (7, 30, 90). `profileOnly` é a parcela de visitas que NÃO abriu produto (C2). DEPENDE da R1.4: a etapa `checkout_started` exige o evento novo (`CheckoutStartedEvent`) e a coluna `profile_only_sessions` no agregado (ADR-019 pendência 5).
+ * @summary Funil geral e por cidade (WB-362 C3, C5, C6, C7)
+ */
+export const getAdminAnalyticsFunnelQueryDaysDefault = 7;
+
+export const GetAdminAnalyticsFunnelQueryParams = zod.object({
+  "days": zod.union([zod.literal(7),zod.literal(30),zod.literal(90)]).default(getAdminAnalyticsFunnelQueryDaysDefault),
+  "cityId": zod.uuid().optional(),
+  "storeId": zod.uuid().optional()
+})
+
+export const getAdminAnalyticsFunnelResponseStagesItemSessionsNMin = 5;
+
+export const getAdminAnalyticsFunnelResponseProfileOnlyNMin = 5;
+
+
+
+export const GetAdminAnalyticsFunnelResponse = zod.object({
+  "period": zod.object({
+  "from": zod.iso.date(),
+  "to": zod.iso.date()
+}),
+  "generatedAt": zod.iso.datetime({"offset":true}),
+  "cached": zod.boolean(),
+  "empty": zod.boolean(),
+  "stages": zod.array(zod.object({
+  "stage": zod.enum(['store_visit', 'product_open', 'bag', 'checkout', 'order_paid']),
+  "sessions": zod.object({
+  "suppressed": zod.boolean(),
+  "n": zod.int().min(getAdminAnalyticsFunnelResponseStagesItemSessionsNMin).optional()
+}).describe('Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente'),
+  "conversionFromPrevious": zod.number().nullable().describe('Percentual sobre a etapa anterior; nulo se alguma das duas células foi suprimida')
+})),
+  "profileOnly": zod.object({
+  "suppressed": zod.boolean(),
+  "n": zod.int().min(getAdminAnalyticsFunnelResponseProfileOnlyNMin).optional()
+}).describe('Célula com menos de 5 sessões: `suppressed: true` e NENHUM `n` (nem valor). Com 5 ou mais: `n` presente')
+})
+
+
+/**
+ * Quantas lojas tocaram em "Quero testar" (`clicked`) e quantas escolheram cada faixa (`bands`), incluindo "Não pagaria por isso". Só contagens e o texto curto opcional das últimas 50 respostas (`notes`, até 140 caracteres, sem identificar loja nem pessoa: o texto pede "Não escreva dados de clientes"). Não mostra o valor como preço decidido: as faixas são exemplos (DEC-093, HIP-A1). Retenção de 12 meses.
+ * @summary Interesse na porta falsa do módulo Análises (WB-367 C3)
+ */
+export const getAdminAnalyticsInterestResponseClickedMin = 0;
+
+export const getAdminAnalyticsInterestResponseAnsweredMin = 0;
+
+export const getAdminAnalyticsInterestResponseNotesItemTextMax = 140;
+
+export const getAdminAnalyticsInterestResponseNotesMax = 50;
+
+
+
+export const GetAdminAnalyticsInterestResponse = zod.object({
+  "clicked": zod.int().min(getAdminAnalyticsInterestResponseClickedMin).describe('Lojas que tocaram em "Quero testar"'),
+  "answered": zod.int().min(getAdminAnalyticsInterestResponseAnsweredMin),
+  "bands": zod.object({
+  "up_to_19": zod.int(),
+  "20_to_39": zod.int(),
+  "40_to_79": zod.int(),
+  "80_plus": zod.int(),
+  "would_not_pay": zod.int()
+}),
+  "notes": zod.array(zod.object({
+  "text": zod.string().max(getAdminAnalyticsInterestResponseNotesItemTextMax),
+  "at": zod.iso.datetime({"offset":true})
+})).max(getAdminAnalyticsInterestResponseNotesMax)
+})
+
+
+/**
+ * Permissão da loja `settings` (só o dono; funcionário 403, não-membro 404). Idempotente por loja: a 1ª chamada com `answer: clicked` registra o toque (`analytics_interest_clicked`); a chamada com `priceBand` grava a faixa (pode mudar de ideia: sobrescreve). Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 140 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429).
+ * @summary Porta falsa: "Quero testar" e a faixa de preço (WB-367 C1, C2, C4)
+ */
+export const RecordAnalyticsInterestParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const recordAnalyticsInterestBodyNoteMax = 140;
+
+
+
+export const RecordAnalyticsInterestBody = zod.object({
+  "answer": zod.enum(['clicked', 'answered']),
+  "priceBand": zod.enum(['up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay']).optional().describe('Obrigatória com `answered`. Faixas de EXEMPLO (HIP-A1), não preço decidido'),
+  "note": zod.string().max(recordAnalyticsInterestBodyNoteMax).optional().describe('Texto puro opcional; a tela pede "Não escreva dados de clientes"')
+})
+
+export const RecordAnalyticsInterestResponse = zod.void()
+
+
+/**
+ * Permissão da loja `catalog`. O servidor confere o **dígito verificador** (EAN-8, UPC-A de 12, EAN-13 e GTIN-14; inválido: 422 `BARCODE_INVALID`, "Código inválido: confira os números") e responde: `inStore` (produto e variação da PRÓPRIA loja com esse código: "Você já tem este produto", com `productId` para "Abrir" e "Aumentar estoque", único por loja) e `reference` (nome, marca e categoria do **catálogo de referência próprio**, dado factual moderado: sem foto e sem descrição; sugestão editável). Código desconhecido: ambos nulos e o cadastro segue normal com o código guardado (C6). **Nenhuma chamada de rede sai do sistema**: a base externa é a flag `ean_base_externa`, desligada, e nenhum adaptador existe (C7, F9). Limite de 60 consultas por hora por loja (a 61ª: 429, C9). Resposta sem cache e sem o corpo do produto.
+ * @summary Conferir código de barras na loja e na base de referência (WB-373 C3 a C7, C9)
+ */
+export const lookupProductBarcodePathBarcodeRegExp = new RegExp('^[0-9]{8}$|^[0-9]{12,14}$');
+
+
+export const LookupProductBarcodeParams = zod.object({
+  "storeId": zod.uuid(),
+  "barcode": zod.string().regex(lookupProductBarcodePathBarcodeRegExp)
+})
+
+export const LookupProductBarcodeResponse = zod.object({
+  "barcode": zod.string(),
+  "valid": zod.literal(true),
+  "inStore": zod.union([zod.null(),zod.object({
+  "productId": zod.uuid(),
+  "variantId": zod.uuid().nullable(),
+  "name": zod.string()
+})]),
+  "reference": zod.union([zod.null(),zod.object({
+  "name": zod.string(),
+  "brand": zod.string().nullable(),
+  "categoryId": zod.uuid().nullable()
+}).describe('Dado factual moderado; sem foto e sem descrição. Sugestão editável')])
+})
+
+
+/**
+ * Permissão da loja `catalog`. O preço "de" e o percentual só aparecem ao cliente se o preço "de" foi **praticado de fato por 30 dias seguidos nos últimos 60** (RN-C8, `[HIPÓTESE; J23]`), sem promoção cobrindo o período; senão a vitrine mostra só o preço atual. Aqui o lojista vê ANTES de publicar a promoção: `eligible: false` com `reasonCode: NO_REFERENCE_HISTORY` e o texto "Seu desconto só aparece depois de 30 dias de preço anterior." e `eligibleFrom` (data em que passa a valer); `eligible: true` com o preço de referência e desde quando. A promoção PODE ser salva sem selo (vale o preço atual); o servidor é quem decide o selo na vitrine (`originalPrice` e `discountPercent` de `ProductCard`, `BrowseProduct` e `ProductVariant` vêm nulos quando não comprovado; antes vinham sempre que havia promoção). Histórico em `product_price_history` (preço, data, autor); anterior à v1.1 não existe: ninguém comprova o selo nos primeiros 30 dias.
+ * @summary O selo "de/por" aparece para este produto? (WB-348 C1, C3)
+ */
+export const GetPromotionEligibilityParams = zod.object({
+  "storeId": zod.uuid(),
+  "productId": zod.uuid()
+})
+
+export const GetPromotionEligibilityQueryParams = zod.object({
+  "variantId": zod.uuid().optional().describe('Variação com preço próprio; sem ela vale o preço base do produto')
+})
+
+export const GetPromotionEligibilityResponse = zod.object({
+  "eligible": zod.boolean(),
+  "reasonCode": zod.union([zod.literal('NO_REFERENCE_HISTORY'),zod.literal('PRICE_CHANGED_RECENTLY'),zod.literal('PROMOTION_COVERED_PERIOD'),zod.literal(null)]).nullable(),
+  "message": zod.string().nullable().describe('"Seu desconto só aparece depois de 30 dias de preço anterior."'),
+  "referencePriceCents": zod.int().nullable().describe('O preço "de" que seria mostrado'),
+  "practicedSince": zod.iso.datetime({"offset":true}).nullable(),
+  "eligibleFrom": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Permissão da loja `coupons` (dono ou funcionário com a permissão; **funcionário sem ela: 403 e o item nem aparece no app**, C6; não-membro: 404; admin com "Ver como": 403, a rota não está na lista fechada). Cada convite traz a parte da loja em % e em R$ por pedido de exemplo, "você recebe R$ X (sem o cupom: R$ Y)" calculado no servidor com a comissão da loja (a visão do lojista pode ver o líquido dele; `x-view-as` NÃO vale aqui), validade (7 dias sem aceite tácito), o teto mensal sugerido (R$ 150,00) e o **texto do aceite com versão e hash** que a loja confirmará. Estados: `pending`, `accepted`, `declined`, `left`, `expired`. Paginado.
+ * @summary Convites de campanha da loja (WB-343 C2, C6, C7)
+ */
+export const ListStoreCampaignInvitesParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listStoreCampaignInvitesQueryCursorMax = 200;
+
+export const listStoreCampaignInvitesQueryLimitDefault = 20;
+export const listStoreCampaignInvitesQueryLimitMax = 50;
+
+
+
+export const ListStoreCampaignInvitesQueryParams = zod.object({
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']).optional(),
+  "cursor": zod.string().max(listStoreCampaignInvitesQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listStoreCampaignInvitesQueryLimitMax).default(listStoreCampaignInvitesQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listStoreCampaignInvitesResponseDataItemStoreSharePctMax = 100;
+
+export const listStoreCampaignInvitesResponseDataItemWebagSharePctMin = 0;
+export const listStoreCampaignInvitesResponseDataItemWebagSharePctMax = 99;
+
+export const listStoreCampaignInvitesResponseDataItemTermsHashRegExp = new RegExp('^[a-f0-9]{64}$');
+export const listStoreCampaignInvitesResponseDataItemTermsTextMax = 4000;
+
+export const listStoreCampaignInvitesResponseDataItemSpentThisMonthCentsMin = 0;
+
+
+
+export const ListStoreCampaignInvitesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "enrollmentId": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "name": zod.string(),
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "storeSharePct": zod.int().min(1).max(listStoreCampaignInvitesResponseDataItemStoreSharePctMax),
+  "webagSharePct": zod.int().min(listStoreCampaignInvitesResponseDataItemWebagSharePctMin).max(listStoreCampaignInvitesResponseDataItemWebagSharePctMax),
+  "example": zod.object({
+  "orderSubtotalCents": zod.int(),
+  "discountCents": zod.int(),
+  "storeShareCents": zod.int().describe('Quanto o desconto custa à loja por pedido'),
+  "youReceiveWithCents": zod.int(),
+  "youReceiveWithoutCents": zod.int()
+}).describe('Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: "você recebe R$ 79,78; sem o cupom, R$ 83,93"'),
+  "terms": zod.object({
+  "version": zod.string().describe('Versão do texto do aceite (cláusula nos Termos do Lojista, J27)'),
+  "hash": zod.string().regex(listStoreCampaignInvitesResponseDataItemTermsHashRegExp).describe('SHA-256 do texto, gravado no aceite'),
+  "text": zod.string().max(listStoreCampaignInvitesResponseDataItemTermsTextMax)
+}),
+  "suggestedMonthlyCapCents": zod.int(),
+  "monthlyCapCents": zod.int().nullable(),
+  "spentThisMonthCents": zod.int().min(listStoreCampaignInvitesResponseDataItemSpentThisMonthCentsMin),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('7 dias; sem resposta, expira sem custo e sem aceite tácito'),
+  "respondedAt": zod.iso.datetime({"offset":true}).nullable()
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão da loja `coupons`; **a loja vem da rota e da membership, nunca do corpo** (C-CUP-07): admin (qualquer perfil, inclusive por "Ver como"), funcionário sem `coupons` e membro de outra loja recebem 403 ou 404 e NADA é gravado. Corpo: `termsVersion` e `termsHash` do texto mostrado, `monthlyCapCents` (teto da loja, R$ 1,00 ou mais) e `confirm: true` (a confirmação "Você paga 40% de cada desconto, até R$ 150,00 por mês"). Versão ou hash diferentes dos vigentes: 409 `TERMS_VERSION_MISMATCH` com os atuais (o lojista relê). Grava, em `campaign_acceptances` (append-only): usuário, hora, versão, hash, teto e a parte da loja do momento (C3). Convite vencido: 410 `INVITE_EXPIRED`; já respondido: 409 `INVITE_NOT_PENDING`. Campanha encerrada: 409 `CAMPAIGN_STATE_INVALID`. Sem aceite NÃO há desconto naquela loja (C1). `Idempotency-Key` obrigatória (aceite em 3G não duplica).
+ * @summary Aceitar o custo da campanha com teto próprio (WB-343 C1, C3, C8)
+ */
+export const AcceptCampaignInviteParams = zod.object({
+  "storeId": zod.uuid(),
+  "enrollmentId": zod.uuid()
+})
+
+export const acceptCampaignInviteHeaderIdempotencyKeyMin = 8;
+export const acceptCampaignInviteHeaderIdempotencyKeyMax = 80;
+
+
+
+export const AcceptCampaignInviteHeader = zod.object({
+  "Idempotency-Key": zod.string().min(acceptCampaignInviteHeaderIdempotencyKeyMin).max(acceptCampaignInviteHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+export const acceptCampaignInviteBodyTermsVersionMax = 40;
+
+export const acceptCampaignInviteBodyTermsHashRegExp = new RegExp('^[a-f0-9]{64}$');
+export const acceptCampaignInviteBodyMonthlyCapCentsMin = 100;
+export const acceptCampaignInviteBodyMonthlyCapCentsMax = 100000000;
+
+
+
+export const AcceptCampaignInviteBody = zod.object({
+  "termsVersion": zod.string().max(acceptCampaignInviteBodyTermsVersionMax),
+  "termsHash": zod.string().regex(acceptCampaignInviteBodyTermsHashRegExp),
+  "monthlyCapCents": zod.int().min(acceptCampaignInviteBodyMonthlyCapCentsMin).max(acceptCampaignInviteBodyMonthlyCapCentsMax),
+  "confirm": zod.literal(true)
+})
+
+export const acceptCampaignInviteResponseStoreSharePctMax = 100;
+
+export const acceptCampaignInviteResponseWebagSharePctMin = 0;
+export const acceptCampaignInviteResponseWebagSharePctMax = 99;
+
+export const acceptCampaignInviteResponseTermsHashRegExp = new RegExp('^[a-f0-9]{64}$');
+export const acceptCampaignInviteResponseTermsTextMax = 4000;
+
+export const acceptCampaignInviteResponseSpentThisMonthCentsMin = 0;
+
+
+
+export const AcceptCampaignInviteResponse = zod.object({
+  "enrollmentId": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "name": zod.string(),
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "storeSharePct": zod.int().min(1).max(acceptCampaignInviteResponseStoreSharePctMax),
+  "webagSharePct": zod.int().min(acceptCampaignInviteResponseWebagSharePctMin).max(acceptCampaignInviteResponseWebagSharePctMax),
+  "example": zod.object({
+  "orderSubtotalCents": zod.int(),
+  "discountCents": zod.int(),
+  "storeShareCents": zod.int().describe('Quanto o desconto custa à loja por pedido'),
+  "youReceiveWithCents": zod.int(),
+  "youReceiveWithoutCents": zod.int()
+}).describe('Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: "você recebe R$ 79,78; sem o cupom, R$ 83,93"'),
+  "terms": zod.object({
+  "version": zod.string().describe('Versão do texto do aceite (cláusula nos Termos do Lojista, J27)'),
+  "hash": zod.string().regex(acceptCampaignInviteResponseTermsHashRegExp).describe('SHA-256 do texto, gravado no aceite'),
+  "text": zod.string().max(acceptCampaignInviteResponseTermsTextMax)
+}),
+  "suggestedMonthlyCapCents": zod.int(),
+  "monthlyCapCents": zod.int().nullable(),
+  "spentThisMonthCents": zod.int().min(acceptCampaignInviteResponseSpentThisMonthCentsMin),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('7 dias; sem resposta, expira sem custo e sem aceite tácito'),
+  "respondedAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Mesmas regras de acesso do aceite. Grava a recusa em `campaign_acceptances` (`action: decline`). Idempotente. A campanha não desconta nesta loja.
+ * @summary Recusar o convite
+ */
+export const DeclineCampaignInviteParams = zod.object({
+  "storeId": zod.uuid(),
+  "enrollmentId": zod.uuid()
+})
+
+export const declineCampaignInviteResponseStoreSharePctMax = 100;
+
+export const declineCampaignInviteResponseWebagSharePctMin = 0;
+export const declineCampaignInviteResponseWebagSharePctMax = 99;
+
+export const declineCampaignInviteResponseTermsHashRegExp = new RegExp('^[a-f0-9]{64}$');
+export const declineCampaignInviteResponseTermsTextMax = 4000;
+
+export const declineCampaignInviteResponseSpentThisMonthCentsMin = 0;
+
+
+
+export const DeclineCampaignInviteResponse = zod.object({
+  "enrollmentId": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "name": zod.string(),
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "storeSharePct": zod.int().min(1).max(declineCampaignInviteResponseStoreSharePctMax),
+  "webagSharePct": zod.int().min(declineCampaignInviteResponseWebagSharePctMin).max(declineCampaignInviteResponseWebagSharePctMax),
+  "example": zod.object({
+  "orderSubtotalCents": zod.int(),
+  "discountCents": zod.int(),
+  "storeShareCents": zod.int().describe('Quanto o desconto custa à loja por pedido'),
+  "youReceiveWithCents": zod.int(),
+  "youReceiveWithoutCents": zod.int()
+}).describe('Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: "você recebe R$ 79,78; sem o cupom, R$ 83,93"'),
+  "terms": zod.object({
+  "version": zod.string().describe('Versão do texto do aceite (cláusula nos Termos do Lojista, J27)'),
+  "hash": zod.string().regex(declineCampaignInviteResponseTermsHashRegExp).describe('SHA-256 do texto, gravado no aceite'),
+  "text": zod.string().max(declineCampaignInviteResponseTermsTextMax)
+}),
+  "suggestedMonthlyCapCents": zod.int(),
+  "monthlyCapCents": zod.int().nullable(),
+  "spentThisMonthCents": zod.int().min(declineCampaignInviteResponseSpentThisMonthCentsMin),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('7 dias; sem resposta, expira sem custo e sem aceite tácito'),
+  "respondedAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Mesmas regras de acesso do aceite. Vale para pedidos NOVOS: a criação do pedido reconfere o aceite sob a trava; pedidos já criados mantêm o desconto e as reservas (C4). Grava `action: leave`. Idempotente. Saída não é multa nem pendência.
+ * @summary Sair da campanha a qualquer momento (WB-343 C4)
+ */
+export const LeaveCampaignParams = zod.object({
+  "storeId": zod.uuid(),
+  "campaignId": zod.uuid()
+})
+
+export const leaveCampaignResponseStoreSharePctMax = 100;
+
+export const leaveCampaignResponseWebagSharePctMin = 0;
+export const leaveCampaignResponseWebagSharePctMax = 99;
+
+export const leaveCampaignResponseTermsHashRegExp = new RegExp('^[a-f0-9]{64}$');
+export const leaveCampaignResponseTermsTextMax = 4000;
+
+export const leaveCampaignResponseSpentThisMonthCentsMin = 0;
+
+
+
+export const LeaveCampaignResponse = zod.object({
+  "enrollmentId": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "name": zod.string(),
+  "state": zod.enum(['pending', 'accepted', 'declined', 'left', 'expired']),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "audience": zod.enum(['all', 'first_purchase', 'reactivation']).describe('`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).'),
+  "startsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "endsAt": zod.iso.datetime({"offset":true}).nullable(),
+  "storeSharePct": zod.int().min(1).max(leaveCampaignResponseStoreSharePctMax),
+  "webagSharePct": zod.int().min(leaveCampaignResponseWebagSharePctMin).max(leaveCampaignResponseWebagSharePctMax),
+  "example": zod.object({
+  "orderSubtotalCents": zod.int(),
+  "discountCents": zod.int(),
+  "storeShareCents": zod.int().describe('Quanto o desconto custa à loja por pedido'),
+  "youReceiveWithCents": zod.int(),
+  "youReceiveWithoutCents": zod.int()
+}).describe('Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: "você recebe R$ 79,78; sem o cupom, R$ 83,93"'),
+  "terms": zod.object({
+  "version": zod.string().describe('Versão do texto do aceite (cláusula nos Termos do Lojista, J27)'),
+  "hash": zod.string().regex(leaveCampaignResponseTermsHashRegExp).describe('SHA-256 do texto, gravado no aceite'),
+  "text": zod.string().max(leaveCampaignResponseTermsTextMax)
+}),
+  "suggestedMonthlyCapCents": zod.int(),
+  "monthlyCapCents": zod.int().nullable(),
+  "spentThisMonthCents": zod.int().min(leaveCampaignResponseSpentThisMonthCentsMin),
+  "expiresAt": zod.iso.datetime({"offset":true}).describe('7 dias; sem resposta, expira sem custo e sem aceite tácito'),
+  "respondedAt": zod.iso.datetime({"offset":true}).nullable()
+})
+
+
+/**
+ * Permissão da loja `coupons` (funcionário sem ela: 403, C3). Só os cupons da própria loja (`owner: store`, `loja_pct` 100). Cada um traz usos, quanto já gastou no mês contra o teto mensal e `pausedBy` (`merchant`, `admin`, `system`). Paginado.
+ * @summary Cupons próprios da loja (WB-346)
+ */
+export const ListStoreCouponsParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const listStoreCouponsQueryCursorMax = 200;
+
+export const listStoreCouponsQueryLimitDefault = 20;
+export const listStoreCouponsQueryLimitMax = 50;
+
+
+
+export const ListStoreCouponsQueryParams = zod.object({
+  "cursor": zod.string().max(listStoreCouponsQueryCursorMax).optional().describe('Cursor opaco devolvido em `nextCursor`'),
+  "limit": zod.int().min(1).max(listStoreCouponsQueryLimitMax).default(listStoreCouponsQueryLimitDefault).describe('Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)')
+})
+
+export const listStoreCouponsResponseDataItemSpentThisMonthCentsMin = 0;
+
+export const listStoreCouponsResponseDataItemUsesMin = 0;
+
+
+
+
+export const ListStoreCouponsResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "code": zod.string(),
+  "codeVisibility": zod.enum(['public', 'private']),
+  "kind": zod.enum(['percent', 'fixed']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "monthlyCapCents": zod.int(),
+  "spentThisMonthCents": zod.int().min(listStoreCouponsResponseDataItemSpentThisMonthCentsMin),
+  "uses": zod.int().min(listStoreCouponsResponseDataItemUsesMin),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "version": zod.int().min(1)
+})),
+  "nextCursor": zod.string().nullable()
+})
+
+
+/**
+ * Permissão da loja `coupons`; **a loja vem da rota e da membership**, nunca do corpo; admin NÃO cria por aqui (C-CUP-07). Percentual ou valor fixo, pedido mínimo, validade, usos totais e por cliente e **teto mensal em R$ obrigatório** (C1). O cupom vale só na própria loja e não gera desconto da Webag (`storeSharePct` 100, C4); o desconto sai da parte da loja (reduz a base da comissão, RN-10). **Teto de percentual** `cupom_loja_pct_max` (padrão 30, só o super admin muda, DEC-103 D-03): percentual acima: 422 `STORE_COUPON_PERCENT_ABOVE_MAX` com `maxPct` ("O desconto máximo da loja é 30%", C7); valor fixo exige pedido mínimo >= valor / (teto/100), arredondado para cima ao centavo (R$ 20,00 exige R$ 66,67): senão 422 `STORE_COUPON_MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`. A criação equivale a aceite implícito (o criador é a loja, com teto): grava em `campaign_acceptances`. O código é do lojista (4 a 20, único; 409 `COUPON_CODE_TAKEN`); cupom `private` tem código gerado. Nasce `active` (sem custo da Webag e sem orçamento da Webag). `Idempotency-Key` obrigatória.
+ * @summary Criar cupom próprio (absorve WB-073; WB-346 C1, C4, C7)
+ */
+export const CreateStoreCouponParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+export const createStoreCouponHeaderIdempotencyKeyMin = 8;
+export const createStoreCouponHeaderIdempotencyKeyMax = 80;
+
+
+
+export const CreateStoreCouponHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createStoreCouponHeaderIdempotencyKeyMin).max(createStoreCouponHeaderIdempotencyKeyMax).describe('Obrigatória (o app repete a escrita em 3G). Mesma chave e mesmo corpo devolvem a resposta guardada (24 h); corpo diferente: 422 `IDEMPOTENCY_KEY_REUSED`; em andamento: 409 `IDEMPOTENCY_IN_PROGRESS` com `Retry-After`. Ausente: 400')
+})
+
+
+
+export const createStoreCouponBodyMinOrderCentsMin = 0;
+export const createStoreCouponBodyMinOrderCentsMax = 1000000;
+
+
+export const createStoreCouponBodyPerCustomerLimitDefault = 1;
+export const createStoreCouponBodyPerCustomerLimitMax = 100;
+
+export const createStoreCouponBodyMonthlyCapCentsMin = 100;
+export const createStoreCouponBodyMonthlyCapCentsMax = 100000000;
+
+export const createStoreCouponBodyCodeMin = 4;
+export const createStoreCouponBodyCodeMax = 20;
+
+
+export const createStoreCouponBodyCodeRegExp = new RegExp('^[A-Z0-9]+$');
+export const createStoreCouponBodyCodeVisibilityDefault = `public`;
+
+export const CreateStoreCouponBody = zod.object({
+  "kind": zod.enum(['percent', 'fixed']),
+  "value": zod.int().min(1).describe('Percentual (1 a `cupom_loja_pct_max`) ou centavos'),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(createStoreCouponBodyMinOrderCentsMin).max(createStoreCouponBodyMinOrderCentsMax).optional(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().min(1).nullish(),
+  "perCustomerLimit": zod.int().min(1).max(createStoreCouponBodyPerCustomerLimitMax).default(createStoreCouponBodyPerCustomerLimitDefault),
+  "monthlyCapCents": zod.int().min(createStoreCouponBodyMonthlyCapCentsMin).max(createStoreCouponBodyMonthlyCapCentsMax).describe('Obrigatório (WB-346 C1)'),
+  "code": zod.string().min(createStoreCouponBodyCodeMin).max(createStoreCouponBodyCodeMax).regex(createStoreCouponBodyCodeRegExp).nullish(),
+  "codeVisibility": zod.enum(['public', 'private']).default(createStoreCouponBodyCodeVisibilityDefault)
+}).describe('Sem `storeId`, `fundingSource`, `storeSharePct`, `campaignId` nem desconto da Webag: a loja vem da rota e o resto é implícito (loja paga 100%).')
+
+export const createStoreCouponResponseSpentThisMonthCentsMin = 0;
+
+export const createStoreCouponResponseUsesMin = 0;
+
+
+
+
+export const CreateStoreCouponResponse = zod.object({
+  "id": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "code": zod.string(),
+  "codeVisibility": zod.enum(['public', 'private']),
+  "kind": zod.enum(['percent', 'fixed']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "monthlyCapCents": zod.int(),
+  "spentThisMonthCents": zod.int().min(createStoreCouponResponseSpentThisMonthCentsMin),
+  "uses": zod.int().min(createStoreCouponResponseUsesMin),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "version": zod.int().min(1)
+})
+
+
+/**
+ * Não grava. Mesma conta do pedido (RN-10): num pedido de R$ 80,00 "você recebe R$ 60,49 (sem o cupom: R$ 67,21)". Exige a permissão `coupons` e devolve o líquido da PRÓPRIA loja (por isso fora do "Ver como").
+ * @summary Prévia "Você recebe R$ X por pedido de R$ Y" (WB-346 C2)
+ */
+export const PreviewStoreCouponParams = zod.object({
+  "storeId": zod.uuid()
+})
+
+
+
+export const previewStoreCouponBodyOrderSubtotalCentsDefault = 8000;
+export const previewStoreCouponBodyOrderSubtotalCentsMin = 1000;
+export const previewStoreCouponBodyOrderSubtotalCentsMax = 1000000;
+
+
+
+export const PreviewStoreCouponBody = zod.object({
+  "kind": zod.enum(['percent', 'fixed']),
+  "value": zod.int().min(1),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "orderSubtotalCents": zod.int().min(previewStoreCouponBodyOrderSubtotalCentsMin).max(previewStoreCouponBodyOrderSubtotalCentsMax).default(previewStoreCouponBodyOrderSubtotalCentsDefault)
+})
+
+export const PreviewStoreCouponResponse = zod.object({
+  "orderSubtotalCents": zod.int(),
+  "discountCents": zod.int(),
+  "youReceiveWithCents": zod.int().describe('"Você recebe R$ 60,49"'),
+  "youReceiveWithoutCents": zod.int().describe('"sem o cupom: R$ 67,21"'),
+  "maxPct": zod.int().describe('`cupom_loja_pct_max` vigente'),
+  "requiredMinOrderCents": zod.int().nullable().describe('Só valor fixo: pedido mínimo exigido (valor / (teto/100), para cima ao centavo)')
+})
+
+
+/**
+ * Permissão `coupons`. `active: false` pausa na hora; `active: true` retoma, exceto se `pausedBy: admin` (409 `PAUSED_BY_ADMIN`, C6) ou se o teto mensal acabou (a retomada só vale no mês seguinte ou com teto maior). Antes do 1º uso pode mudar valor, mínimo, validade e usos; **depois do 1º uso só pausa, retoma, encerra e sobe o teto mensal** (409 `COUPON_IN_USE`). O teto mensal atingido pausa o cupom sozinho (`pausedBy: system`) e avisa o lojista (C5). Os tetos de % e de mínimo da criação valem na edição. `expectedVersion` obrigatório.
+ * @summary Pausar, retomar ou ajustar cupom próprio (WB-346 C5, C6)
+ */
+export const UpdateStoreCouponParams = zod.object({
+  "storeId": zod.uuid(),
+  "couponId": zod.uuid()
+})
+
+
+
+
+export const updateStoreCouponBodyMinOrderCentsMin = 0;
+export const updateStoreCouponBodyMinOrderCentsMax = 1000000;
+
+
+export const updateStoreCouponBodyPerCustomerLimitMax = 100;
+
+export const updateStoreCouponBodyMonthlyCapCentsMin = 100;
+export const updateStoreCouponBodyMonthlyCapCentsMax = 100000000;
+
+
+
+export const UpdateStoreCouponBody = zod.object({
+  "expectedVersion": zod.int().min(1),
+  "active": zod.boolean().optional(),
+  "end": zod.boolean().optional().describe('Encerra (não reabre)'),
+  "value": zod.int().min(1).optional(),
+  "percentCapCents": zod.int().min(1).nullish(),
+  "minOrderCents": zod.int().min(updateStoreCouponBodyMinOrderCentsMin).max(updateStoreCouponBodyMinOrderCentsMax).optional(),
+  "endsAt": zod.iso.datetime({"offset":true}).optional(),
+  "maxUses": zod.int().min(1).nullish(),
+  "perCustomerLimit": zod.int().min(1).max(updateStoreCouponBodyPerCustomerLimitMax).optional(),
+  "monthlyCapCents": zod.int().min(updateStoreCouponBodyMonthlyCapCentsMin).max(updateStoreCouponBodyMonthlyCapCentsMax).optional()
+})
+
+export const updateStoreCouponResponseSpentThisMonthCentsMin = 0;
+
+export const updateStoreCouponResponseUsesMin = 0;
+
+
+
+
+export const UpdateStoreCouponResponse = zod.object({
+  "id": zod.uuid(),
+  "campaignId": zod.uuid(),
+  "code": zod.string(),
+  "codeVisibility": zod.enum(['public', 'private']),
+  "kind": zod.enum(['percent', 'fixed']),
+  "value": zod.int(),
+  "percentCapCents": zod.int().nullable(),
+  "minOrderCents": zod.int(),
+  "startsAt": zod.iso.datetime({"offset":true}),
+  "endsAt": zod.iso.datetime({"offset":true}),
+  "maxUses": zod.int().nullable(),
+  "perCustomerLimit": zod.int(),
+  "monthlyCapCents": zod.int(),
+  "spentThisMonthCents": zod.int().min(updateStoreCouponResponseSpentThisMonthCentsMin),
+  "uses": zod.int().min(updateStoreCouponResponseUsesMin),
+  "state": zod.enum(['draft', 'scheduled', 'active', 'paused', 'ended']).describe('`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.'),
+  "pausedBy": zod.union([zod.literal('admin'),zod.literal('merchant'),zod.literal('system'),zod.literal(null)]).nullable(),
+  "version": zod.int().min(1)
+})
+
+
+/**
+ * "Cupons para este pedido" (BottomSheet da sacola). Lista **só cupons públicos** (`codeVisibility: public`) aplicáveis AGORA ou aplicáveis com "Faltam R$ X" (`shortfall`); **nunca** lista cupom segmentado ou privado, de outro público ("primeira compra" só aparece a quem não tem pedido pago), de campanha sem aceite da loja ou esgotado (C7). Cada oferta traz valor, condição, validade (o dia final vale até 23:59 em America/Sao_Paulo, C9), a origem em texto (`webag`, `store`, `webag_and_store`, `delivery_webag`) e as restrições em lista fechada, para a tela montar o texto sem o servidor mandar frase. O `code` só vai nas ofertas públicas. Tudo calculado no servidor com a sacola e o endereço da conta (mesmos parâmetros de `getCart`); não revela qual identificador antifraude casou. Até 20 ofertas, sem cursor. Limite de 60 chamadas em 10 min por conta (429).
+ * @summary Cupons para este pedido: a vitrine da sacola (WB-347 C2, C7, C9)
+ */
+export const listCartCouponOffersQueryModeDefault = `delivery`;
+
+export const ListCartCouponOffersQueryParams = zod.object({
+  "mode": zod.enum(['delivery', 'pickup']).default(listCartCouponOffersQueryModeDefault).describe('Como o cliente quer receber; define frete e bloqueios do resumo'),
+  "addressId": zod.uuid().optional().describe('Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404')
+})
+
+
+export const listCartCouponOffersResponseDataMax = 20;
+
+
+
+export const ListCartCouponOffersResponse = zod.object({
+  "data": zod.array(zod.object({
+  "code": zod.string().describe('Só cupom público'),
+  "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
+  "valueCents": zod.int().nullable(),
+  "percent": zod.int().nullable(),
+  "percentCapCents": zod.int().nullable().describe('O cartão diz "até R$ N"'),
+  "minOrderCents": zod.int(),
+  "validUntil": zod.iso.datetime({"offset":true}).describe('O dia final vale até 23:59 em America/Sao_Paulo'),
+  "origin": zod.enum(['webag', 'store', 'webag_and_store', 'delivery_webag']).describe('Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).'),
+  "restrictions": zod.array(zod.enum(['first_purchase', 'reactivation', 'this_store', 'this_city', 'this_category', 'min_order'])),
+  "applicable": zod.boolean(),
+  "shortfall": zod.union([zod.object({
+  "missingCents": zod.int().min(1),
+  "requiredSubtotalCents": zod.int(),
+  "currentSubtotalCents": zod.int()
+}).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]),
+  "estimatedDiscountCents": zod.int().nullable()
+})).max(listCartCouponOffersResponseDataMax),
+  "nextCursor": zod.null()
 })

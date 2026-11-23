@@ -15,9 +15,10 @@
  * Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
  * Permissões do admin (WB-355): TODA operação `/v1/admin/*` declara `x-admin-permission` (chave da tabela única `permissions.ts`; `admin-self` = qualquer perfil de admin, só nas rotas do próprio TOTP). Rota nova sem a chave falha no CI; o teste de matriz percorre todas as rotas reais com os 4 perfis, um lojista e um cliente.
  * "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
+ * Mudanças de 0.4.0 para 0.5.0 (v1.1, R2, ADR-019): só adições (campanhas e cupons por fonte de custo, painéis prontos, funil e porta falsa dos acessos, convites e cupom próprio da loja, vitrine de cupons da sacola, código de barras, elegibilidade do "de/por"); operações novas levam `x-planned: v1.1 R2` até serem implementadas. Campos novos em `CartCoupon`, `CartSummary`, `Order`, `ProductVariant` e nos corpos de variação são opcionais (o app publicado ignora). **Comportamento que muda sem mudar o formato:** `originalPrice` e `discountPercent` (vitrine, produto e variação) passam a vir nulos quando o preço "de" não foi praticado por 30 dias (RN-C8, `getPromotionEligibility`); campo estranho em `applyCartCoupon` ou `createOrder` (`discountCents`, fonte de custo, `campaignId`) é 422 `FIELD_NOT_EDITABLE`. Nenhum campo, parâmetro ou rota do contrato majora preço, frete ou taxa por causa de cupom (DEC-088, F1).
  * Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
  *
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import { apiFetch } from '../http/api-fetch.js';
 export type HealthIndicatorStatus = typeof HealthIndicatorStatus[keyof typeof HealthIndicatorStatus];
@@ -2896,6 +2897,11 @@ export interface ProductVariant {
   soldOut: boolean;
   /** Disponível maior que zero e menor ou igual ao limite da loja */
   low: boolean;
+  /**
+     * v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional
+     * @nullable
+     */
+  barcode?: string | null;
 }
 
 /**
@@ -3166,6 +3172,12 @@ export type SetVariantsRequestVariantsItemAttributes = {[key: string]: string};
 export type SetVariantsRequestVariantsItem = {
   id?: string;
   attributes: SetVariantsRequestVariantsItemAttributes;
+  /**
+     * v1.1 R2 (WB-373): código de barras da variação; inválido: 422 `BARCODE_INVALID`; já usado por outro produto da loja: 409 `BARCODE_IN_USE` (com `productId`). Campo novo opcional
+     * @nullable
+     * @pattern ^[0-9]{8}$|^[0-9]{12,14}$
+     */
+  barcode?: string | null;
   stock?: number;
   /** @nullable */
   priceCents?: number | null;
@@ -4462,6 +4474,53 @@ export const CartCouponScope = {
   platform: 'platform',
 } as const;
 
+/**
+ * Rótulo ao cliente: "Desconto Webag", "Desconto da loja", "Desconto Webag e loja", "Desconto Webag (entrega)" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7).
+ */
+export type DiscountOrigin = typeof DiscountOrigin[keyof typeof DiscountOrigin];
+
+
+export const DiscountOrigin = {
+  webag: 'webag',
+  store: 'store',
+  webag_and_store: 'webag_and_store',
+  delivery_webag: 'delivery_webag',
+} as const;
+
+export type CouponBreakdownAppliesTo = typeof CouponBreakdownAppliesTo[keyof typeof CouponBreakdownAppliesTo];
+
+
+export const CouponBreakdownAppliesTo = {
+  items: 'items',
+  delivery: 'delivery',
+} as const;
+
+/**
+ * Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22).
+ */
+export interface CouponBreakdown {
+  origin: DiscountOrigin;
+  /** @minimum 0 */
+  totalCents: number;
+  /** @minimum 0 */
+  storeCents: number;
+  /** @minimum 0 */
+  webagCents: number;
+  appliesTo: CouponBreakdownAppliesTo;
+  /** Texto pt-BR da linha ("Desconto Webag (entrega)") */
+  label: string;
+}
+
+/**
+ * "Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.
+ */
+export interface CouponShortfall {
+  /** @minimum 1 */
+  missingCents: number;
+  requiredSubtotalCents: number;
+  currentSubtotalCents: number;
+}
+
 export interface CartCoupon {
   code: string;
   kind: CartCouponKind;
@@ -4472,6 +4531,36 @@ export interface CartCoupon {
      * @nullable
      */
   rejection: string | null;
+  /** v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional */
+  origin?: DiscountOrigin | null;
+  /** v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional */
+  breakdown?: CouponBreakdown | null;
+  /** v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional */
+  shortfall?: CouponShortfall | null;
+  /**
+     * v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional
+     * @nullable
+     */
+  validUntil?: string | null;
+}
+
+export type CartSummaryLineKey = typeof CartSummaryLineKey[keyof typeof CartSummaryLineKey];
+
+
+export const CartSummaryLineKey = {
+  subtotal: 'subtotal',
+  delivery: 'delivery',
+  service_fee: 'service_fee',
+  coupon_discount: 'coupon_discount',
+  total: 'total',
+} as const;
+
+export interface CartSummaryLine {
+  key: CartSummaryLineKey;
+  label: string;
+  /** Com sinal: o desconto é negativo */
+  amountCents: number;
+  origin?: DiscountOrigin | null;
 }
 
 /**
@@ -4492,6 +4581,8 @@ export interface CartSummary {
   platformDiscountCapped: boolean;
   /** 'Faltam R$ X para o pedido mínimo' */
   missingForMinimum: Money | null;
+  /** v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como 'Entrega: Grátis'. Campo novo opcional (o app antigo usa os campos acima) */
+  lines?: CartSummaryLine[];
 }
 
 export type ExposureLimitMode = typeof ExposureLimitMode[keyof typeof ExposureLimitMode];
@@ -5400,6 +5491,8 @@ export interface Order {
   summary: CartSummary;
   /** @nullable */
   couponCode: string | null;
+  /** v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional */
+  couponBreakdown?: CouponBreakdown | null;
   delivery: OrderDelivery;
   pickup: OrderPickup;
   payment: OrderPaymentProperty;
@@ -7328,6 +7421,12 @@ export interface DraftBatchVariant {
      * @nullable
      */
   priceCents?: number | null;
+  /**
+     * v1.1 R2 (WB-373). Campo novo opcional
+     * @nullable
+     * @pattern ^[0-9]{8}$|^[0-9]{12,14}$
+     */
+  barcode?: string | null;
 }
 
 export interface DraftBatchItem {
@@ -8754,7 +8853,29 @@ export interface ItemAddedEvent {
   productId: string;
 }
 
-export type AnalyticsEvent = AppSessionStartedEvent | StoreViewedEvent | ProductViewedEvent | ItemAddedEvent;
+export type CheckoutStartedEventName = typeof CheckoutStartedEventName[keyof typeof CheckoutStartedEventName];
+
+
+export const CheckoutStartedEventName = {
+  checkout_started: 'checkout_started',
+} as const;
+
+/**
+ * v1.1 R2 (WB-362 C3): início do checkout. Mesmas regras de privacidade dos demais eventos (sem conta, sem valor, sem endereço). Só passa a existir na coleta quando a R1.4 for construída com ele (ADR-019 pendência 5).
+ */
+export interface CheckoutStartedEvent {
+  name: CheckoutStartedEventName;
+  eventId: string;
+  occurredAt: string;
+  /**
+     * @minLength 16
+     * @maxLength 64
+     */
+  sessionId: string;
+  storeId: string;
+}
+
+export type AnalyticsEvent = AppSessionStartedEvent | StoreViewedEvent | ProductViewedEvent | ItemAddedEvent | CheckoutStartedEvent;
 
 export interface AnalyticsEventsRequest {
   /**
@@ -8844,6 +8965,1780 @@ export interface AnalyticsAccessReport {
   nextCursor: string | null;
   /** Contadores operacionais do período, por motivo (tech-lead I6): o que o servidor recusou ou descartou. Não têm loja, produto nem sessão; servem para ver se o limite por IP em CGNAT está perdendo evento */
   discards?: AnalyticsAccessReportDiscards;
+}
+
+/**
+ * `draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). "Convite enviado" não é estado: é `enrollments.pending > 0`.
+ */
+export type CampaignState = typeof CampaignState[keyof typeof CampaignState];
+
+
+export const CampaignState = {
+  draft: 'draft',
+  scheduled: 'scheduled',
+  active: 'active',
+  paused: 'paused',
+  ended: 'ended',
+} as const;
+
+/**
+ * As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa.
+ */
+export type CampaignFunding = typeof CampaignFunding[keyof typeof CampaignFunding];
+
+
+export const CampaignFunding = {
+  webag: 'webag',
+  store: 'store',
+  split: 'split',
+  self_funded: 'self_funded',
+} as const;
+
+export type CampaignDiscountKind = typeof CampaignDiscountKind[keyof typeof CampaignDiscountKind];
+
+
+export const CampaignDiscountKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+  free_shipping: 'free_shipping',
+} as const;
+
+/**
+ * `reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196).
+ */
+export type CampaignAudience = typeof CampaignAudience[keyof typeof CampaignAudience];
+
+
+export const CampaignAudience = {
+  all: 'all',
+  first_purchase: 'first_purchase',
+  reactivation: 'reactivation',
+} as const;
+
+export type CampaignEndReason = typeof CampaignEndReason[keyof typeof CampaignEndReason];
+
+
+export const CampaignEndReason = {
+  budget: 'budget',
+  uses: 'uses',
+  expired: 'expired',
+  admin: 'admin',
+} as const;
+
+export type CampaignTargetKind = typeof CampaignTargetKind[keyof typeof CampaignTargetKind];
+
+
+export const CampaignTargetKind = {
+  all: 'all',
+  city: 'city',
+  store: 'store',
+  category: 'category',
+} as const;
+
+export interface CampaignTarget {
+  kind: CampaignTargetKind;
+  /** @nullable */
+  cityId?: string | null;
+  /** @nullable */
+  storeId?: string | null;
+  /** @nullable */
+  categoryId?: string | null;
+}
+
+/**
+ * `private`: o servidor gera o código (8 ou mais caracteres aleatórios, C-CUP-06); enviar `code` junto é 422
+ */
+export type CampaignCreateCodeVisibility = typeof CampaignCreateCodeVisibility[keyof typeof CampaignCreateCodeVisibility];
+
+
+export const CampaignCreateCodeVisibility = {
+  public: 'public',
+  private: 'private',
+} as const;
+
+export interface CampaignCreate {
+  /**
+     * Texto puro; exibido como texto e escapado no CSV
+     * @minLength 2
+     * @maxLength 80
+     */
+  name: string;
+  fundingSource: CampaignFunding;
+  /**
+     * @minimum 1
+     * @maximum 99
+     */
+  storeSharePct?: number;
+  kind: CampaignDiscountKind;
+  /** @minimum 0 */
+  value?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  minOrderCents?: number;
+  audience: CampaignAudience;
+  /**
+     * @minimum 7
+     * @maximum 365
+     */
+  reactivationDays?: number;
+  target: CampaignTarget;
+  startsAt?: string;
+  endsAt?: string;
+  /**
+     * Obrigatório para ATIVAR campanha com `desconto_webag > 0` (RN-C4); opcional em rascunho
+     * @minimum 1
+     * @nullable
+     */
+  budgetTotalCents?: number | null;
+  /**
+     * Idem; o dia vira à meia-noite de America/Sao_Paulo
+     * @minimum 1
+     * @nullable
+     */
+  budgetDailyCents?: number | null;
+  /**
+     * WB-342 C6: exige este limite OU o orçamento
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  /**
+     * Só código público ("vaidade"). Sem código, o cupom não aparece sozinho (campanha automática sem código é Could e não existe na R2)
+     * @minLength 4
+     * @maxLength 20
+     * @nullable
+     * @pattern ^[A-Z0-9]+$
+     */
+  code?: string | null;
+  /** `private`: o servidor gera o código (8 ou mais caracteres aleatórios, C-CUP-06); enviar `code` junto é 422 */
+  codeVisibility?: CampaignCreateCodeVisibility;
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+}
+
+export type CampaignPatchCodeVisibility = typeof CampaignPatchCodeVisibility[keyof typeof CampaignPatchCodeVisibility];
+
+
+export const CampaignPatchCodeVisibility = {
+  public: 'public',
+  private: 'private',
+} as const;
+
+/**
+ * Todos os campos de `CampaignCreate` são opcionais aqui (só os enviados mudam), mais a versão
+ */
+export interface CampaignPatch {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name?: string;
+  fundingSource?: CampaignFunding;
+  /**
+     * @minimum 1
+     * @maximum 99
+     */
+  storeSharePct?: number;
+  kind?: CampaignDiscountKind;
+  /** @minimum 0 */
+  value?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  minOrderCents?: number;
+  audience?: CampaignAudience;
+  /**
+     * @minimum 7
+     * @maximum 365
+     */
+  reactivationDays?: number;
+  target?: CampaignTarget;
+  startsAt?: string;
+  endsAt?: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  budgetTotalCents?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  budgetDailyCents?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  /**
+     * @minLength 4
+     * @maxLength 20
+     * @nullable
+     * @pattern ^[A-Z0-9]+$
+     */
+  code?: string | null;
+  codeVisibility?: CampaignPatchCodeVisibility;
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+}
+
+export interface CampaignReasonRequest {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+}
+
+export interface CampaignActivateRequest {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+  /** @minimum 1 */
+  expectedVersion: number;
+  /** Obrigatório (e só o super admin) quando "Webag paga" fica acima da margem prevista: "pode gerar prejuízo por pedido" */
+  acknowledgeLossRisk?: boolean;
+}
+
+export type ActivationBlockerCode = typeof ActivationBlockerCode[keyof typeof ActivationBlockerCode];
+
+
+export const ActivationBlockerCode = {
+  NAME_REQUIRED: 'NAME_REQUIRED',
+  VALUE_REQUIRED: 'VALUE_REQUIRED',
+  BUDGET_REQUIRED: 'BUDGET_REQUIRED',
+  USAGE_OR_BUDGET_REQUIRED: 'USAGE_OR_BUDGET_REQUIRED',
+  MIN_ORDER_TOO_LOW: 'MIN_ORDER_TOO_LOW',
+  GLOBAL_BUDGET_ZERO: 'GLOBAL_BUDGET_ZERO',
+  GLOBAL_BUDGET_EXCEEDED: 'GLOBAL_BUDGET_EXCEEDED',
+  ABOVE_MARGIN_SUPER_ADMIN_ONLY: 'ABOVE_MARGIN_SUPER_ADMIN_ONLY',
+  LOSS_RISK_ACK_REQUIRED: 'LOSS_RISK_ACK_REQUIRED',
+  NO_ACCEPTED_STORE: 'NO_ACCEPTED_STORE',
+  FREE_SHIPPING_DISABLED: 'FREE_SHIPPING_DISABLED',
+  FREE_SHIPPING_FUNDING_INVALID: 'FREE_SHIPPING_FUNDING_INVALID',
+  STARTS_AFTER_ENDS: 'STARTS_AFTER_ENDS',
+  CAMPAIGNS_DISABLED: 'CAMPAIGNS_DISABLED',
+} as const;
+
+export interface ActivationBlocker {
+  code: ActivationBlockerCode;
+  /** Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code` */
+  message: string;
+  /** `MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1) */
+  requiredMinOrderCents?: number;
+  /** `GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11) */
+  missingCents?: number;
+}
+
+export interface CampaignActivation {
+  /** Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta */
+  canActivate: boolean;
+  /** Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min */
+  requiresStepUp: boolean;
+  requiresSuperAdmin: boolean;
+  /**
+     * Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)
+     * @nullable
+     */
+  maxCostCents: number | null;
+  blockers: ActivationBlocker[];
+}
+
+export type ActivationProblem = Problem & {
+  blockers?: ActivationBlocker[];
+};
+
+/**
+ * Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9).
+ */
+export interface CampaignBudget {
+  /** @nullable */
+  totalCents: number | null;
+  /** @minimum 0 */
+  reservedCents: number;
+  /** @minimum 0 */
+  spentCents: number;
+  /** @nullable */
+  remainingCents: number | null;
+  /** @nullable */
+  dailyCents: number | null;
+  /** @minimum 0 */
+  dailyReservedCents: number;
+  /** @minimum 0 */
+  dailySpentCents: number;
+  /** @nullable */
+  dailyRemainingCents: number | null;
+  /** Dia corrente em America/Sao_Paulo */
+  day: string;
+  /** @nullable */
+  maxUses: number | null;
+  /** @minimum 0 */
+  usesReserved: number;
+  /** @minimum 0 */
+  usesConfirmed: number;
+}
+
+export interface CampaignEnrollmentCounts {
+  /**
+     * Lojas ainda `pending`
+     * @minimum 0
+     */
+  invited: number;
+  /** @minimum 0 */
+  accepted: number;
+  /** @minimum 0 */
+  declined: number;
+  /** @minimum 0 */
+  left: number;
+  /** @minimum 0 */
+  expired: number;
+}
+
+export type CampaignCodeVisibility = typeof CampaignCodeVisibility[keyof typeof CampaignCodeVisibility];
+
+
+export const CampaignCodeVisibility = {
+  public: 'public',
+  private: 'private',
+} as const;
+
+export interface CampaignCode {
+  code: string;
+  visibility: CampaignCodeVisibility;
+  active: boolean;
+}
+
+export type CampaignSummaryOwner = typeof CampaignSummaryOwner[keyof typeof CampaignSummaryOwner];
+
+
+export const CampaignSummaryOwner = {
+  webag: 'webag',
+  store: 'store',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CampaignSummaryPausedBy = typeof CampaignSummaryPausedBy[keyof typeof CampaignSummaryPausedBy] | null;
+
+
+export const CampaignSummaryPausedBy = {
+  admin: 'admin',
+  merchant: 'merchant',
+  system: 'system',
+} as const;
+
+export interface CampaignSummary {
+  id: string;
+  owner: CampaignSummaryOwner;
+  name: string;
+  state: CampaignState;
+  /** @minimum 1 */
+  version: number;
+  fundingSource: CampaignFunding;
+  /** "Autofinanciado", "Dividido: loja 40% e Webag 60%", "Webag paga", "Loja paga" (padroniza o CU-3 da spec) */
+  fundingLabel: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  storeSharePct: number;
+  endReason: CampaignEndReason | null;
+  /** @nullable */
+  pausedBy: CampaignSummaryPausedBy;
+  /** @nullable */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  budget: CampaignBudget;
+  enrollments: CampaignEnrollmentCounts;
+  updatedAt: string;
+}
+
+export interface CampaignPage {
+  data: CampaignSummary[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type Campaign = CampaignSummary & ({
+  kind: CampaignDiscountKind;
+  /** @minimum 0 */
+  value: number;
+  /** @nullable */
+  percentCapCents: number | null;
+  /** @minimum 0 */
+  minOrderCents: number;
+  audience: CampaignAudience;
+  reactivationDays: number;
+  target: CampaignTarget;
+  /** @nullable */
+  maxUses: number | null;
+  perCustomerLimit: number;
+  codes: CampaignCode[];
+  activation: CampaignActivation;
+  /** F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz "custo previsto: tabela provisória" */
+  courierCostProvisional: boolean;
+  createdAt: string;
+  /** @nullable */
+  activatedAt: string | null;
+});
+
+export interface CampaignSimulationRequest {
+  fundingSource: CampaignFunding;
+  /**
+     * @minimum 1
+     * @maximum 99
+     */
+  storeSharePct?: number;
+  kind: CampaignDiscountKind;
+  /** @minimum 0 */
+  value?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  minOrderCents?: number;
+  target?: CampaignTarget;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  budgetTotalCents?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  budgetDailyCents?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * Pedido de referência; sem ele vale o mínimo necessário ou R$ 80,00
+     * @minimum 1000
+     * @maximum 1000000
+     */
+  referenceSubtotalCents?: number;
+}
+
+export interface SimulationBand {
+  /** `pickup` ou `tier-<n>` na ordem da tabela de entrega */
+  id: string;
+  /** "Retirada", "Até 2 km", "2 a 4 km"... */
+  label: string;
+  /** @nullable */
+  fromM: number | null;
+  /** @nullable */
+  toM: number | null;
+  pickup: boolean;
+}
+
+export interface SimulationRow {
+  band: SimulationBand;
+  /** @minimum 0 */
+  deliveryFeeCents: number;
+  /**
+     * Custo previsto do motoboy da faixa (retirada: 0)
+     * @minimum 0
+     */
+  courierCostCents: number;
+  /** @minimum 0 */
+  commissionCents: number;
+  /** @minimum 0 */
+  serviceFeeCents: number;
+  /** RN-C3: comissão + taxa de serviço + taxa de entrega - custo previsto do motoboy; PODE ser negativa (seed) */
+  marginCents: number;
+  /** @minimum 0 */
+  discountGrossCents: number;
+  /** @minimum 0 */
+  discountStoreCents: number;
+  /** @minimum 0 */
+  discountWebagCents: number;
+  /** Quanto sobra no pedido para a Webag depois do desconto dela (margem - desconto Webag); negativo = prejuízo */
+  remainingCents: number;
+  /** `remainingCents < 0`: a tela escreve "Prejuízo de R$ X" (nunca só cor) */
+  loss: boolean;
+  /**
+     * Só `self_funded`: subtotal mínimo para o desconto valer inteiro; nulo = não se aplica nesta faixa (margem <= 0)
+     * @nullable
+     */
+  minOrderNeededCents: number | null;
+  applicable: boolean;
+}
+
+export type CampaignSimulationCourierCostSource = typeof CampaignSimulationCourierCostSource[keyof typeof CampaignSimulationCourierCostSource];
+
+
+export const CampaignSimulationCourierCostSource = {
+  delivery_fee_table: 'delivery_fee_table',
+  provisional: 'provisional',
+} as const;
+
+/**
+ * Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2)
+ */
+export type CampaignSimulationWorstCase = {
+  discountWebagCents: number;
+  band: SimulationBand;
+};
+
+export interface CampaignGlobalBudget {
+  /**
+     * Parâmetro `cupom_orcamento_mensal_webag_cents`; padrão 0 (F2)
+     * @minimum 0
+     */
+  monthlyBudgetCents: number;
+  /**
+     * Soma do que as campanhas ativas ainda podem gastar
+     * @minimum 0
+     */
+  committedCents: number;
+  /** @minimum 0 */
+  spentMonthCents: number;
+  /** Pode ficar negativo se o orçamento foi reduzido depois de ativar campanhas */
+  remainingCents: number;
+  monthStart: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  autofinTetoPct: number;
+  /** `false` enquanto o orçamento for R$ 0: só "Loja paga" ativa */
+  webagFundingEnabled: boolean;
+  courierCostProvisional: boolean;
+}
+
+export interface CampaignSimulation {
+  referenceSubtotalCents: number;
+  /** Comissão padrão usada na referência (a real é por loja e categoria) */
+  commissionPct: number;
+  /**
+     * Parâmetro global `autofin_teto_pct` (padrão 50); não existe por campanha
+     * @minimum 0
+     * @maximum 100
+     */
+  autofinTetoPct: number;
+  courierCostSource: CampaignSimulationCourierCostSource;
+  provisional: boolean;
+  rows: SimulationRow[];
+  /** Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2) */
+  worstCase: CampaignSimulationWorstCase;
+  /** @nullable */
+  maxCostCents: number | null;
+  /**
+     * "Com R$ 800,00 dá para cerca de 100 pedidos com cupom": orçamento / desconto de referência
+     * @nullable
+     */
+  estimatedOrders: number | null;
+  globalBudget: CampaignGlobalBudget;
+  /** Desconto da Webag acima da margem prevista em alguma faixa: só o super admin ativa (C5) */
+  aboveMargin: boolean;
+  blockers: ActivationBlocker[];
+}
+
+export type CampaignEnrollmentState = typeof CampaignEnrollmentState[keyof typeof CampaignEnrollmentState];
+
+
+export const CampaignEnrollmentState = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  left: 'left',
+  expired: 'expired',
+} as const;
+
+export interface CampaignEnrollment {
+  enrollmentId: string;
+  storeId: string;
+  storeName: string;
+  state: CampaignEnrollmentState;
+  invitedAt: string;
+  expiresAt: string;
+  /** @nullable */
+  respondedAt: string | null;
+  /** @nullable */
+  monthlyCapCents: number | null;
+  /** @minimum 0 */
+  spentThisMonthCents: number;
+  /** A lista do admin NÃO traz o nome de quem aceitou */
+  acceptedByStaff: boolean;
+}
+
+export interface CampaignEnrollmentPage {
+  data: CampaignEnrollment[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface InviteCampaignStoresRequest {
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  storeIds: string[];
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  reason: string;
+}
+
+export type InviteCampaignStoresResultIneligibleItemReason = typeof InviteCampaignStoresResultIneligibleItemReason[keyof typeof InviteCampaignStoresResultIneligibleItemReason];
+
+
+export const InviteCampaignStoresResultIneligibleItemReason = {
+  NOT_APPROVED: 'NOT_APPROVED',
+  NOT_IN_TARGET: 'NOT_IN_TARGET',
+  UNKNOWN_STORE: 'UNKNOWN_STORE',
+} as const;
+
+export type InviteCampaignStoresResultIneligibleItem = {
+  storeId: string;
+  reason: InviteCampaignStoresResultIneligibleItemReason;
+};
+
+export interface InviteCampaignStoresResult {
+  /** @minimum 0 */
+  invited: number;
+  /** @minimum 0 */
+  alreadyInvited: number;
+  ineligible: InviteCampaignStoresResultIneligibleItem[];
+}
+
+export type CampaignReportPeriod = {
+  /** @nullable */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+};
+
+export type CampaignReportByStoreItem = {
+  storeId: string;
+  storeName: string;
+  orders: number;
+  webagPaidCents: number;
+  storePaidCents: number;
+};
+
+export interface CampaignReport {
+  campaignId: string;
+  state: CampaignState;
+  period: CampaignReportPeriod;
+  /** `atualizado_em` */
+  generatedAt: string;
+  /** `em_cache` */
+  cached: boolean;
+  empty: boolean;
+  /** A soma das reservas confirmadas bate com a dos pedidos pagos e com o razão (WB-345 C5) */
+  reconciled: boolean;
+  /** Custo real da Webag: confirmado menos o devolvido, só pedidos pagos */
+  webagCostCents: number;
+  /**
+     * Devolvido em cancelamentos e estornos, separado (C1)
+     * @minimum 0
+     */
+  returnedCents: number;
+  /** @minimum 0 */
+  ordersPaid: number;
+  /** @minimum 0 */
+  ordersCancelled: number;
+  /** @minimum 0 */
+  gmvCents: number;
+  /** @nullable */
+  ticketWithCouponCents: number | null;
+  /**
+     * Das MESMAS lojas e do mesmo período, sem cupom (C3)
+     * @nullable
+     */
+  ticketWithoutCouponCents: number | null;
+  /** @minimum 0 */
+  newCustomers: number;
+  /** @nullable */
+  costPerNewCustomerCents: number | null;
+  /** @nullable */
+  repeat30dPct: number | null;
+  /**
+     * Preenche 30 dias depois (C3)
+     * @nullable
+     */
+  repeat30dReadyAt: string | null;
+  /** @nullable */
+  contributionMarginCents: number | null;
+  /** Há corrida sem custo de entrega lançado (RN-18, C4) */
+  marginPartial: boolean;
+  budget: CampaignBudget;
+  /** @maxItems 100 */
+  byStore: CampaignReportByStoreItem[];
+}
+
+export type CampaignAlertKind = typeof CampaignAlertKind[keyof typeof CampaignAlertKind];
+
+
+export const CampaignAlertKind = {
+  budget_80: 'budget_80',
+  budget_100: 'budget_100',
+  no_use_30d: 'no_use_30d',
+  suspect_over_20pct: 'suspect_over_20pct',
+  store_concentration_30pct: 'store_concentration_30pct',
+  store_coupon_concentration: 'store_coupon_concentration',
+  report_unreconciled: 'report_unreconciled',
+} as const;
+
+export type CampaignAlertSeverity = typeof CampaignAlertSeverity[keyof typeof CampaignAlertSeverity];
+
+
+export const CampaignAlertSeverity = {
+  info: 'info',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
+/**
+ * `budget_*`: total ou do dia
+ * @nullable
+ */
+export type CampaignAlertScope = typeof CampaignAlertScope[keyof typeof CampaignAlertScope] | null;
+
+
+export const CampaignAlertScope = {
+  total: 'total',
+  day: 'day',
+} as const;
+
+export interface CampaignAlert {
+  id: string;
+  kind: CampaignAlertKind;
+  campaignId: string;
+  campaignName: string;
+  severity: CampaignAlertSeverity;
+  /**
+     * `budget_*`: total ou do dia
+     * @nullable
+     */
+  scope?: CampaignAlertScope;
+  /** @nullable */
+  valueCents?: number | null;
+  /** Texto pt-BR sem dado pessoal */
+  detail: string;
+  createdAt: string;
+}
+
+export interface CampaignAlertPage {
+  data: CampaignAlert[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type CouponSuspectSignal = typeof CouponSuspectSignal[keyof typeof CouponSuspectSignal];
+
+
+export const CouponSuspectSignal = {
+  device_accounts: 'device_accounts',
+  address_accounts: 'address_accounts',
+  payer_accounts: 'payer_accounts',
+  cancellations: 'cancellations',
+  account_velocity: 'account_velocity',
+} as const;
+
+export type CouponSuspectState = typeof CouponSuspectState[keyof typeof CouponSuspectState];
+
+
+export const CouponSuspectState = {
+  open: 'open',
+  released: 'released',
+} as const;
+
+export interface CouponSuspect {
+  id: string;
+  /** Número público do pedido (opaco, sem dado pessoal) */
+  orderNumber: string;
+  campaignId: string;
+  campaignName: string;
+  signal: CouponSuspectSignal;
+  state: CouponSuspectState;
+  detectedAt: string;
+  /** @nullable */
+  releasedAt: string | null;
+}
+
+export interface CouponSuspectPage {
+  data: CouponSuspect[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+/**
+ * Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.
+ */
+export type MetricId = typeof MetricId[keyof typeof MetricId];
+
+
+export const MetricId = {
+  gmv: 'gmv',
+  gmv_delivered: 'gmv_delivered',
+  orders_paid: 'orders_paid',
+  orders_delivered: 'orders_delivered',
+  avg_ticket: 'avg_ticket',
+  webag_revenue: 'webag_revenue',
+  take_rate: 'take_rate',
+  new_customers: 'new_customers',
+  active_customers: 'active_customers',
+  repeat_30d: 'repeat_30d',
+  cancellations_rate: 'cancellations_rate',
+  cancellations_count: 'cancellations_count',
+  accept_time: 'accept_time',
+  delivered_in_window_pct: 'delivered_in_window_pct',
+  pay_to_delivery_time: 'pay_to_delivery_time',
+  courier_cost_per_delivery: 'courier_cost_per_delivery',
+  active_stores: 'active_stores',
+  coupon_uses: 'coupon_uses',
+  discount_total: 'discount_total',
+  discount_webag: 'discount_webag',
+  cost_per_new_customer: 'cost_per_new_customer',
+  sessions: 'sessions',
+  store_visits: 'store_visits',
+  product_visits: 'product_visits',
+  bag_adds: 'bag_adds',
+  conversion: 'conversion',
+} as const;
+
+/**
+ * Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04).
+ */
+export type DimensionId = typeof DimensionId[keyof typeof DimensionId];
+
+
+export const DimensionId = {
+  time: 'time',
+  city: 'city',
+  store: 'store',
+  category: 'category',
+  mode: 'mode',
+  payment_method: 'payment_method',
+  campaign: 'campaign',
+  distance_band: 'distance_band',
+  origin: 'origin',
+} as const;
+
+/**
+ * `general`: os 4 perfis; `operational`: super admin, operação e financeiro; `financial` (receita, take rate, custo de logística, custo e desconto da Webag): super admin e financeiro
+ */
+export type MetricSensitivity = typeof MetricSensitivity[keyof typeof MetricSensitivity];
+
+
+export const MetricSensitivity = {
+  general: 'general',
+  operational: 'operational',
+  financial: 'financial',
+} as const;
+
+export type MetricDefinitionUnit = typeof MetricDefinitionUnit[keyof typeof MetricDefinitionUnit];
+
+
+export const MetricDefinitionUnit = {
+  money_cents: 'money_cents',
+  count: 'count',
+  percent: 'percent',
+  seconds: 'seconds',
+} as const;
+
+/**
+ * Cancelamento subindo é ruim: a cor da variação segue a polaridade, sempre com a palavra Subiu ou Caiu
+ */
+export type MetricDefinitionPolarity = typeof MetricDefinitionPolarity[keyof typeof MetricDefinitionPolarity];
+
+
+export const MetricDefinitionPolarity = {
+  up_good: 'up_good',
+  down_good: 'down_good',
+  neutral: 'neutral',
+} as const;
+
+/**
+ * `quantile`: mediana e p90 por histograma fixo (aproximação documentada, `MetricResult.approximate`); `distinct`: só períodos pré-calculados
+ */
+export type MetricDefinitionAggregation = typeof MetricDefinitionAggregation[keyof typeof MetricDefinitionAggregation];
+
+
+export const MetricDefinitionAggregation = {
+  additive: 'additive',
+  ratio: 'ratio',
+  quantile: 'quantile',
+  distinct: 'distinct',
+} as const;
+
+export type MetricDefinitionChartTypesItem = typeof MetricDefinitionChartTypesItem[keyof typeof MetricDefinitionChartTypesItem];
+
+
+export const MetricDefinitionChartTypesItem = {
+  number: 'number',
+  line: 'line',
+  bar: 'bar',
+  stacked_bar: 'stacked_bar',
+  donut: 'donut',
+  table: 'table',
+} as const;
+
+export type MetricDefinitionMinSampleKind = typeof MetricDefinitionMinSampleKind[keyof typeof MetricDefinitionMinSampleKind];
+
+
+export const MetricDefinitionMinSampleKind = {
+  rate: 'rate',
+  quantile: 'quantile',
+  access: 'access',
+  none: 'none',
+} as const;
+
+export type MetricDefinitionMinSample = {
+  kind: MetricDefinitionMinSampleKind;
+  /** 20 para taxa, ticket e comparação; 5 para mediana e p90 (DEC-108); 5 sessões nas métricas de acesso */
+  n: number;
+};
+
+/**
+ * `requires_flag`: métricas de acesso até `coleta_eventos` ligar
+ */
+export type MetricDefinitionAvailability = typeof MetricDefinitionAvailability[keyof typeof MetricDefinitionAvailability];
+
+
+export const MetricDefinitionAvailability = {
+  available: 'available',
+  requires_flag: 'requires_flag',
+} as const;
+
+export interface MetricDefinition {
+  id: MetricId;
+  name: string;
+  /** Definição em UMA frase (RN-15), igual em toda tela */
+  definition: string;
+  sensitivity: MetricSensitivity;
+  unit: MetricDefinitionUnit;
+  /** Cancelamento subindo é ruim: a cor da variação segue a polaridade, sempre com a palavra Subiu ou Caiu */
+  polarity: MetricDefinitionPolarity;
+  /** `quantile`: mediana e p90 por histograma fixo (aproximação documentada, `MetricResult.approximate`); `distinct`: só períodos pré-calculados */
+  aggregation: MetricDefinitionAggregation;
+  /** Compatíveis (matriz do PRD). `time` aceita dia, semana ou mês; recompra só `time` mensal e `city` */
+  dimensions: DimensionId[];
+  chartTypes: MetricDefinitionChartTypesItem[];
+  minSample: MetricDefinitionMinSample;
+  /** `requires_flag`: métricas de acesso até `coleta_eventos` ligar */
+  availability: MetricDefinitionAvailability;
+}
+
+export type DimensionDefinitionGranularitiesItem = typeof DimensionDefinitionGranularitiesItem[keyof typeof DimensionDefinitionGranularitiesItem];
+
+
+export const DimensionDefinitionGranularitiesItem = {
+  day: 'day',
+  week: 'week',
+  month: 'month',
+} as const;
+
+export interface DimensionDefinition {
+  id: DimensionId;
+  name: string;
+  /** Só `time`; vazio nas demais */
+  granularities: DimensionDefinitionGranularitiesItem[];
+}
+
+export interface DashboardLimits {
+  maxPeriodDays: number;
+  maxDimensions: number;
+  maxFilters: number;
+  maxPoints: number;
+  maxCategories: number;
+  maxWidgetsPerDashboard: number;
+  maxDashboardsPerUser: number;
+  queriesPerMinute: number;
+  concurrentQueries: number;
+  timeoutSeconds: number;
+  cacheSeconds: number;
+  lowSampleRate: number;
+  lowSampleQuantile: number;
+}
+
+export interface DashboardCatalog {
+  metrics: MetricDefinition[];
+  dimensions: DimensionDefinition[];
+  limits: DashboardLimits;
+  /** Última atualização dos agregados (`atualizado_em`) */
+  generatedAt: string;
+}
+
+export type MetricPeriodPreset = typeof MetricPeriodPreset[keyof typeof MetricPeriodPreset];
+
+
+export const MetricPeriodPreset = {
+  today: 'today',
+  last_7d: 'last_7d',
+  last_28d: 'last_28d',
+  last_30d: 'last_30d',
+  last_90d: 'last_90d',
+  this_month: 'this_month',
+  last_month: 'last_month',
+} as const;
+
+/**
+ * Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)
+ */
+export interface MetricPeriod {
+  preset?: MetricPeriodPreset;
+  from?: string;
+  to?: string;
+}
+
+export type MetricFilterOp = typeof MetricFilterOp[keyof typeof MetricFilterOp];
+
+
+export const MetricFilterOp = {
+  eq: 'eq',
+  in: 'in',
+} as const;
+
+export interface MetricFilter {
+  dimensionId: DimensionId;
+  op: MetricFilterOp;
+  /**
+     * @minItems 1
+     * @maxItems 50
+     * @items.maxLength 64
+     */
+  values: string[];
+}
+
+/**
+ * Só com a dimensão `time`
+ */
+export type MetricQueryGranularity = typeof MetricQueryGranularity[keyof typeof MetricQueryGranularity];
+
+
+export const MetricQueryGranularity = {
+  day: 'day',
+  week: 'week',
+  month: 'month',
+} as const;
+
+export interface MetricQuery {
+  metricId: MetricId;
+  /** @maxItems 2 */
+  dimensionIds?: DimensionId[];
+  /** @maxItems 5 */
+  filters?: MetricFilter[];
+  period: MetricPeriod;
+  /** Só com a dimensão `time` */
+  granularity?: MetricQueryGranularity;
+  /** Compara com o período anterior de mesmo tamanho (linha tracejada e variação) */
+  compare?: boolean;
+}
+
+/**
+ * `suppressed: true` (acesso com menos de 5 sessões): `value` e `n` nulos. `lowSample: true` (DEC-108): a tarja "Poucos dados" e `variationPct` nulo. `n` é o tamanho da amostra (pedidos ou sessões); nunca identifica ninguém.
+ */
+export interface MetricCell {
+  /**
+     * Na unidade da métrica (`money_cents`: centavos inteiros; `percent`: 0 a 100 com 1 casa; `seconds`)
+     * @nullable
+     */
+  value: number | null;
+  /** @nullable */
+  n: number | null;
+  lowSample: boolean;
+  suppressed: boolean;
+  /**
+     * Variação sobre o período anterior; nula em baixa amostra ou sem comparação
+     * @nullable
+     */
+  variationPct: number | null;
+}
+
+/**
+ * Uma entrada por dimensão pedida (chave = `DimensionId`)
+ */
+export type MetricRowDimensions = {[key: string]: {
+  /** @nullable */
+  key: string | null;
+  label: string;
+}};
+
+export interface MetricRow {
+  /** Uma entrada por dimensão pedida (chave = `DimensionId`) */
+  dimensions: MetricRowDimensions;
+  /** Linha "Outros" (além das 10 maiores categorias) */
+  isOther: boolean;
+  cell: MetricCell;
+  previous: MetricCell | null;
+}
+
+export type MetricResultUnit = typeof MetricResultUnit[keyof typeof MetricResultUnit];
+
+
+export const MetricResultUnit = {
+  money_cents: 'money_cents',
+  count: 'count',
+  percent: 'percent',
+  seconds: 'seconds',
+} as const;
+
+export type MetricResultPeriod = {
+  from: string;
+  to: string;
+};
+
+/**
+ * @nullable
+ */
+export type MetricResultPreviousPeriod = {
+  from?: string;
+  to?: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type MetricResultGranularity = typeof MetricResultGranularity[keyof typeof MetricResultGranularity] | null;
+
+
+export const MetricResultGranularity = {
+  day: 'day',
+  week: 'week',
+  month: 'month',
+} as const;
+
+export interface MetricResult {
+  metricId: MetricId;
+  unit: MetricResultUnit;
+  period: MetricResultPeriod;
+  /** @nullable */
+  previousPeriod: MetricResultPreviousPeriod;
+  /** @nullable */
+  granularity: MetricResultGranularity;
+  dimensionIds: DimensionId[];
+  /** @maxItems 5000 */
+  rows: MetricRow[];
+  /** Mediana e p90 saem de histograma de faixas fixas: aproximação, dita na tela */
+  approximate: boolean;
+  /** `atualizado_em`: última atualização dos agregados (a tela diz "Atualizado às HH:MM" e avisa defasagem) */
+  generatedAt: string;
+  /** `em_cache` */
+  cached: boolean;
+}
+
+export type DashboardWidgetChartType = typeof DashboardWidgetChartType[keyof typeof DashboardWidgetChartType];
+
+
+export const DashboardWidgetChartType = {
+  number: 'number',
+  line: 'line',
+  bar: 'bar',
+  stacked_bar: 'stacked_bar',
+  donut: 'donut',
+  table: 'table',
+} as const;
+
+export interface DashboardWidget {
+  id: string;
+  /**
+     * @minimum 0
+     * @maximum 11
+     */
+  position: number;
+  /**
+     * Texto puro (nunca HTML); escapado no CSV (C-DSH-06)
+     * @maxLength 80
+     */
+  title: string;
+  metricId: MetricId;
+  /** @maxItems 2 */
+  dimensionIds: DimensionId[];
+  chartType: DashboardWidgetChartType;
+  /** @maxItems 5 */
+  filters: MetricFilter[];
+  period: MetricPeriod;
+  compare: boolean;
+}
+
+export type DashboardKind = typeof DashboardKind[keyof typeof DashboardKind];
+
+
+export const DashboardKind = {
+  preset: 'preset',
+  user: 'user',
+} as const;
+
+/**
+ * @nullable
+ */
+export type DashboardPresetKey = typeof DashboardPresetKey[keyof typeof DashboardPresetKey] | null;
+
+
+export const DashboardPresetKey = {
+  overview: 'overview',
+  sales: 'sales',
+  stores: 'stores',
+  delivery: 'delivery',
+  coupons: 'coupons',
+  access: 'access',
+} as const;
+
+export interface Dashboard {
+  id: string;
+  kind: DashboardKind;
+  /** @nullable */
+  presetKey: DashboardPresetKey;
+  /** @maxLength 80 */
+  name: string;
+  /** Falso nos prontos; a edição de painel próprio é do construtor (R3) */
+  editable: boolean;
+  /** Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe) */
+  someWidgetsHidden: boolean;
+  /** @maxItems 12 */
+  widgets: DashboardWidget[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DashboardPage {
+  data: Dashboard[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface DuplicateDashboardRequest {
+  /**
+     * Padrão: o nome do original com " (cópia)"
+     * @minLength 1
+     * @maxLength 80
+     */
+  name?: string;
+}
+
+export type AnalyticsFunnelStageStage = typeof AnalyticsFunnelStageStage[keyof typeof AnalyticsFunnelStageStage];
+
+
+export const AnalyticsFunnelStageStage = {
+  store_visit: 'store_visit',
+  product_open: 'product_open',
+  bag: 'bag',
+  checkout: 'checkout',
+  order_paid: 'order_paid',
+} as const;
+
+export interface AnalyticsFunnelStage {
+  stage: AnalyticsFunnelStageStage;
+  sessions: AnalyticsCell;
+  /**
+     * Percentual sobre a etapa anterior; nulo se alguma das duas células foi suprimida
+     * @nullable
+     */
+  conversionFromPrevious: number | null;
+}
+
+export type AnalyticsFunnelPeriod = {
+  from: string;
+  to: string;
+};
+
+export interface AnalyticsFunnel {
+  period: AnalyticsFunnelPeriod;
+  generatedAt: string;
+  cached: boolean;
+  empty: boolean;
+  stages: AnalyticsFunnelStage[];
+  profileOnly: AnalyticsCell;
+}
+
+export type RecordAnalyticsInterestRequestAnswer = typeof RecordAnalyticsInterestRequestAnswer[keyof typeof RecordAnalyticsInterestRequestAnswer];
+
+
+export const RecordAnalyticsInterestRequestAnswer = {
+  clicked: 'clicked',
+  answered: 'answered',
+} as const;
+
+/**
+ * Obrigatória com `answered`. Faixas de EXEMPLO (HIP-A1), não preço decidido
+ */
+export type RecordAnalyticsInterestRequestPriceBand = typeof RecordAnalyticsInterestRequestPriceBand[keyof typeof RecordAnalyticsInterestRequestPriceBand];
+
+
+export const RecordAnalyticsInterestRequestPriceBand = {
+  up_to_19: 'up_to_19',
+  '20_to_39': '20_to_39',
+  '40_to_79': '40_to_79',
+  '80_plus': '80_plus',
+  would_not_pay: 'would_not_pay',
+} as const;
+
+export interface RecordAnalyticsInterestRequest {
+  answer: RecordAnalyticsInterestRequestAnswer;
+  /** Obrigatória com `answered`. Faixas de EXEMPLO (HIP-A1), não preço decidido */
+  priceBand?: RecordAnalyticsInterestRequestPriceBand;
+  /**
+     * Texto puro opcional; a tela pede "Não escreva dados de clientes"
+     * @maxLength 140
+     */
+  note?: string;
+}
+
+export type AnalyticsInterestReportBands = {
+  up_to_19: number;
+  '20_to_39': number;
+  '40_to_79': number;
+  '80_plus': number;
+  would_not_pay: number;
+};
+
+export type AnalyticsInterestReportNotesItem = {
+  /** @maxLength 140 */
+  text: string;
+  at: string;
+};
+
+export interface AnalyticsInterestReport {
+  /**
+     * Lojas que tocaram em "Quero testar"
+     * @minimum 0
+     */
+  clicked: number;
+  /** @minimum 0 */
+  answered: number;
+  bands: AnalyticsInterestReportBands;
+  /** @maxItems 50 */
+  notes: AnalyticsInterestReportNotesItem[];
+}
+
+export type BarcodeLookupInStore = {
+  productId: string;
+  /** @nullable */
+  variantId: string | null;
+  name: string;
+} | null;
+
+export type BarcodeLookupReference = {
+  name: string;
+  /** @nullable */
+  brand: string | null;
+  /** @nullable */
+  categoryId: string | null;
+} | null;
+
+export interface BarcodeLookup {
+  barcode: string;
+  valid: true;
+  inStore: BarcodeLookupInStore;
+  reference: BarcodeLookupReference;
+}
+
+/**
+ * @nullable
+ */
+export type PromotionEligibilityReasonCode = typeof PromotionEligibilityReasonCode[keyof typeof PromotionEligibilityReasonCode] | null;
+
+
+export const PromotionEligibilityReasonCode = {
+  NO_REFERENCE_HISTORY: 'NO_REFERENCE_HISTORY',
+  PRICE_CHANGED_RECENTLY: 'PRICE_CHANGED_RECENTLY',
+  PROMOTION_COVERED_PERIOD: 'PROMOTION_COVERED_PERIOD',
+} as const;
+
+export interface PromotionEligibility {
+  eligible: boolean;
+  /** @nullable */
+  reasonCode: PromotionEligibilityReasonCode;
+  /**
+     * "Seu desconto só aparece depois de 30 dias de preço anterior."
+     * @nullable
+     */
+  message: string | null;
+  /**
+     * O preço "de" que seria mostrado
+     * @nullable
+     */
+  referencePriceCents: number | null;
+  /** @nullable */
+  practicedSince: string | null;
+  /** @nullable */
+  eligibleFrom: string | null;
+}
+
+export interface CampaignInviteTerms {
+  /** Versão do texto do aceite (cláusula nos Termos do Lojista, J27) */
+  version: string;
+  /**
+     * SHA-256 do texto, gravado no aceite
+     * @pattern ^[a-f0-9]{64}$
+     */
+  hash: string;
+  /** @maxLength 4000 */
+  text: string;
+}
+
+/**
+ * Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: "você recebe R$ 79,78; sem o cupom, R$ 83,93"
+ */
+export interface CampaignInviteExample {
+  orderSubtotalCents: number;
+  discountCents: number;
+  /** Quanto o desconto custa à loja por pedido */
+  storeShareCents: number;
+  youReceiveWithCents: number;
+  youReceiveWithoutCents: number;
+}
+
+export type CampaignInviteState = typeof CampaignInviteState[keyof typeof CampaignInviteState];
+
+
+export const CampaignInviteState = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  left: 'left',
+  expired: 'expired',
+} as const;
+
+export interface CampaignInvite {
+  enrollmentId: string;
+  campaignId: string;
+  name: string;
+  state: CampaignInviteState;
+  kind: CampaignDiscountKind;
+  value: number;
+  /** @nullable */
+  percentCapCents: number | null;
+  minOrderCents: number;
+  audience: CampaignAudience;
+  /** @nullable */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  storeSharePct: number;
+  /**
+     * @minimum 0
+     * @maximum 99
+     */
+  webagSharePct: number;
+  example: CampaignInviteExample;
+  terms: CampaignInviteTerms;
+  suggestedMonthlyCapCents: number;
+  /** @nullable */
+  monthlyCapCents: number | null;
+  /** @minimum 0 */
+  spentThisMonthCents: number;
+  /** 7 dias; sem resposta, expira sem custo e sem aceite tácito */
+  expiresAt: string;
+  /** @nullable */
+  respondedAt: string | null;
+}
+
+export interface CampaignInvitePage {
+  data: CampaignInvite[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export interface AcceptCampaignInviteRequest {
+  /** @maxLength 40 */
+  termsVersion: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  termsHash: string;
+  /**
+     * @minimum 100
+     * @maximum 100000000
+     */
+  monthlyCapCents: number;
+  confirm: true;
+}
+
+export type StoreCouponCodeVisibility = typeof StoreCouponCodeVisibility[keyof typeof StoreCouponCodeVisibility];
+
+
+export const StoreCouponCodeVisibility = {
+  public: 'public',
+  private: 'private',
+} as const;
+
+export type StoreCouponKind = typeof StoreCouponKind[keyof typeof StoreCouponKind];
+
+
+export const StoreCouponKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type StoreCouponPausedBy = typeof StoreCouponPausedBy[keyof typeof StoreCouponPausedBy] | null;
+
+
+export const StoreCouponPausedBy = {
+  admin: 'admin',
+  merchant: 'merchant',
+  system: 'system',
+} as const;
+
+export interface StoreCoupon {
+  id: string;
+  campaignId: string;
+  code: string;
+  codeVisibility: StoreCouponCodeVisibility;
+  kind: StoreCouponKind;
+  value: number;
+  /** @nullable */
+  percentCapCents: number | null;
+  minOrderCents: number;
+  startsAt: string;
+  endsAt: string;
+  /** @nullable */
+  maxUses: number | null;
+  perCustomerLimit: number;
+  monthlyCapCents: number;
+  /** @minimum 0 */
+  spentThisMonthCents: number;
+  /** @minimum 0 */
+  uses: number;
+  state: CampaignState;
+  /** @nullable */
+  pausedBy: StoreCouponPausedBy;
+  /** @minimum 1 */
+  version: number;
+}
+
+export interface StoreCouponPage {
+  data: StoreCoupon[];
+  /** @nullable */
+  nextCursor: string | null;
+}
+
+export type StoreCouponCreateKind = typeof StoreCouponCreateKind[keyof typeof StoreCouponCreateKind];
+
+
+export const StoreCouponCreateKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+} as const;
+
+export type StoreCouponCreateCodeVisibility = typeof StoreCouponCreateCodeVisibility[keyof typeof StoreCouponCreateCodeVisibility];
+
+
+export const StoreCouponCreateCodeVisibility = {
+  public: 'public',
+  private: 'private',
+} as const;
+
+/**
+ * Sem `storeId`, `fundingSource`, `storeSharePct`, `campaignId` nem desconto da Webag: a loja vem da rota e o resto é implícito (loja paga 100%).
+ */
+export interface StoreCouponCreate {
+  kind: StoreCouponCreateKind;
+  /**
+     * Percentual (1 a `cupom_loja_pct_max`) ou centavos
+     * @minimum 1
+     */
+  value: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  minOrderCents?: number;
+  startsAt: string;
+  endsAt: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  /**
+     * Obrigatório (WB-346 C1)
+     * @minimum 100
+     * @maximum 100000000
+     */
+  monthlyCapCents: number;
+  /**
+     * @minLength 4
+     * @maxLength 20
+     * @nullable
+     * @pattern ^[A-Z0-9]+$
+     */
+  code?: string | null;
+  codeVisibility?: StoreCouponCreateCodeVisibility;
+}
+
+export interface StoreCouponPatch {
+  /** @minimum 1 */
+  expectedVersion: number;
+  active?: boolean;
+  /** Encerra (não reabre) */
+  end?: boolean;
+  /** @minimum 1 */
+  value?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 1000000
+     */
+  minOrderCents?: number;
+  endsAt?: string;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  maxUses?: number | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  perCustomerLimit?: number;
+  /**
+     * @minimum 100
+     * @maximum 100000000
+     */
+  monthlyCapCents?: number;
+}
+
+export type StoreCouponPreviewRequestKind = typeof StoreCouponPreviewRequestKind[keyof typeof StoreCouponPreviewRequestKind];
+
+
+export const StoreCouponPreviewRequestKind = {
+  percent: 'percent',
+  fixed: 'fixed',
+} as const;
+
+export interface StoreCouponPreviewRequest {
+  kind: StoreCouponPreviewRequestKind;
+  /** @minimum 1 */
+  value: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  percentCapCents?: number | null;
+  /**
+     * @minimum 1000
+     * @maximum 1000000
+     */
+  orderSubtotalCents?: number;
+}
+
+export interface StoreCouponPreview {
+  orderSubtotalCents: number;
+  discountCents: number;
+  /** "Você recebe R$ 60,49" */
+  youReceiveWithCents: number;
+  /** "sem o cupom: R$ 67,21" */
+  youReceiveWithoutCents: number;
+  /** `cupom_loja_pct_max` vigente */
+  maxPct: number;
+  /**
+     * Só valor fixo: pedido mínimo exigido (valor / (teto/100), para cima ao centavo)
+     * @nullable
+     */
+  requiredMinOrderCents: number | null;
+}
+
+export type CouponProblem = Problem & {
+  shortfall?: CouponShortfall;
+};
+
+export type CouponOfferRestrictionsItem = typeof CouponOfferRestrictionsItem[keyof typeof CouponOfferRestrictionsItem];
+
+
+export const CouponOfferRestrictionsItem = {
+  first_purchase: 'first_purchase',
+  reactivation: 'reactivation',
+  this_store: 'this_store',
+  this_city: 'this_city',
+  this_category: 'this_category',
+  min_order: 'min_order',
+} as const;
+
+export interface CouponOffer {
+  /** Só cupom público */
+  code: string;
+  kind: CampaignDiscountKind;
+  /** @nullable */
+  valueCents: number | null;
+  /** @nullable */
+  percent: number | null;
+  /**
+     * O cartão diz "até R$ N"
+     * @nullable
+     */
+  percentCapCents: number | null;
+  minOrderCents: number;
+  /** O dia final vale até 23:59 em America/Sao_Paulo */
+  validUntil: string;
+  origin: DiscountOrigin;
+  restrictions: CouponOfferRestrictionsItem[];
+  applicable: boolean;
+  shortfall: CouponShortfall | null;
+  /** @nullable */
+  estimatedDiscountCents: number | null;
+}
+
+export interface CouponOfferList {
+  /** @maxItems 20 */
+  data: CouponOffer[];
+  /** @nullable */
+  nextCursor: null;
 }
 
 /**
@@ -11229,6 +13124,164 @@ export const GetAdminAnalyticsAccessGroupBy = {
   product: 'product',
   origin: 'origin',
 } as const;
+
+export type ListCampaignsParams = {
+  state?: CampaignState;
+  fundingSource?: CampaignFunding;
+  owner?: ListCampaignsOwner;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCampaignsOwner = typeof ListCampaignsOwner[keyof typeof ListCampaignsOwner];
+
+
+export const ListCampaignsOwner = {
+  webag: 'webag',
+  store: 'store',
+} as const;
+
+export type ListCampaignStoresParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCampaignAlertsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCouponSuspectsParams = {
+  state?: ListCouponSuspectsState;
+  campaignId?: string;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCouponSuspectsState = typeof ListCouponSuspectsState[keyof typeof ListCouponSuspectsState];
+
+
+export const ListCouponSuspectsState = {
+  open: 'open',
+  released: 'released',
+} as const;
+
+export type ListDashboardsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type GetAdminAnalyticsFunnelParams = {
+  days?: GetAdminAnalyticsFunnelDays;
+  cityId?: string;
+  storeId?: string;
+};
+
+export type GetAdminAnalyticsFunnelDays = typeof GetAdminAnalyticsFunnelDays[keyof typeof GetAdminAnalyticsFunnelDays];
+
+
+export const GetAdminAnalyticsFunnelDays = {
+  NUMBER_7: 7,
+  NUMBER_30: 30,
+  NUMBER_90: 90,
+} as const;
+
+export type GetPromotionEligibilityParams = {
+  /** Variação com preço próprio; sem ela vale o preço base do produto */
+  variantId?: string;
+};
+
+export type ListStoreCampaignInvitesParams = {
+  state?: ListStoreCampaignInvitesState;
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListStoreCampaignInvitesState = typeof ListStoreCampaignInvitesState[keyof typeof ListStoreCampaignInvitesState];
+
+
+export const ListStoreCampaignInvitesState = {
+  pending: 'pending',
+  accepted: 'accepted',
+  declined: 'declined',
+  left: 'left',
+  expired: 'expired',
+} as const;
+
+export type ListStoreCouponsParams = {
+  /**
+   * Cursor opaco devolvido em `nextCursor`
+   * @maxLength 200
+   */
+  cursor?: CursorParameter;
+  /**
+   * Itens por página (padrão 20, máximo 50). Fora de 1 a 50 ou não numérico: 400 VALIDATION_FAILED (BUG-027)
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: LimitParameter;
+};
+
+export type ListCartCouponOffersParams = {
+  /** Como o cliente quer receber; define frete e bloqueios do resumo */
+  mode?: CartModeParameter;
+  /** Endereço de entrega (de `/v1/me/addresses`); sem ele vale o padrão da conta. Endereço de outra conta responde 404 */
+  addressId?: CartAddressIdParameter;
+};
 
 const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
   const seen = new Set<string>();
@@ -23958,7 +26011,7 @@ export type applyCartCouponResponse404 = {
 }
 
 export type applyCartCouponResponse422 = {
-  data: UnprocessableResponse
+  data: CouponProblem
   status: 422
 }
 
@@ -23992,7 +26045,7 @@ export const getApplyCartCouponUrl = (params?: ApplyCartCouponParams,) => {
 }
 
 /**
- * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP.
+ * Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP. **v1.1 R2 (ADR-019 D5):** o corpo só aceita `code` (até 32 caracteres, letras, números e hífen; C-CUP-01): qualquer outro campo (`discountCents`, fonte de custo, `campaignId`, `storeSharePct`) é 422 `FIELD_NOT_EDITABLE`, e o total é sempre o do servidor. Códigos novos de 422 (a sacola não muda): `COUPON_SHORTFALL` ("Faltam R$ X": `Cart.coupon.shortfall` também vem na leitura; o total não muda), `COUPON_UNAVAILABLE` (margem do pedido <= 0: "Cupom não disponível para este pedido"), `COUPON_EXHAUSTED_TODAY` ("Cupom esgotado hoje": o pedido segue sem cupom se o cliente confirmar), `COUPON_NOT_APPLICABLE` (qualquer sinal do antifraude: CPF de outra conta, aparelho, endereço, velocidade ou suspeito aberto; texto neutro "Não foi possível aplicar este cupom a este pedido" com "Falar com o suporte", e o cliente NUNCA vê qual identificador casou, RN-C11). `COUPON_NOT_FOUND` cobre também código de campanha segmentada, privada, de outro público ou de loja sem aceite: o MESMO texto "Cupom inválido" (C-CUP-06); `COUPON_FIRST_PURCHASE_ONLY` ("Cupom válido só na primeira compra") só para a conta com pedido pago anterior. O celular do perfil NÃO é critério (DEC-103 D-01); o e-mail confirmado é (`COUPON_EMAIL_UNVERIFIED`). Tentativas: 10 por hora por conta, 30 por hora por IP e 10 por hora por aparelho (`X-Device-Id`); a seguinte é 429 `COUPON_RATE_LIMITED` com `Retry-After` de 1 hora e texto neutro. A aplicação NÃO reserva orçamento: a reserva é atômica na criação do pedido (`createOrder`).
  * @summary Aplicar ou trocar o cupom (WB-022)
  */
 export const applyCartCoupon = async (applyCouponRequest: ApplyCouponRequest,
@@ -24873,6 +26926,8 @@ export const getCreateOrderUrl = () => {
  * **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
  *
  * SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
+ *
+ * **v1.1 R2 (ADR-019 D4, D6, D7):** a primeira compra passa a ser travada POR IDENTIFICADOR (HMAC de conta, aparelho, endereço normalizado e documento do pagador, `pg_advisory_xact_lock` em ordem fixa), valendo ENTRE campanhas; o celular não é identificador. Com cupom de campanha, o desconto é composto no servidor (`desconto_loja` + `desconto_webag`, RN-C2) e o **orçamento é reservado na MESMA transação do pedido**, sob a trava da linha da campanha (e da adesão da loja quando há parte da loja): orçamento total, do dia (America/Sao_Paulo), usos, teto mensal da loja, estado `active` e aceite são reconferidos ali, sem confiar na cotação nem no cache (C-CUP-02, C-CUP-10). Campanha pausada entre a cotação e o pedido (C-CUP-10): o pedido NUNCA sai com o cupom; como o total muda e `expectedTotalCents` é obrigatório, a criação responde 409 `CART_CHANGED` com `DISCOUNT_CHANGED` (nada reservado, nada cobrado) e o pedido sem cupom só nasce depois de o cliente ver o total novo. Sem saldo de orçamento, de usos ou do teto da loja: o mesmo 409 `CART_CHANGED` com `DISCOUNT_CHANGED`. O corpo continua sem desconto, fonte ou campanha (422 `FIELD_NOT_EDITABLE`). A reserva vira gasto ao pagamento aprovado e volta ao expirar, cancelar ou estornar (parcial: proporcional, RN-08), uma única vez.
  * @summary Criar o pedido a partir da sacola e iniciar o pagamento (WB-023, WB-024, WB-025)
  */
 export const createOrder = async (createOrderRequest: CreateOrderRequest, options?: Parameters<typeof apiFetch>[1]): Promise<createOrderResponse> => {
@@ -28856,7 +30911,7 @@ export const getCreatePlatformCouponUrl = () => {
 }
 
 /**
- * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado.
+ * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado. **v1.1 R2:** com a flag `campanhas_cupom` ligada a criação de cupom da plataforma por esta rota passa a responder 409 `USE_CAMPAIGNS` (o cupom da plataforma é uma campanha `webag`, com orçamento e reserva: `createCampaign`); os cupons já existentes seguem pela regra de hoje até serem encerrados e ficam fora do orçamento (ADR-019 D13).
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCoupon = async (platformCouponCreate: PlatformCouponCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createPlatformCouponResponse> => {
@@ -33323,6 +35378,2338 @@ export const getGetAdminAnalyticsAccessUrl = (params: GetAdminAnalyticsAccessPar
 export const getAdminAnalyticsAccess = async (params: GetAdminAnalyticsAccessParams, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsAccessResponse> => {
 
   return apiFetch<getAdminAnalyticsAccessResponse>(getGetAdminAnalyticsAccessUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listCampaignsResponse200 = {
+  data: CampaignPage
+  status: 200
+}
+
+export type listCampaignsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listCampaignsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCampaignsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCampaignsResponseSuccess = (listCampaignsResponse200) & {
+  headers: Headers;
+};
+export type listCampaignsResponseError = (listCampaignsResponse400 | listCampaignsResponse401 | listCampaignsResponse403) & {
+  headers: Headers;
+};
+
+export type listCampaignsResponse = (listCampaignsResponseSuccess | listCampaignsResponseError)
+
+export const getListCampaignsUrl = (params?: ListCampaignsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/campaigns?${stringifiedParams}` : `/v1/admin/campaigns`
+}
+
+/**
+ * Permissão `coupons:read` (super admin, operação e financeiro; suporte 403). Cartão por campanha: estado, fonte em texto, convites aceitos, gasto total e do dia contra o orçamento (números exatos do servidor, a barra é só o desenho), usos e, se encerrada, o motivo. Inclui campanhas de loja (`owner: store`), sem orçamento da Webag. Mais recentes primeiro, keyset por `(createdAt, id)`. Os alertas ficam em `listCampaignAlerts`.
+ * @summary Listar campanhas com barra de orçamento (WB-340, WB-342 C4, WB-349)
+ */
+export const listCampaigns = async (params?: ListCampaignsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCampaignsResponse> => {
+
+  return apiFetch<listCampaignsResponse>(getListCampaignsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createCampaignResponse201 = {
+  data: Campaign
+  status: 201
+}
+
+export type createCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createCampaignResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createCampaignResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createCampaignResponseSuccess = (createCampaignResponse201) & {
+  headers: Headers;
+};
+export type createCampaignResponseError = (createCampaignResponse400 | createCampaignResponse401 | createCampaignResponse403 | createCampaignResponse409 | createCampaignResponse422 | createCampaignResponse429) & {
+  headers: Headers;
+};
+
+export type createCampaignResponse = (createCampaignResponseSuccess | createCampaignResponseError)
+
+export const getCreateCampaignUrl = () => {
+
+
+
+
+  return `/v1/admin/campaigns`
+}
+
+/**
+ * Permissão `coupons:write` (super admin e operação; financeiro 403). Sempre nasce `draft`: criar NÃO ativa nem gasta (C6). Só existem 4 fontes (`webag`, `store`, `split`, `self_funded`) e a porcentagem da loja segue a fonte (RN-C2): webag 0, store 100, split 1 a 99, self_funded 0; frete grátis só com `webag` ou `self_funded` (422 `FREE_SHIPPING_FUNDING_INVALID`: "O frete é da Webag.", C3). **Não existe campo para majorar preço, frete ou taxa** (DEC-088): o corpo é estrito e campo fora da lista é 422 `FIELD_NOT_EDITABLE`. Código opcional: sem código a campanha não aparece sozinha; código de campanha `segmented` ou `private` é gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06): enviar `code` com `codeVisibility: private` é 422; código público ("vaidade") 4 a 20 letras e números, único (409 `COUPON_CODE_TAKEN`). Campanha de loja (`owner: store`) NÃO nasce aqui, só por `createStoreCoupon` (C-CUP-07). O valor de fonte `store` ou `split` só desconta de lojas com aceite (RN-C5). `reason` (3 a 200) vai ao `audit_log` com antes e depois (C7). `Idempotency-Key` obrigatória.
+ * @summary Criar campanha em rascunho com fonte de custo (WB-340 C2, C3, C6, C7)
+ */
+export const createCampaign = async (campaignCreate: CampaignCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createCampaignResponse> => {
+
+  return apiFetch<createCampaignResponse>(getCreateCampaignUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignCreate)
+  }
+);}
+
+
+
+export type simulateCampaignResponse200 = {
+  data: CampaignSimulation
+  status: 200
+}
+
+export type simulateCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type simulateCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type simulateCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type simulateCampaignResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type simulateCampaignResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type simulateCampaignResponseSuccess = (simulateCampaignResponse200) & {
+  headers: Headers;
+};
+export type simulateCampaignResponseError = (simulateCampaignResponse400 | simulateCampaignResponse401 | simulateCampaignResponse403 | simulateCampaignResponse422 | simulateCampaignResponse429) & {
+  headers: Headers;
+};
+
+export type simulateCampaignResponse = (simulateCampaignResponseSuccess | simulateCampaignResponseError)
+
+export const getSimulateCampaignUrl = () => {
+
+
+
+
+  return `/v1/admin/campaigns/simulate`
+}
+
+/**
+ * Não grava nada; serve ao formulário enquanto o admin digita (a tabela é o centro da tela). Uma linha por faixa da tabela de entrega vigente MAIS a retirada. Para cada faixa: taxa de entrega, **custo previsto do motoboy** (`courierCostCents`, F4: vem de `DeliveryFeeTier.expectedCostCents`; `courierCostSource` diz `delivery_fee_table` ou `provisional` e, enquanto o fundador não cotar, `provisional: true` e a tela mostra "custo previsto: tabela provisória"), comissão no pedido de referência, margem prevista (RN-C3, pode ser negativa), desconto da Webag e da loja, **quanto sobra no pedido** (`remainingCents`; negativo = prejuízo, mostrado em texto) e, no `self_funded`, o **pedido mínimo necessário** (`minOrderNeededCents`; nulo = o cupom não se aplica nesta faixa, margem <= 0). O pedido de referência é o mínimo necessário ou R$ 80,00 (`referenceSubtotalCents`). `worstCase` traz o pior caso por pedido do percentual com teto (CU-2 da spec). `globalBudget` mostra o orçamento mensal global da Webag contra o já comprometido (C10, C11). `blockers` repete o que impediria ativar (mesmo formato do `activation` da campanha). Cálculo no servidor com a tabela vigente, centavos inteiros, `round_half_up` (RN-C2).
+ * @summary Simular "quanto isso custa por pedido" por faixa de entrega (WB-340 C1, C2; WB-341 C11)
+ */
+export const simulateCampaign = async (campaignSimulationRequest: CampaignSimulationRequest, options?: Parameters<typeof apiFetch>[1]): Promise<simulateCampaignResponse> => {
+
+  return apiFetch<simulateCampaignResponse>(getSimulateCampaignUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignSimulationRequest)
+  }
+);}
+
+
+
+export type getCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type getCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getCampaignResponseSuccess = (getCampaignResponse200) & {
+  headers: Headers;
+};
+export type getCampaignResponseError = (getCampaignResponse401 | getCampaignResponse403 | getCampaignResponse404) & {
+  headers: Headers;
+};
+
+export type getCampaignResponse = (getCampaignResponseSuccess | getCampaignResponseError)
+
+export const getGetCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}`
+}
+
+/**
+ * `activation` é a caixa "Para ativar" da tela: `blockers` lista o que falta, em texto e com o código estável (a tela nunca esconde o botão sem dizer o motivo). Histórico de alterações (autor, antes, depois, motivo) sai de `GET /v1/admin/audit` com `targetType=campaign`; nenhum dado pessoal aqui.
+ * @summary Detalhe da campanha, orçamento e o que falta para ativar (WB-340 C4, C10)
+ */
+export const getCampaign = async (campaignId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getCampaignResponse> => {
+
+  return apiFetch<getCampaignResponse>(getGetCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type updateCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateCampaignResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateCampaignResponseSuccess = (updateCampaignResponse200) & {
+  headers: Headers;
+};
+export type updateCampaignResponseError = (updateCampaignResponse400 | updateCampaignResponse401 | updateCampaignResponse403 | updateCampaignResponse404 | updateCampaignResponse409 | updateCampaignResponse422) & {
+  headers: Headers;
+};
+
+export type updateCampaignResponse = (updateCampaignResponseSuccess | updateCampaignResponseError)
+
+export const getUpdateCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}`
+}
+
+/**
+ * Só em `draft` ou `scheduled`. Campanha `active` ou `paused` NÃO muda de regra (nem orçamento): encerrar e duplicar (ADR-019 D3), para o que o cliente viu e o que a loja aceitou continuarem valendo; tentativa: 409 `CAMPAIGN_IMMUTABLE`. `ended` não reabre (409). Confere `expectedVersion` (409 `CAMPAIGN_VERSION_CONFLICT` com a versão atual). Mesmas validações da criação. Alterar uma campanha `scheduled` com convites aceitos zera os aceites (a regra mudou; o lojista aceita de novo). `reason` obrigatório; antes e depois no `audit_log`.
+ * @summary Editar rascunho ou campanha agendada (WB-340 C7)
+ */
+export const updateCampaign = async (campaignId: string,
+    campaignPatch: CampaignPatch, options?: Parameters<typeof apiFetch>[1]): Promise<updateCampaignResponse> => {
+
+  return apiFetch<updateCampaignResponse>(getUpdateCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignPatch)
+  }
+);}
+
+
+
+export type activateCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type activateCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type activateCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type activateCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type activateCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type activateCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type activateCampaignResponse422 = {
+  data: ActivationProblem
+  status: 422
+}
+
+export type activateCampaignResponseSuccess = (activateCampaignResponse200) & {
+  headers: Headers;
+};
+export type activateCampaignResponseError = (activateCampaignResponse400 | activateCampaignResponse401 | activateCampaignResponse403 | activateCampaignResponse404 | activateCampaignResponse409 | activateCampaignResponse422) & {
+  headers: Headers;
+};
+
+export type activateCampaignResponse = (activateCampaignResponseSuccess | activateCampaignResponseError)
+
+export const getActivateCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/activate`
+}
+
+/**
+ * Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto "Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. "Webag paga" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` ("pode gerar prejuízo por pedido"). Flag `campanhas_cupom` desligada: 409 `CAMPAIGNS_DISABLED`. `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois.
+ * @summary Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
+ */
+export const activateCampaign = async (campaignId: string,
+    campaignActivateRequest: CampaignActivateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<activateCampaignResponse> => {
+
+  return apiFetch<activateCampaignResponse>(getActivateCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignActivateRequest)
+  }
+);}
+
+
+
+export type pauseCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type pauseCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type pauseCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type pauseCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type pauseCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type pauseCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type pauseCampaignResponseSuccess = (pauseCampaignResponse200) & {
+  headers: Headers;
+};
+export type pauseCampaignResponseError = (pauseCampaignResponse400 | pauseCampaignResponse401 | pauseCampaignResponse403 | pauseCampaignResponse404 | pauseCampaignResponse409) & {
+  headers: Headers;
+};
+
+export type pauseCampaignResponse = (pauseCampaignResponseSuccess | pauseCampaignResponseError)
+
+export const getPauseCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/pause`
+}
+
+/**
+ * Qualquer admin com permissão de cupom pausa (super admin e operação), com motivo. Vale na hora: a criação do pedido reconfere `state = active` SOB A TRAVA da campanha, sem cache (C-CUP-10); a vitrine e a sacola refletem em até 1 minuto. Pedidos já criados mantêm o desconto e as reservas (a pausa não devolve nada). Pausar campanha já pausada é idempotente (200). Campanha de loja pausada pelo admin: `pausedBy: admin` e o lojista é avisado; ele NÃO retoma (409 `PAUSED_BY_ADMIN` em `updateStoreCoupon`).
+ * @summary Pausar na hora (WB-349 C1, C5)
+ */
+export const pauseCampaign = async (campaignId: string,
+    campaignReasonRequest: CampaignReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<pauseCampaignResponse> => {
+
+  return apiFetch<pauseCampaignResponse>(getPauseCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignReasonRequest)
+  }
+);}
+
+
+
+export type resumeCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type resumeCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type resumeCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type resumeCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type resumeCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type resumeCampaignResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type resumeCampaignResponseSuccess = (resumeCampaignResponse200) & {
+  headers: Headers;
+};
+export type resumeCampaignResponseError = (resumeCampaignResponse401 | resumeCampaignResponse403 | resumeCampaignResponse404 | resumeCampaignResponse409 | resumeCampaignResponse422) & {
+  headers: Headers;
+};
+
+export type resumeCampaignResponse = (resumeCampaignResponseSuccess | resumeCampaignResponseError)
+
+export const getResumeCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/resume`
+}
+
+/**
+ * Retomar volta a gastar dinheiro: mesma permissão e mesma reautenticação recente da ativação (403 `REAUTH_REQUIRED`), e as mesmas conferências (`ACTIVATION_BLOCKED`). Só de `paused` (409 `CAMPAIGN_STATE_INVALID`). Validade vencida: 409 `CAMPAIGN_EXPIRED`.
+ * @summary Retomar campanha pausada
+ */
+export const resumeCampaign = async (campaignId: string,
+    campaignActivateRequest: CampaignActivateRequest, options?: Parameters<typeof apiFetch>[1]): Promise<resumeCampaignResponse> => {
+
+  return apiFetch<resumeCampaignResponse>(getResumeCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignActivateRequest)
+  }
+);}
+
+
+
+export type endCampaignResponse200 = {
+  data: Campaign
+  status: 200
+}
+
+export type endCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type endCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type endCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type endCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type endCampaignResponseSuccess = (endCampaignResponse200) & {
+  headers: Headers;
+};
+export type endCampaignResponseError = (endCampaignResponse401 | endCampaignResponse403 | endCampaignResponse404 | endCampaignResponse409) & {
+  headers: Headers;
+};
+
+export type endCampaignResponse = (endCampaignResponseSuccess | endCampaignResponseError)
+
+export const getEndCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/end`
+}
+
+/**
+ * Super admin e financeiro, com reautenticação recente quando há custo da Webag (403 `REAUTH_REQUIRED`). `ended` é terminal: a campanha NÃO reabre; para repetir, `duplicateCampaign`. Reservas em aberto seguem seu curso (pedido criado mantém o desconto). Encerra com `endReason: admin`. Encerrada por orçamento esgotado, usos ou validade é feito pelo servidor (varredura de 1 minuto), sem esta rota. Idempotente.
+ * @summary Encerrar campanha, sem reabrir (WB-349 C2, WB-340 C6)
+ */
+export const endCampaign = async (campaignId: string,
+    campaignReasonRequest: CampaignReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<endCampaignResponse> => {
+
+  return apiFetch<endCampaignResponse>(getEndCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignReasonRequest)
+  }
+);}
+
+
+
+export type duplicateCampaignResponse201 = {
+  data: Campaign
+  status: 201
+}
+
+export type duplicateCampaignResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type duplicateCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type duplicateCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type duplicateCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type duplicateCampaignResponseSuccess = (duplicateCampaignResponse201) & {
+  headers: Headers;
+};
+export type duplicateCampaignResponseError = (duplicateCampaignResponse400 | duplicateCampaignResponse401 | duplicateCampaignResponse403 | duplicateCampaignResponse404) & {
+  headers: Headers;
+};
+
+export type duplicateCampaignResponse = (duplicateCampaignResponseSuccess | duplicateCampaignResponseError)
+
+export const getDuplicateCampaignUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/duplicate`
+}
+
+/**
+ * Cria `draft` com as regras (tipo, valor, público, alvo, pedido mínimo, fonte, usos por cliente) e **sem** orçamento, validade nem código, e sem convites ou aceites (DEC-107). Vale para qualquer estado; campanha de loja não duplica pelo admin (404). `Idempotency-Key` obrigatória.
+ * @summary Duplicar como rascunho (WB-349 C6)
+ */
+export const duplicateCampaign = async (campaignId: string,
+    campaignReasonRequest: CampaignReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<duplicateCampaignResponse> => {
+
+  return apiFetch<duplicateCampaignResponse>(getDuplicateCampaignUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignReasonRequest)
+  }
+);}
+
+
+
+export type listCampaignStoresResponse200 = {
+  data: CampaignEnrollmentPage
+  status: 200
+}
+
+export type listCampaignStoresResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCampaignStoresResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCampaignStoresResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listCampaignStoresResponseSuccess = (listCampaignStoresResponse200) & {
+  headers: Headers;
+};
+export type listCampaignStoresResponseError = (listCampaignStoresResponse401 | listCampaignStoresResponse403 | listCampaignStoresResponse404) & {
+  headers: Headers;
+};
+
+export type listCampaignStoresResponse = (listCampaignStoresResponseSuccess | listCampaignStoresResponseError)
+
+export const getListCampaignStoresUrl = (campaignId: string,
+    params?: ListCampaignStoresParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/campaigns/${campaignId}/stores?${stringifiedParams}` : `/v1/admin/campaigns/${campaignId}/stores`
+}
+
+/**
+ * "2 de 5 lojas aceitaram". Estados: `pending`, `accepted`, `declined`, `left`, `expired` (7 dias sem resposta, sem aceite tácito, C7). Sem dado pessoal do lojista (só `acceptedByStaff: true`); o aceite (usuário, hora, versão, hash do texto, teto) fica em `campaign_acceptances` e sai na auditoria interna. Paginado.
+ * @summary Lojas convidadas e o estado de cada aceite (WB-343)
+ */
+export const listCampaignStores = async (campaignId: string,
+    params?: ListCampaignStoresParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCampaignStoresResponse> => {
+
+  return apiFetch<listCampaignStoresResponse>(getListCampaignStoresUrl(campaignId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type inviteCampaignStoresResponse200 = {
+  data: InviteCampaignStoresResult
+  status: 200
+}
+
+export type inviteCampaignStoresResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type inviteCampaignStoresResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type inviteCampaignStoresResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type inviteCampaignStoresResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type inviteCampaignStoresResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type inviteCampaignStoresResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type inviteCampaignStoresResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type inviteCampaignStoresResponseSuccess = (inviteCampaignStoresResponse200) & {
+  headers: Headers;
+};
+export type inviteCampaignStoresResponseError = (inviteCampaignStoresResponse400 | inviteCampaignStoresResponse401 | inviteCampaignStoresResponse403 | inviteCampaignStoresResponse404 | inviteCampaignStoresResponse409 | inviteCampaignStoresResponse422 | inviteCampaignStoresResponse429) & {
+  headers: Headers;
+};
+
+export type inviteCampaignStoresResponse = (inviteCampaignStoresResponseSuccess | inviteCampaignStoresResponseError)
+
+export const getInviteCampaignStoresUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/stores`
+}
+
+/**
+ * Só campanha `webag`-owner com fonte `store` ou `split`, em `draft`, `scheduled` ou `active`. Convite por painel e e-mail do lojista (fila de e-mail existente); validade de 7 dias (`campanha_convite_validade_dias`). **O admin só convida; nunca registra aceite em nome da loja** (C-CUP-07): não existe rota de admin que aceite, e o aceite exige membro da loja com permissão `coupons` (`acceptCampaignInvite`). Nunca existe aceite automático nem "padrão para novas campanhas" (RN-C5). Até 50 lojas por chamada; loja já convidada é ignorada (`alreadyInvited`). `Idempotency-Key` obrigatória.
+ * @summary Convidar lojas para campanha com parte da loja (WB-343 C1, C8)
+ */
+export const inviteCampaignStores = async (campaignId: string,
+    inviteCampaignStoresRequest: InviteCampaignStoresRequest, options?: Parameters<typeof apiFetch>[1]): Promise<inviteCampaignStoresResponse> => {
+
+  return apiFetch<inviteCampaignStoresResponse>(getInviteCampaignStoresUrl(campaignId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(inviteCampaignStoresRequest)
+  }
+);}
+
+
+
+export type getCampaignReportResponse200 = {
+  data: CampaignReport
+  status: 200
+}
+
+export type getCampaignReportResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCampaignReportResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getCampaignReportResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getCampaignReportResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type getCampaignReportResponseSuccess = (getCampaignReportResponse200) & {
+  headers: Headers;
+};
+export type getCampaignReportResponseError = (getCampaignReportResponse401 | getCampaignReportResponse403 | getCampaignReportResponse404 | getCampaignReportResponse503) & {
+  headers: Headers;
+};
+
+export type getCampaignReportResponse = (getCampaignReportResponseSuccess | getCampaignReportResponseError)
+
+export const getGetCampaignReportUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/report`
+}
+
+/**
+ * **Custo real da Webag** = soma de `desconto_webag` dos pedidos com pagamento aprovado MENOS o devolvido em cancelamento e estorno (RN-C9, C1), com "devolvido em cancelamentos" em campo separado; vem das reservas `confirmed` (`coupon_reservations`) e bate com a soma dos pedidos pagos e com o razão (`reconciled: true|false`, C5; divergência vira alerta). Por loja: quanto a Webag e a loja pagaram (C2). Pedidos, GMV, ticket com cupom e **ticket sem cupom da mesma loja no período**, clientes novos (1º pedido pago com a campanha), custo por cliente novo e recompra em 30 dias (`null` até fechar 30 dias, C3). Margem de contribuição = receita Webag - custo de logística - desconto Webag, `partial: true` quando há corrida sem custo lançado (C4, RN-18). Sem nome, telefone nem endereço: só ids opacos (C8, C-CUP-12). Campanha sem uso: zeros e `empty: true` ("Nenhum pedido ainda", C7). Lê agregados e reservas; não escaneia `orders` inteira (índice por `campaign_id`). Cache de 60 s.
+ * @summary Relatório de custo real da campanha (WB-345)
+ */
+export const getCampaignReport = async (campaignId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getCampaignReportResponse> => {
+
+  return apiFetch<getCampaignReportResponse>(getGetCampaignReportUrl(campaignId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type exportCampaignReportCsvResponse200 = {
+  data: string
+  status: 200
+}
+
+export type exportCampaignReportCsvResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type exportCampaignReportCsvResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type exportCampaignReportCsvResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type exportCampaignReportCsvResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type exportCampaignReportCsvResponseSuccess = (exportCampaignReportCsvResponse200) & {
+  headers: Headers;
+};
+export type exportCampaignReportCsvResponseError = (exportCampaignReportCsvResponse401 | exportCampaignReportCsvResponse403 | exportCampaignReportCsvResponse404 | exportCampaignReportCsvResponse429) & {
+  headers: Headers;
+};
+
+export type exportCampaignReportCsvResponse = (exportCampaignReportCsvResponseSuccess | exportCampaignReportCsvResponseError)
+
+export const getExportCampaignReportCsvUrl = (campaignId: string,) => {
+
+
+
+
+  return `/v1/admin/campaigns/${campaignId}/report.csv`
+}
+
+/**
+ * Valores em reais com vírgula, separador `;`, UTF-8 com BOM; célula iniciada por `=`, `+`, `-` ou `@` sai com apóstrofo (helper do SEC-156). Uma linha por loja mais a linha de total; sem dado pessoal. Cada exportação é auditada (`campaign.report.export`). Até 10 por minuto por admin (429).
+ * @summary Exportar o relatório em CSV (WB-345 C6, C8)
+ */
+export const exportCampaignReportCsv = async (campaignId: string, options?: Parameters<typeof apiFetch>[1]): Promise<exportCampaignReportCsvResponse> => {
+
+  return apiFetch<exportCampaignReportCsvResponse>(getExportCampaignReportCsvUrl(campaignId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listCampaignAlertsResponse200 = {
+  data: CampaignAlertPage
+  status: 200
+}
+
+export type listCampaignAlertsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCampaignAlertsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCampaignAlertsResponseSuccess = (listCampaignAlertsResponse200) & {
+  headers: Headers;
+};
+export type listCampaignAlertsResponseError = (listCampaignAlertsResponse401 | listCampaignAlertsResponse403) & {
+  headers: Headers;
+};
+
+export type listCampaignAlertsResponse = (listCampaignAlertsResponseSuccess | listCampaignAlertsResponseError)
+
+export const getListCampaignAlertsUrl = (params?: ListCampaignAlertsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/campaign-alerts?${stringifiedParams}` : `/v1/admin/campaign-alerts`
+}
+
+/**
+ * Tipos: `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado.
+ * @summary Alertas de campanha no topo da lista (WB-342 C4, WB-349 C3 e C4, WB-344 C7, WB-346 C8)
+ */
+export const listCampaignAlerts = async (params?: ListCampaignAlertsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCampaignAlertsResponse> => {
+
+  return apiFetch<listCampaignAlertsResponse>(getListCampaignAlertsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getCampaignBudgetResponse200 = {
+  data: CampaignGlobalBudget
+  status: 200
+}
+
+export type getCampaignBudgetResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getCampaignBudgetResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getCampaignBudgetResponseSuccess = (getCampaignBudgetResponse200) & {
+  headers: Headers;
+};
+export type getCampaignBudgetResponseError = (getCampaignBudgetResponse401 | getCampaignBudgetResponse403) & {
+  headers: Headers;
+};
+
+export type getCampaignBudgetResponse = (getCampaignBudgetResponseSuccess | getCampaignBudgetResponseError)
+
+export const getGetCampaignBudgetUrl = () => {
+
+
+
+
+  return `/v1/admin/campaign-budget`
+}
+
+/**
+ * Mostra o orçamento mensal global (parâmetro `cupom_orcamento_mensal_webag_cents`, padrão **R$ 0**: sem ele só campanha "Loja paga" ativa), o comprometido pelas campanhas ativas (soma dos orçamentos totais restantes), o gasto confirmado no mês (America/Sao_Paulo) e `autofinTetoPct`. Somente leitura. A alteração é do super admin pelas rotas de parâmetros existentes (`parameters:write`, `audit_log` com antes e depois, C9): operação e financeiro recebem 403 lá.
+ * @summary Orçamento mensal global de cupons da Webag (WB-340 C9, C10, C11; DEC-102 F2)
+ */
+export const getCampaignBudget = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getCampaignBudgetResponse> => {
+
+  return apiFetch<getCampaignBudgetResponse>(getGetCampaignBudgetUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listCouponSuspectsResponse200 = {
+  data: CouponSuspectPage
+  status: 200
+}
+
+export type listCouponSuspectsResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type listCouponSuspectsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCouponSuspectsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCouponSuspectsResponseSuccess = (listCouponSuspectsResponse200) & {
+  headers: Headers;
+};
+export type listCouponSuspectsResponseError = (listCouponSuspectsResponse400 | listCouponSuspectsResponse401 | listCouponSuspectsResponse403) & {
+  headers: Headers;
+};
+
+export type listCouponSuspectsResponse = (listCouponSuspectsResponseSuccess | listCouponSuspectsResponseError)
+
+export const getListCouponSuspectsUrl = (params?: ListCouponSuspectsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/coupon-suspects?${stringifiedParams}` : `/v1/admin/coupon-suspects`
+}
+
+/**
+ * Só ids opacos: número do pedido, campanha e o sinal (`device_accounts`: 3 contas no mesmo aparelho em 24 h; `address_accounts`; `payer_accounts`; `cancellations`: 3 cancelamentos com cupom em 7 dias). **Nenhum nome, telefone, e-mail, endereço, CPF ou id de aparelho, nem em claro nem em HMAC** (C-CUP-05, C-CUP-12). NÃO existe "revelar" nesta rota: quem precisa do dado abre a ficha do pedido (`getAdminOrder`, mascarada e auditada, WB-352 C14; DEC-071 cortou o "Revelar" completo), pedido a pedido (ADR-019 pendência Security 1). O próximo pedido da conta fica sem cupom enquanto o sinal estiver `open`. Paginado.
+ * @summary Suspeitos de uso indevido de cupom (WB-344 C6, C12)
+ */
+export const listCouponSuspects = async (params?: ListCouponSuspectsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCouponSuspectsResponse> => {
+
+  return apiFetch<listCouponSuspectsResponse>(getListCouponSuspectsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type releaseCouponSuspectResponse200 = {
+  data: CouponSuspect
+  status: 200
+}
+
+export type releaseCouponSuspectResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type releaseCouponSuspectResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type releaseCouponSuspectResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type releaseCouponSuspectResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type releaseCouponSuspectResponseSuccess = (releaseCouponSuspectResponse200) & {
+  headers: Headers;
+};
+export type releaseCouponSuspectResponseError = (releaseCouponSuspectResponse400 | releaseCouponSuspectResponse401 | releaseCouponSuspectResponse403 | releaseCouponSuspectResponse404) & {
+  headers: Headers;
+};
+
+export type releaseCouponSuspectResponse = (releaseCouponSuspectResponseSuccess | releaseCouponSuspectResponseError)
+
+export const getReleaseCouponSuspectUrl = (suspectId: string,) => {
+
+
+
+
+  return `/v1/admin/coupon-suspects/${suspectId}/release`
+}
+
+/**
+ * A conta volta a poder usar cupom. Motivo obrigatório (3 a 200); `audit_log` com o admin, o sinal e o motivo (sem dado pessoal). Idempotente. Libera o sinal, não apaga o HMAC do antifraude.
+ * @summary Liberar cliente bloqueado por engano (WB-344 C9)
+ */
+export const releaseCouponSuspect = async (suspectId: string,
+    campaignReasonRequest: CampaignReasonRequest, options?: Parameters<typeof apiFetch>[1]): Promise<releaseCouponSuspectResponse> => {
+
+  return apiFetch<releaseCouponSuspectResponse>(getReleaseCouponSuspectUrl(suspectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(campaignReasonRequest)
+  }
+);}
+
+
+
+export type getDashboardCatalogResponse200 = {
+  data: DashboardCatalog
+  status: 200
+}
+
+export type getDashboardCatalogResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getDashboardCatalogResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getDashboardCatalogResponseSuccess = (getDashboardCatalogResponse200) & {
+  headers: Headers;
+};
+export type getDashboardCatalogResponseError = (getDashboardCatalogResponse401 | getDashboardCatalogResponse403) & {
+  headers: Headers;
+};
+
+export type getDashboardCatalogResponse = (getDashboardCatalogResponseSuccess | getDashboardCatalogResponseError)
+
+export const getGetDashboardCatalogUrl = () => {
+
+
+
+
+  return `/v1/admin/dashboard/catalog`
+}
+
+/**
+ * Os 4 perfis chamam; cada um recebe **só as métricas da sua sensibilidade** (`general`: os 4; `operational`: super admin, operação e financeiro; `financial`: super admin e financeiro, ADR-019 D9). Métrica sem permissão não aparece (não vaza que existe, C3). Cada métrica traz a definição em uma frase (RN-15, C1), a unidade, a polaridade (cancelamento subindo é ruim), as dimensões COMPATÍVEIS (a matriz métrica x dimensão do PRD; combinação incompatível é 422 em `queryDashboardMetric`, C2) e os tipos de gráfico permitidos. **Não existe dimensão de cliente, motoboy, endereço nem bairro** (C-DSH-04, teste da lista fechada). Métricas de acesso trazem `availability: requires_flag` até a coleta ligar. Os ids de `MetricId` e `DimensionId` são enums do contrato, gerados do registro do servidor (um teste compara os dois). Limites em `limits`. Resposta pequena e cacheável por perfil (`Cache-Control: private, max-age=300`).
+ * @summary Catálogo fechado de métricas e dimensões (WB-356 C1, C2, C3, C7)
+ */
+export const getDashboardCatalog = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getDashboardCatalogResponse> => {
+
+  return apiFetch<getDashboardCatalogResponse>(getGetDashboardCatalogUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type queryDashboardMetricResponse200 = {
+  data: MetricResult
+  status: 200
+}
+
+export type queryDashboardMetricResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type queryDashboardMetricResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type queryDashboardMetricResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type queryDashboardMetricResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type queryDashboardMetricResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type queryDashboardMetricResponse503 = {
+  data: ServiceUnavailableResponse
+  status: 503
+}
+
+export type queryDashboardMetricResponseSuccess = (queryDashboardMetricResponse200) & {
+  headers: Headers;
+};
+export type queryDashboardMetricResponseError = (queryDashboardMetricResponse400 | queryDashboardMetricResponse401 | queryDashboardMetricResponse403 | queryDashboardMetricResponse422 | queryDashboardMetricResponse429 | queryDashboardMetricResponse503) & {
+  headers: Headers;
+};
+
+export type queryDashboardMetricResponse = (queryDashboardMetricResponseSuccess | queryDashboardMetricResponseError)
+
+export const getQueryDashboardMetricUrl = () => {
+
+
+
+
+  return `/v1/admin/dashboard/query`
+}
+
+/**
+ * **Sem SQL livre** (DEC-091): o corpo é `{metricId, dimensionIds[], filters[{dimensionId, op: eq|in, values}], period, compare}`; ids vêm dos enums, o SQL sai SÓ do registro do servidor e os valores vão como parâmetro (C-DSH-01; `sql.raw` com entrada é barrado por lint no módulo). Id desconhecido, dimensão incompatível, filtro fora da lista ou `__proto__`: 422 `QUERY_NOT_ALLOWED` e **zero consultas executadas** (C5, C6). A permissão por sensibilidade é checada ANTES de ler o cache (403 `METRIC_FORBIDDEN`, C-DSH-02, C8); a chave do cache traz métrica e parâmetros normalizados, nunca o perfil nem dado pessoal. **Limites no servidor (C-DSH-03, C9):** período até 400 dias (401: 422 `PERIOD_TOO_LONG`, "Período máximo de 400 dias"), 2 dimensões, 5 filtros, 5.000 pontos, 10 categorias mais "Outros"; **30 consultas por minuto e 2 simultâneas por usuário** (a 31ª: 429 `DASHBOARD_RATE_LIMITED` com `Retry-After`); transação somente leitura, `statement_timeout` de 5 s, **pool separado de 2 conexões**, só sobre agregados diários (nunca `orders`); consulta cancelada: 503 `QUERY_TOO_HEAVY` ("Muito pesado: reduza o período ou o filtro"). **Frescor e amostra (C11):** `generatedAt` (atualizado_em: última atualização dos agregados, não a hora da resposta), `cached` (em_cache: cache de 5 min por métrica e parâmetros) e, por célula, `n` (amostra) e `suppressed`. Baixa amostra (DEC-108): taxa, ticket médio e comparação pedem 20 pedidos; mediana e p90 pedem 5; abaixo disso `lowSample: true` e SEM percentual de variação. Métrica de acesso: célula com menos de 5 sessões vem `suppressed: true`, sem valor e sem `n`. Período sem dado: `rows: []` (a tela mostra "Sem dados no período", nunca zero enganoso). Fuso America/Sao_Paulo, semana começa na segunda. Métrica de contagem distinta (`active_customers`, `repeat_30d`) só aceita os períodos pré-calculados (dia, 7 ou 30 dias terminando em um dia fechado; mês-calendário): outro período é 422 `PERIOD_NOT_SUPPORTED`.
+ * @summary Consultar uma métrica do catálogo (WB-356 C5 a C11)
+ */
+export const queryDashboardMetric = async (metricQuery: MetricQuery, options?: Parameters<typeof apiFetch>[1]): Promise<queryDashboardMetricResponse> => {
+
+  return apiFetch<queryDashboardMetricResponse>(getQueryDashboardMetricUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(metricQuery)
+  }
+);}
+
+
+
+export type listDashboardsResponse200 = {
+  data: DashboardPage
+  status: 200
+}
+
+export type listDashboardsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listDashboardsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listDashboardsResponseSuccess = (listDashboardsResponse200) & {
+  headers: Headers;
+};
+export type listDashboardsResponseError = (listDashboardsResponse401 | listDashboardsResponse403) & {
+  headers: Headers;
+};
+
+export type listDashboardsResponse = (listDashboardsResponseSuccess | listDashboardsResponseError)
+
+export const getListDashboardsUrl = (params?: ListDashboardsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/dashboards?${stringifiedParams}` : `/v1/admin/dashboards`
+}
+
+/**
+ * Os painéis prontos (Visão geral, Vendas, Lojas, Entrega, Cupons e, com a coleta de acessos, Acessos) pertencem ao sistema: **duplicáveis, nenhum editável** (`editable: false`). Painéis do usuário são **privados** (`owner_admin_id = :me`, C-DSH-05): nunca aparecem os de outro admin. O painel pronto só traz os widgets que o perfil pode ver; `someWidgetsHidden` avisa sem dizer quais (a tela não renderiza o que não pode). Até 6 prontos e 20 do usuário; paginado por convenção (a lista cabe numa página).
+ * @summary Painéis prontos e os meus (WB-357 C6)
+ */
+export const listDashboards = async (params?: ListDashboardsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listDashboardsResponse> => {
+
+  return apiFetch<listDashboardsResponse>(getListDashboardsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDashboardResponse200 = {
+  data: Dashboard
+  status: 200
+}
+
+export type getDashboardResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getDashboardResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getDashboardResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getDashboardResponseSuccess = (getDashboardResponse200) & {
+  headers: Headers;
+};
+export type getDashboardResponseError = (getDashboardResponse401 | getDashboardResponse403 | getDashboardResponse404) & {
+  headers: Headers;
+};
+
+export type getDashboardResponse = (getDashboardResponseSuccess | getDashboardResponseError)
+
+export const getGetDashboardUrl = (dashboardId: string,) => {
+
+
+
+
+  return `/v1/admin/dashboards/${dashboardId}`
+}
+
+/**
+ * Devolve a definição (widgets, filtros globais padrão: período, cidade, loja, categoria, modo, campanha); **os dados vêm de `queryDashboardMetric`, um widget por chamada** (widgets carregam independentes: um lento não trava o painel). Painel de outro admin: 404 (nunca 403, C-DSH-05).
+ * @summary Abrir um painel (WB-357 C1 a C5)
+ */
+export const getDashboard = async (dashboardId: string, options?: Parameters<typeof apiFetch>[1]): Promise<getDashboardResponse> => {
+
+  return apiFetch<getDashboardResponse>(getGetDashboardUrl(dashboardId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type duplicateDashboardResponse201 = {
+  data: Dashboard
+  status: 201
+}
+
+export type duplicateDashboardResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type duplicateDashboardResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type duplicateDashboardResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type duplicateDashboardResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type duplicateDashboardResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type duplicateDashboardResponseSuccess = (duplicateDashboardResponse201) & {
+  headers: Headers;
+};
+export type duplicateDashboardResponseError = (duplicateDashboardResponse400 | duplicateDashboardResponse401 | duplicateDashboardResponse403 | duplicateDashboardResponse404 | duplicateDashboardResponse422) & {
+  headers: Headers;
+};
+
+export type duplicateDashboardResponse = (duplicateDashboardResponseSuccess | duplicateDashboardResponseError)
+
+export const getDuplicateDashboardUrl = (dashboardId: string,) => {
+
+
+
+
+  return `/v1/admin/dashboards/${dashboardId}/duplicate`
+}
+
+/**
+ * Cria uma cópia EDITÁVEL e privada do painel pronto ou do próprio (o original fica intacto). Widgets de métrica que o perfil não pode ver ficam de fora da cópia. Painel de outro admin: 404. Limite de 20 painéis por usuário (422 `DASHBOARD_LIMIT`, "Limite de 20 painéis"); nome até 80 caracteres, exibido como texto e escapado no CSV (C-DSH-06). Criar, renomear, reordenar, excluir widgets e "Enviar cópia" são do construtor (R3, WB-358) e não estão neste contrato.
+ * @summary Duplicar para editar (WB-357 C4; WB-358 C6 na R3)
+ */
+export const duplicateDashboard = async (dashboardId: string,
+    duplicateDashboardRequest?: DuplicateDashboardRequest, options?: Parameters<typeof apiFetch>[1]): Promise<duplicateDashboardResponse> => {
+
+  return apiFetch<duplicateDashboardResponse>(getDuplicateDashboardUrl(dashboardId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(duplicateDashboardRequest)
+  }
+);}
+
+
+
+export type getAdminAnalyticsFunnelResponse200 = {
+  data: AnalyticsFunnel
+  status: 200
+}
+
+export type getAdminAnalyticsFunnelResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type getAdminAnalyticsFunnelResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminAnalyticsFunnelResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminAnalyticsFunnelResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type getAdminAnalyticsFunnelResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type getAdminAnalyticsFunnelResponseSuccess = (getAdminAnalyticsFunnelResponse200) & {
+  headers: Headers;
+};
+export type getAdminAnalyticsFunnelResponseError = (getAdminAnalyticsFunnelResponse400 | getAdminAnalyticsFunnelResponse401 | getAdminAnalyticsFunnelResponse403 | getAdminAnalyticsFunnelResponse409 | getAdminAnalyticsFunnelResponse429) & {
+  headers: Headers;
+};
+
+export type getAdminAnalyticsFunnelResponse = (getAdminAnalyticsFunnelResponseSuccess | getAdminAnalyticsFunnelResponseError)
+
+export const getGetAdminAnalyticsFunnelUrl = (params?: GetAdminAnalyticsFunnelParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/admin/analytics/funnel?${stringifiedParams}` : `/v1/admin/analytics/funnel`
+}
+
+/**
+ * Etapas: visita à loja, abriu produto, sacola, início do checkout, pedido pago, cada uma com a conversão da etapa anterior (não só a final). Lê só o agregado diário (nunca o bruto, C-ANA-04); célula com menos de 5 sessões vem `suppressed: true` sem valor nem `n` (C-ANA-05); suporte 403 (C6); sem dado: 200 com `empty: true` ("Ainda sem dados: o app precisa ser atualizado", C7). Períodos fechados terminando ontem (7, 30, 90). `profileOnly` é a parcela de visitas que NÃO abriu produto (C2). DEPENDE da R1.4: a etapa `checkout_started` exige o evento novo (`CheckoutStartedEvent`) e a coluna `profile_only_sessions` no agregado (ADR-019 pendência 5).
+ * @summary Funil geral e por cidade (WB-362 C3, C5, C6, C7)
+ */
+export const getAdminAnalyticsFunnel = async (params?: GetAdminAnalyticsFunnelParams, options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsFunnelResponse> => {
+
+  return apiFetch<getAdminAnalyticsFunnelResponse>(getGetAdminAnalyticsFunnelUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAdminAnalyticsInterestResponse200 = {
+  data: AnalyticsInterestReport
+  status: 200
+}
+
+export type getAdminAnalyticsInterestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getAdminAnalyticsInterestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getAdminAnalyticsInterestResponseSuccess = (getAdminAnalyticsInterestResponse200) & {
+  headers: Headers;
+};
+export type getAdminAnalyticsInterestResponseError = (getAdminAnalyticsInterestResponse401 | getAdminAnalyticsInterestResponse403) & {
+  headers: Headers;
+};
+
+export type getAdminAnalyticsInterestResponse = (getAdminAnalyticsInterestResponseSuccess | getAdminAnalyticsInterestResponseError)
+
+export const getGetAdminAnalyticsInterestUrl = () => {
+
+
+
+
+  return `/v1/admin/analytics-interest`
+}
+
+/**
+ * Quantas lojas tocaram em "Quero testar" (`clicked`) e quantas escolheram cada faixa (`bands`), incluindo "Não pagaria por isso". Só contagens e o texto curto opcional das últimas 50 respostas (`notes`, até 140 caracteres, sem identificar loja nem pessoa: o texto pede "Não escreva dados de clientes"). Não mostra o valor como preço decidido: as faixas são exemplos (DEC-093, HIP-A1). Retenção de 12 meses.
+ * @summary Interesse na porta falsa do módulo Análises (WB-367 C3)
+ */
+export const getAdminAnalyticsInterest = async ( options?: Parameters<typeof apiFetch>[1]): Promise<getAdminAnalyticsInterestResponse> => {
+
+  return apiFetch<getAdminAnalyticsInterestResponse>(getGetAdminAnalyticsInterestUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type recordAnalyticsInterestResponse204 = {
+  data: void
+  status: 204
+}
+
+export type recordAnalyticsInterestResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type recordAnalyticsInterestResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type recordAnalyticsInterestResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type recordAnalyticsInterestResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type recordAnalyticsInterestResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type recordAnalyticsInterestResponseSuccess = (recordAnalyticsInterestResponse204) & {
+  headers: Headers;
+};
+export type recordAnalyticsInterestResponseError = (recordAnalyticsInterestResponse400 | recordAnalyticsInterestResponse401 | recordAnalyticsInterestResponse403 | recordAnalyticsInterestResponse404 | recordAnalyticsInterestResponse429) & {
+  headers: Headers;
+};
+
+export type recordAnalyticsInterestResponse = (recordAnalyticsInterestResponseSuccess | recordAnalyticsInterestResponseError)
+
+export const getRecordAnalyticsInterestUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/analytics-interest`
+}
+
+/**
+ * Permissão da loja `settings` (só o dono; funcionário 403, não-membro 404). Idempotente por loja: a 1ª chamada com `answer: clicked` registra o toque (`analytics_interest_clicked`); a chamada com `priceBand` grava a faixa (pode mudar de ideia: sobrescreve). Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 140 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429).
+ * @summary Porta falsa: "Quero testar" e a faixa de preço (WB-367 C1, C2, C4)
+ */
+export const recordAnalyticsInterest = async (storeId: string,
+    recordAnalyticsInterestRequest: RecordAnalyticsInterestRequest, options?: Parameters<typeof apiFetch>[1]): Promise<recordAnalyticsInterestResponse> => {
+
+  return apiFetch<recordAnalyticsInterestResponse>(getRecordAnalyticsInterestUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(recordAnalyticsInterestRequest)
+  }
+);}
+
+
+
+export type lookupProductBarcodeResponse200 = {
+  data: BarcodeLookup
+  status: 200
+}
+
+export type lookupProductBarcodeResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type lookupProductBarcodeResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type lookupProductBarcodeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type lookupProductBarcodeResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type lookupProductBarcodeResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type lookupProductBarcodeResponseSuccess = (lookupProductBarcodeResponse200) & {
+  headers: Headers;
+};
+export type lookupProductBarcodeResponseError = (lookupProductBarcodeResponse401 | lookupProductBarcodeResponse403 | lookupProductBarcodeResponse404 | lookupProductBarcodeResponse422 | lookupProductBarcodeResponse429) & {
+  headers: Headers;
+};
+
+export type lookupProductBarcodeResponse = (lookupProductBarcodeResponseSuccess | lookupProductBarcodeResponseError)
+
+export const getLookupProductBarcodeUrl = (storeId: string,
+    barcode: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/barcodes/${barcode}`
+}
+
+/**
+ * Permissão da loja `catalog`. O servidor confere o **dígito verificador** (EAN-8, UPC-A de 12, EAN-13 e GTIN-14; inválido: 422 `BARCODE_INVALID`, "Código inválido: confira os números") e responde: `inStore` (produto e variação da PRÓPRIA loja com esse código: "Você já tem este produto", com `productId` para "Abrir" e "Aumentar estoque", único por loja) e `reference` (nome, marca e categoria do **catálogo de referência próprio**, dado factual moderado: sem foto e sem descrição; sugestão editável). Código desconhecido: ambos nulos e o cadastro segue normal com o código guardado (C6). **Nenhuma chamada de rede sai do sistema**: a base externa é a flag `ean_base_externa`, desligada, e nenhum adaptador existe (C7, F9). Limite de 60 consultas por hora por loja (a 61ª: 429, C9). Resposta sem cache e sem o corpo do produto.
+ * @summary Conferir código de barras na loja e na base de referência (WB-373 C3 a C7, C9)
+ */
+export const lookupProductBarcode = async (storeId: string,
+    barcode: string, options?: Parameters<typeof apiFetch>[1]): Promise<lookupProductBarcodeResponse> => {
+
+  return apiFetch<lookupProductBarcodeResponse>(getLookupProductBarcodeUrl(storeId,barcode),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getPromotionEligibilityResponse200 = {
+  data: PromotionEligibility
+  status: 200
+}
+
+export type getPromotionEligibilityResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type getPromotionEligibilityResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type getPromotionEligibilityResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getPromotionEligibilityResponseSuccess = (getPromotionEligibilityResponse200) & {
+  headers: Headers;
+};
+export type getPromotionEligibilityResponseError = (getPromotionEligibilityResponse401 | getPromotionEligibilityResponse403 | getPromotionEligibilityResponse404) & {
+  headers: Headers;
+};
+
+export type getPromotionEligibilityResponse = (getPromotionEligibilityResponseSuccess | getPromotionEligibilityResponseError)
+
+export const getGetPromotionEligibilityUrl = (storeId: string,
+    productId: string,
+    params?: GetPromotionEligibilityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/products/${productId}/promotion-eligibility?${stringifiedParams}` : `/v1/stores/${storeId}/products/${productId}/promotion-eligibility`
+}
+
+/**
+ * Permissão da loja `catalog`. O preço "de" e o percentual só aparecem ao cliente se o preço "de" foi **praticado de fato por 30 dias seguidos nos últimos 60** (RN-C8, `[HIPÓTESE; J23]`), sem promoção cobrindo o período; senão a vitrine mostra só o preço atual. Aqui o lojista vê ANTES de publicar a promoção: `eligible: false` com `reasonCode: NO_REFERENCE_HISTORY` e o texto "Seu desconto só aparece depois de 30 dias de preço anterior." e `eligibleFrom` (data em que passa a valer); `eligible: true` com o preço de referência e desde quando. A promoção PODE ser salva sem selo (vale o preço atual); o servidor é quem decide o selo na vitrine (`originalPrice` e `discountPercent` de `ProductCard`, `BrowseProduct` e `ProductVariant` vêm nulos quando não comprovado; antes vinham sempre que havia promoção). Histórico em `product_price_history` (preço, data, autor); anterior à v1.1 não existe: ninguém comprova o selo nos primeiros 30 dias.
+ * @summary O selo "de/por" aparece para este produto? (WB-348 C1, C3)
+ */
+export const getPromotionEligibility = async (storeId: string,
+    productId: string,
+    params?: GetPromotionEligibilityParams, options?: Parameters<typeof apiFetch>[1]): Promise<getPromotionEligibilityResponse> => {
+
+  return apiFetch<getPromotionEligibilityResponse>(getGetPromotionEligibilityUrl(storeId,productId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listStoreCampaignInvitesResponse200 = {
+  data: CampaignInvitePage
+  status: 200
+}
+
+export type listStoreCampaignInvitesResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreCampaignInvitesResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreCampaignInvitesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreCampaignInvitesResponseSuccess = (listStoreCampaignInvitesResponse200) & {
+  headers: Headers;
+};
+export type listStoreCampaignInvitesResponseError = (listStoreCampaignInvitesResponse401 | listStoreCampaignInvitesResponse403 | listStoreCampaignInvitesResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreCampaignInvitesResponse = (listStoreCampaignInvitesResponseSuccess | listStoreCampaignInvitesResponseError)
+
+export const getListStoreCampaignInvitesUrl = (storeId: string,
+    params?: ListStoreCampaignInvitesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/campaign-invites?${stringifiedParams}` : `/v1/stores/${storeId}/campaign-invites`
+}
+
+/**
+ * Permissão da loja `coupons` (dono ou funcionário com a permissão; **funcionário sem ela: 403 e o item nem aparece no app**, C6; não-membro: 404; admin com "Ver como": 403, a rota não está na lista fechada). Cada convite traz a parte da loja em % e em R$ por pedido de exemplo, "você recebe R$ X (sem o cupom: R$ Y)" calculado no servidor com a comissão da loja (a visão do lojista pode ver o líquido dele; `x-view-as` NÃO vale aqui), validade (7 dias sem aceite tácito), o teto mensal sugerido (R$ 150,00) e o **texto do aceite com versão e hash** que a loja confirmará. Estados: `pending`, `accepted`, `declined`, `left`, `expired`. Paginado.
+ * @summary Convites de campanha da loja (WB-343 C2, C6, C7)
+ */
+export const listStoreCampaignInvites = async (storeId: string,
+    params?: ListStoreCampaignInvitesParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreCampaignInvitesResponse> => {
+
+  return apiFetch<listStoreCampaignInvitesResponse>(getListStoreCampaignInvitesUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type acceptCampaignInviteResponse200 = {
+  data: CampaignInvite
+  status: 200
+}
+
+export type acceptCampaignInviteResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type acceptCampaignInviteResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type acceptCampaignInviteResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type acceptCampaignInviteResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type acceptCampaignInviteResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type acceptCampaignInviteResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type acceptCampaignInviteResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type acceptCampaignInviteResponseSuccess = (acceptCampaignInviteResponse200) & {
+  headers: Headers;
+};
+export type acceptCampaignInviteResponseError = (acceptCampaignInviteResponse400 | acceptCampaignInviteResponse401 | acceptCampaignInviteResponse403 | acceptCampaignInviteResponse404 | acceptCampaignInviteResponse409 | acceptCampaignInviteResponse410 | acceptCampaignInviteResponse422) & {
+  headers: Headers;
+};
+
+export type acceptCampaignInviteResponse = (acceptCampaignInviteResponseSuccess | acceptCampaignInviteResponseError)
+
+export const getAcceptCampaignInviteUrl = (storeId: string,
+    enrollmentId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/campaign-invites/${enrollmentId}/accept`
+}
+
+/**
+ * Permissão da loja `coupons`; **a loja vem da rota e da membership, nunca do corpo** (C-CUP-07): admin (qualquer perfil, inclusive por "Ver como"), funcionário sem `coupons` e membro de outra loja recebem 403 ou 404 e NADA é gravado. Corpo: `termsVersion` e `termsHash` do texto mostrado, `monthlyCapCents` (teto da loja, R$ 1,00 ou mais) e `confirm: true` (a confirmação "Você paga 40% de cada desconto, até R$ 150,00 por mês"). Versão ou hash diferentes dos vigentes: 409 `TERMS_VERSION_MISMATCH` com os atuais (o lojista relê). Grava, em `campaign_acceptances` (append-only): usuário, hora, versão, hash, teto e a parte da loja do momento (C3). Convite vencido: 410 `INVITE_EXPIRED`; já respondido: 409 `INVITE_NOT_PENDING`. Campanha encerrada: 409 `CAMPAIGN_STATE_INVALID`. Sem aceite NÃO há desconto naquela loja (C1). `Idempotency-Key` obrigatória (aceite em 3G não duplica).
+ * @summary Aceitar o custo da campanha com teto próprio (WB-343 C1, C3, C8)
+ */
+export const acceptCampaignInvite = async (storeId: string,
+    enrollmentId: string,
+    acceptCampaignInviteRequest: AcceptCampaignInviteRequest, options?: Parameters<typeof apiFetch>[1]): Promise<acceptCampaignInviteResponse> => {
+
+  return apiFetch<acceptCampaignInviteResponse>(getAcceptCampaignInviteUrl(storeId,enrollmentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(acceptCampaignInviteRequest)
+  }
+);}
+
+
+
+export type declineCampaignInviteResponse200 = {
+  data: CampaignInvite
+  status: 200
+}
+
+export type declineCampaignInviteResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type declineCampaignInviteResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type declineCampaignInviteResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type declineCampaignInviteResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type declineCampaignInviteResponse410 = {
+  data: GoneResponse
+  status: 410
+}
+
+export type declineCampaignInviteResponseSuccess = (declineCampaignInviteResponse200) & {
+  headers: Headers;
+};
+export type declineCampaignInviteResponseError = (declineCampaignInviteResponse401 | declineCampaignInviteResponse403 | declineCampaignInviteResponse404 | declineCampaignInviteResponse409 | declineCampaignInviteResponse410) & {
+  headers: Headers;
+};
+
+export type declineCampaignInviteResponse = (declineCampaignInviteResponseSuccess | declineCampaignInviteResponseError)
+
+export const getDeclineCampaignInviteUrl = (storeId: string,
+    enrollmentId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/campaign-invites/${enrollmentId}/decline`
+}
+
+/**
+ * Mesmas regras de acesso do aceite. Grava a recusa em `campaign_acceptances` (`action: decline`). Idempotente. A campanha não desconta nesta loja.
+ * @summary Recusar o convite
+ */
+export const declineCampaignInvite = async (storeId: string,
+    enrollmentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<declineCampaignInviteResponse> => {
+
+  return apiFetch<declineCampaignInviteResponse>(getDeclineCampaignInviteUrl(storeId,enrollmentId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type leaveCampaignResponse200 = {
+  data: CampaignInvite
+  status: 200
+}
+
+export type leaveCampaignResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type leaveCampaignResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type leaveCampaignResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type leaveCampaignResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type leaveCampaignResponseSuccess = (leaveCampaignResponse200) & {
+  headers: Headers;
+};
+export type leaveCampaignResponseError = (leaveCampaignResponse401 | leaveCampaignResponse403 | leaveCampaignResponse404 | leaveCampaignResponse409) & {
+  headers: Headers;
+};
+
+export type leaveCampaignResponse = (leaveCampaignResponseSuccess | leaveCampaignResponseError)
+
+export const getLeaveCampaignUrl = (storeId: string,
+    campaignId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/campaigns/${campaignId}/leave`
+}
+
+/**
+ * Mesmas regras de acesso do aceite. Vale para pedidos NOVOS: a criação do pedido reconfere o aceite sob a trava; pedidos já criados mantêm o desconto e as reservas (C4). Grava `action: leave`. Idempotente. Saída não é multa nem pendência.
+ * @summary Sair da campanha a qualquer momento (WB-343 C4)
+ */
+export const leaveCampaign = async (storeId: string,
+    campaignId: string, options?: Parameters<typeof apiFetch>[1]): Promise<leaveCampaignResponse> => {
+
+  return apiFetch<leaveCampaignResponse>(getLeaveCampaignUrl(storeId,campaignId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listStoreCouponsResponse200 = {
+  data: StoreCouponPage
+  status: 200
+}
+
+export type listStoreCouponsResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listStoreCouponsResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listStoreCouponsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type listStoreCouponsResponseSuccess = (listStoreCouponsResponse200) & {
+  headers: Headers;
+};
+export type listStoreCouponsResponseError = (listStoreCouponsResponse401 | listStoreCouponsResponse403 | listStoreCouponsResponse404) & {
+  headers: Headers;
+};
+
+export type listStoreCouponsResponse = (listStoreCouponsResponseSuccess | listStoreCouponsResponseError)
+
+export const getListStoreCouponsUrl = (storeId: string,
+    params?: ListStoreCouponsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/stores/${storeId}/coupons?${stringifiedParams}` : `/v1/stores/${storeId}/coupons`
+}
+
+/**
+ * Permissão da loja `coupons` (funcionário sem ela: 403, C3). Só os cupons da própria loja (`owner: store`, `loja_pct` 100). Cada um traz usos, quanto já gastou no mês contra o teto mensal e `pausedBy` (`merchant`, `admin`, `system`). Paginado.
+ * @summary Cupons próprios da loja (WB-346)
+ */
+export const listStoreCoupons = async (storeId: string,
+    params?: ListStoreCouponsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listStoreCouponsResponse> => {
+
+  return apiFetch<listStoreCouponsResponse>(getListStoreCouponsUrl(storeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createStoreCouponResponse201 = {
+  data: StoreCoupon
+  status: 201
+}
+
+export type createStoreCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type createStoreCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type createStoreCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type createStoreCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type createStoreCouponResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type createStoreCouponResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type createStoreCouponResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type createStoreCouponResponseSuccess = (createStoreCouponResponse201) & {
+  headers: Headers;
+};
+export type createStoreCouponResponseError = (createStoreCouponResponse400 | createStoreCouponResponse401 | createStoreCouponResponse403 | createStoreCouponResponse404 | createStoreCouponResponse409 | createStoreCouponResponse422 | createStoreCouponResponse429) & {
+  headers: Headers;
+};
+
+export type createStoreCouponResponse = (createStoreCouponResponseSuccess | createStoreCouponResponseError)
+
+export const getCreateStoreCouponUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/coupons`
+}
+
+/**
+ * Permissão da loja `coupons`; **a loja vem da rota e da membership**, nunca do corpo; admin NÃO cria por aqui (C-CUP-07). Percentual ou valor fixo, pedido mínimo, validade, usos totais e por cliente e **teto mensal em R$ obrigatório** (C1). O cupom vale só na própria loja e não gera desconto da Webag (`storeSharePct` 100, C4); o desconto sai da parte da loja (reduz a base da comissão, RN-10). **Teto de percentual** `cupom_loja_pct_max` (padrão 30, só o super admin muda, DEC-103 D-03): percentual acima: 422 `STORE_COUPON_PERCENT_ABOVE_MAX` com `maxPct` ("O desconto máximo da loja é 30%", C7); valor fixo exige pedido mínimo >= valor / (teto/100), arredondado para cima ao centavo (R$ 20,00 exige R$ 66,67): senão 422 `STORE_COUPON_MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`. A criação equivale a aceite implícito (o criador é a loja, com teto): grava em `campaign_acceptances`. O código é do lojista (4 a 20, único; 409 `COUPON_CODE_TAKEN`); cupom `private` tem código gerado. Nasce `active` (sem custo da Webag e sem orçamento da Webag). `Idempotency-Key` obrigatória.
+ * @summary Criar cupom próprio (absorve WB-073; WB-346 C1, C4, C7)
+ */
+export const createStoreCoupon = async (storeId: string,
+    storeCouponCreate: StoreCouponCreate, options?: Parameters<typeof apiFetch>[1]): Promise<createStoreCouponResponse> => {
+
+  return apiFetch<createStoreCouponResponse>(getCreateStoreCouponUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(storeCouponCreate)
+  }
+);}
+
+
+
+export type previewStoreCouponResponse200 = {
+  data: StoreCouponPreview
+  status: 200
+}
+
+export type previewStoreCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type previewStoreCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type previewStoreCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type previewStoreCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type previewStoreCouponResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type previewStoreCouponResponseSuccess = (previewStoreCouponResponse200) & {
+  headers: Headers;
+};
+export type previewStoreCouponResponseError = (previewStoreCouponResponse400 | previewStoreCouponResponse401 | previewStoreCouponResponse403 | previewStoreCouponResponse404 | previewStoreCouponResponse422) & {
+  headers: Headers;
+};
+
+export type previewStoreCouponResponse = (previewStoreCouponResponseSuccess | previewStoreCouponResponseError)
+
+export const getPreviewStoreCouponUrl = (storeId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/coupons/preview`
+}
+
+/**
+ * Não grava. Mesma conta do pedido (RN-10): num pedido de R$ 80,00 "você recebe R$ 60,49 (sem o cupom: R$ 67,21)". Exige a permissão `coupons` e devolve o líquido da PRÓPRIA loja (por isso fora do "Ver como").
+ * @summary Prévia "Você recebe R$ X por pedido de R$ Y" (WB-346 C2)
+ */
+export const previewStoreCoupon = async (storeId: string,
+    storeCouponPreviewRequest: StoreCouponPreviewRequest, options?: Parameters<typeof apiFetch>[1]): Promise<previewStoreCouponResponse> => {
+
+  return apiFetch<previewStoreCouponResponse>(getPreviewStoreCouponUrl(storeId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(storeCouponPreviewRequest)
+  }
+);}
+
+
+
+export type updateStoreCouponResponse200 = {
+  data: StoreCoupon
+  status: 200
+}
+
+export type updateStoreCouponResponse400 = {
+  data: ValidationErrorResponse
+  status: 400
+}
+
+export type updateStoreCouponResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type updateStoreCouponResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type updateStoreCouponResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type updateStoreCouponResponse409 = {
+  data: ConflictResponse
+  status: 409
+}
+
+export type updateStoreCouponResponse422 = {
+  data: UnprocessableResponse
+  status: 422
+}
+
+export type updateStoreCouponResponseSuccess = (updateStoreCouponResponse200) & {
+  headers: Headers;
+};
+export type updateStoreCouponResponseError = (updateStoreCouponResponse400 | updateStoreCouponResponse401 | updateStoreCouponResponse403 | updateStoreCouponResponse404 | updateStoreCouponResponse409 | updateStoreCouponResponse422) & {
+  headers: Headers;
+};
+
+export type updateStoreCouponResponse = (updateStoreCouponResponseSuccess | updateStoreCouponResponseError)
+
+export const getUpdateStoreCouponUrl = (storeId: string,
+    couponId: string,) => {
+
+
+
+
+  return `/v1/stores/${storeId}/coupons/${couponId}`
+}
+
+/**
+ * Permissão `coupons`. `active: false` pausa na hora; `active: true` retoma, exceto se `pausedBy: admin` (409 `PAUSED_BY_ADMIN`, C6) ou se o teto mensal acabou (a retomada só vale no mês seguinte ou com teto maior). Antes do 1º uso pode mudar valor, mínimo, validade e usos; **depois do 1º uso só pausa, retoma, encerra e sobe o teto mensal** (409 `COUPON_IN_USE`). O teto mensal atingido pausa o cupom sozinho (`pausedBy: system`) e avisa o lojista (C5). Os tetos de % e de mínimo da criação valem na edição. `expectedVersion` obrigatório.
+ * @summary Pausar, retomar ou ajustar cupom próprio (WB-346 C5, C6)
+ */
+export const updateStoreCoupon = async (storeId: string,
+    couponId: string,
+    storeCouponPatch: StoreCouponPatch, options?: Parameters<typeof apiFetch>[1]): Promise<updateStoreCouponResponse> => {
+
+  return apiFetch<updateStoreCouponResponse>(getUpdateStoreCouponUrl(storeId,couponId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(storeCouponPatch)
+  }
+);}
+
+
+
+export type listCartCouponOffersResponse200 = {
+  data: CouponOfferList
+  status: 200
+}
+
+export type listCartCouponOffersResponse401 = {
+  data: UnauthorizedResponse
+  status: 401
+}
+
+export type listCartCouponOffersResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type listCartCouponOffersResponse429 = {
+  data: TooManyRequestsResponse
+  status: 429
+}
+
+export type listCartCouponOffersResponseSuccess = (listCartCouponOffersResponse200) & {
+  headers: Headers;
+};
+export type listCartCouponOffersResponseError = (listCartCouponOffersResponse401 | listCartCouponOffersResponse403 | listCartCouponOffersResponse429) & {
+  headers: Headers;
+};
+
+export type listCartCouponOffersResponse = (listCartCouponOffersResponseSuccess | listCartCouponOffersResponseError)
+
+export const getListCartCouponOffersUrl = (params?: ListCartCouponOffersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/cart/coupon-offers?${stringifiedParams}` : `/v1/cart/coupon-offers`
+}
+
+/**
+ * "Cupons para este pedido" (BottomSheet da sacola). Lista **só cupons públicos** (`codeVisibility: public`) aplicáveis AGORA ou aplicáveis com "Faltam R$ X" (`shortfall`); **nunca** lista cupom segmentado ou privado, de outro público ("primeira compra" só aparece a quem não tem pedido pago), de campanha sem aceite da loja ou esgotado (C7). Cada oferta traz valor, condição, validade (o dia final vale até 23:59 em America/Sao_Paulo, C9), a origem em texto (`webag`, `store`, `webag_and_store`, `delivery_webag`) e as restrições em lista fechada, para a tela montar o texto sem o servidor mandar frase. O `code` só vai nas ofertas públicas. Tudo calculado no servidor com a sacola e o endereço da conta (mesmos parâmetros de `getCart`); não revela qual identificador antifraude casou. Até 20 ofertas, sem cursor. Limite de 60 chamadas em 10 min por conta (429).
+ * @summary Cupons para este pedido: a vitrine da sacola (WB-347 C2, C7, C9)
+ */
+export const listCartCouponOffers = async (params?: ListCartCouponOffersParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCartCouponOffersResponse> => {
+
+  return apiFetch<listCartCouponOffersResponse>(getListCartCouponOffersUrl(params),
   {
     ...options,
     method: 'GET'

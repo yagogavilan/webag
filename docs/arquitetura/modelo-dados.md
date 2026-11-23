@@ -1,4 +1,4 @@
-# Modelo de dados — Webag (estado atual: migrações 0000 a 0042)
+# Modelo de dados — Webag (estado atual: migrações 0000 a 0065)
 
 Dono: backend-dev | Revisado: 2026-11-19 (Tech Lead, Onda 7: mapa das migrações, Onda 2 e Onda 4 completas) | Fonte da verdade: `apps/api/src/modules/*/db/schema.ts` (Drizzle) + `apps/api/drizzle/*.sql` (migrações versionadas, aplicadas por `pnpm db:migrate`; nunca alterar banco à mão).
 
@@ -172,6 +172,41 @@ Parâmetros novos (`parameters.definitions.ts`, auditados): `rascunhos_max_por_l
 
 **Versão (`version`) e limites sob concorrência (I2, I3).** `version` sobe por incremento explícito `version = version + 1` num único helper do repositório de catálogo, chamado só pelas edições de catálogo (lojista e admin); sem gatilho de banco. Reserva, venda, devolução, moderação e o sweep de validade NÃO sobem. O teto de rascunhos é contado sob `SELECT ... FROM stores WHERE id = :id FOR UPDATE` (ou `pg_advisory_xact_lock`) em `createProduct`, `createProductDraft`, lote, `duplicateProduct` e `createAdminProductDraft`.
 
+## v1.1 R2 (migrações 0064 e 0065, ADR-019; só schema, o motor é da R2.2 e R2.3)
+
+Contrato: `openapi.yaml` 0.5.0. Escritas com `drizzle/down/` testadas por `migrations-down.e2e-spec.ts` (sobe, desce 0065 a 0058, sobe) e regras do banco por `r2-campaigns-schema.e2e-spec.ts`. Convenções: dinheiro em centavos `integer`; `text({ enum })` do Drizzle é só TypeScript, então os enums de dinheiro e segurança também são CHECK (`platform/database/enum-check.ts`).
+
+### 0064 `r2_campaigns` (módulo `campaigns`; colunas em `coupons` e `orders`)
+| Tabela | Conteúdo | Garantias no banco |
+|---|---|---|
+| `campaigns` | A REGRA: dono (`webag` ou `store`), fonte de custo (`webag`, `store`, `split`, `self_funded`), parte da loja, tipo, valor, teto do percentual, mínimo, público, alvo (todas, cidade, loja, categoria), validade, orçamento total e diário (Webag), usos, estado, `version`, contadores (`budget_reserved_cents`, `budget_spent_cents`, `uses_*`) | Fonte x parte da loja; frete grátis só com `webag` ou `self_funded`; cupom da loja = fonte `store` na própria loja; alvo coerente; **orçamento e limite obrigatórios fora de rascunho**; `reservado + gasto <= total` e usos; enums |
+| `campaign_store_enrollments` | Convite e adesão por (campanha, loja): estado (`pending`, `accepted`, `declined`, `left`, `expired`), validade de 7 dias, teto mensal próprio | `accepted` exige teto, versão, hash e quem aceitou; único por (campanha, loja) |
+| `campaign_acceptances` | PROVA do aceite, recusa, saída e criação do cupom da loja (usuário, hora, versão e hash do texto, teto, parte da loja). **Append-only** | Gatilho `campaign_acceptances_append_only`; `webag_app` só INSERT e SELECT |
+| `campaign_budget_days` | Orçamento do DIA (America/Sao_Paulo, dia calculado no banco): limite, reservado, gasto | `reservado + gasto <= limite` |
+| `campaign_store_months` | Teto MENSAL da loja por campanha | idem |
+| `coupon_reservations` | Reserva por pedido: `reserved` -> `confirmed` -> `returned`, Webag e loja em centavos, dia e mês da reserva, estorno parcial acumulado | Único por pedido; forma coerente com o estado; estorno <= confirmado; desconto > 0 |
+| `campaign_budget_entries` | DIÁRIO do orçamento (`reserve`, `confirm`, `release`, `refund`, por quem paga). **Append-only**, `dedupe_key` única | Gatilho append-only; `webag_app` só INSERT e SELECT; `campaign_budget_violations()` devolve os contadores que divergem do diário |
+| `coupon_fraud_claims` | Primeira compra consumida por identificador (`account`, `device`, `address`, `document`), SÓ HMAC | **Único parcial `(kind, hmac) WHERE state = 'active'`** (vale entre campanhas); HMAC = 64 hexadecimais |
+| `coupon_identifier_sightings` | Contas DISTINTAS (HMAC) por identificador, para o sinal de velocidade | Único por (identificador, conta); só HMAC |
+| `coupon_fraud_signals` | "Suspeitos": pedido, campanha, sinal e liberação (quem, quando, motivo). Sem identificador | Único por (pedido, sinal); liberar exige autor e motivo |
+| `coupons.campaign_id`, `visibility`, `code_origin` | Liga o CÓDIGO à campanha; `private` só com código gerado de 8+ caracteres | FK; CHECK de força do código |
+| `orders.campaign_id`, `orders.coupon_snapshot` | Campanha e snapshot do desconto composto (fonte, partes, tetos, margem, custo do motoboy e origem) | FK; índice parcial `(campaign_id, paid_at)` |
+
+O razão financeiro (`ledger_*`) NÃO recebe lançamento da campanha (o desconto da Webag já está na `application_fee` da venda). Mapa de privacidade e papéis: ver ADR-019 D14; `APPEND_ONLY_TABLES` agora tem 11 tabelas.
+
+### 0065 `r2_dashboards_catalog_interest` (módulos `dashboards`, `analytics`, `catalog`)
+| Tabela | Conteúdo | Garantias no banco |
+|---|---|---|
+| `dashboard_daily_facts` | Fatos ADITIVOS por dia do pagamento, loja, categoria da loja, modo, meio de pagamento, campanha e faixa de distância; histogramas fixos para mediana e p90 | Sem coluna de pessoa (teste); sem FK (agregado); enums |
+| `dashboard_item_facts` | GMV de itens por categoria do PRODUTO | idem |
+| `dashboard_distinct_daily` | Clientes ativos e recompra por janela (`d1`, `d7`, `d30`, `m`): só o número | idem |
+| `dashboard_refresh_state` | `refreshed_at` (o `atualizado_em`), marca d'água do job, estado | 3 linhas semeadas |
+| `dashboards`, `dashboard_widgets` | Painel pronto (sem dono, do sistema) ou do usuário (PRIVADO, `owner_admin_id`); widgets | **12 widgets (posição 0 a 11 única) e 2 dimensões por CHECK**; forma pronto x usuário; nome de 1 a 80 |
+| `product_price_history` | Intervalos de preço `base` e `promo` por produto e variação, com autor | Um intervalo aberto por (produto, variação, tipo); preço 1 a 9.999.999; **semente: preço de hoje com início `now()`** (sem passado) |
+| `product_barcodes` | Código de barras por variação, único por loja | Único `(store_id, barcode)`; formato 8 ou 12 a 14 dígitos |
+| `reference_barcodes` | Catálogo de referência próprio (nome, marca, categoria; sem foto) | Formato; origem moderada ou admin |
+| `analytics_interest` | Porta falsa: uma linha por loja, faixa de exemplo, texto de 140 caracteres | Único por loja; faixa só com data da resposta |
+
 ## Mapa das migrações (0000 a 0053)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.
 
@@ -234,3 +269,6 @@ Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/
 | 0054 sec182_previous_user_status | `account_deletions.previous_user_status` |
 | 0055 a02_cancel_requests_open_per_kind | Índice `order_cancel_requests_open_uq` passa a ser por `(order_id, kind)` (A-02) |
 | 0056 a06_eta_dispatch_informative | `orders.eta_dispatch_from_at`, `eta_dispatch_to_at`: faixa INFORMATIVA depois do despacho; a promessa (`eta_from_at`/`eta_to_at`) não muda (A-06, DEC-076) |
+| 0057 a 0063 | R1 e desempenho (ver ADR-018 e a seção v1.1 R1) |
+| 0064 r2_campaigns | Campanhas, adesão, reservas, diário do orçamento e antifraude; `coupons` e `orders` ganham colunas de campanha |
+| 0065 r2_dashboards_catalog_interest | Agregados e painéis, histórico de preço, código de barras e porta falsa |

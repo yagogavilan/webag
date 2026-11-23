@@ -87,6 +87,8 @@ const ROUTE_BY_PERMISSION: Record<AdminPermission, { method: 'get'; path: string
   'store-history:export': null,
   'view-as:open': null,
   'analytics:read': null,
+  'coupons:activate': null, // v1.1 R2: sem rota até a R2.2
+  'dashboards:read': null, // v1.1 R2: sem rota até a R2.3
 };
 
 describe('RBAC (SEC-020, SEC-021, WB-100 C4/C5, SEC-014)', () => {

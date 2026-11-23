@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Webag API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contrato da API do Webag (fonte da verdade, ver skill `contrato-api` e ADR-007).
     Recursos de negócio ficam sob `/v1`. Endpoints operacionais (`/health`) ficam fora do versionamento.
@@ -16,6 +16,7 @@ info:
     Extensões do contrato: `x-planned` (publicada antes do código), `x-admin-permission` e `x-admin-profiles` (permissão e perfis de admin que a rota exige; o teste de contrato confere com a matriz `ADMIN_PERMISSIONS`) e `x-view-as: true` (rota de leitura que aceita a credencial de "Ver como o lojista").
     Permissões do admin (WB-355): TODA operação `/v1/admin/*` declara `x-admin-permission` (chave da tabela única `permissions.ts`; `admin-self` = qualquer perfil de admin, só nas rotas do próprio TOTP). Rota nova sem a chave falha no CI; o teste de matriz percorre todas as rotas reais com os 4 perfis, um lojista e um cliente.
     "Ver como o lojista" (v1.1 R1, ADR-018 D8, threat model §14): o admin abre uma visão (`openViewAs`) e recebe a credencial `vas_...`, que vai no cabeçalho `X-View-As` JUNTO com o `Authorization: Bearer` do próprio admin (nunca no lugar dele: sozinha não autentica nada). Vale só nas 13 rotas GET marcadas `x-view-as: true` (dados, configuração, produtos, pedidos, trocas e avaliações da loja), com nível fixo "visualizador" e resposta mascarada (`x-view-as-schema` aponta o corpo quando ele difere do normal). Qualquer outro método ou rota com o cabeçalho: 403 `VIEW_AS_READ_ONLY`; credencial vencida, encerrada, de outra loja, de outro admin ou de outra sessão: 403 `VIEW_AS_EXPIRED` (um código só, não diz qual parte falhou). Leitura com a visão: 120 por minuto por visão (429). Respostas com `Cache-Control: private, no-store`. Socket.IO ignora o cabeçalho.
+    Mudanças de 0.4.0 para 0.5.0 (v1.1, R2, ADR-019): só adições (campanhas e cupons por fonte de custo, painéis prontos, funil e porta falsa dos acessos, convites e cupom próprio da loja, vitrine de cupons da sacola, código de barras, elegibilidade do "de/por"); operações novas levam `x-planned: v1.1 R2` até serem implementadas. Campos novos em `CartCoupon`, `CartSummary`, `Order`, `ProductVariant` e nos corpos de variação são opcionais (o app publicado ignora). **Comportamento que muda sem mudar o formato:** `originalPrice` e `discountPercent` (vitrine, produto e variação) passam a vir nulos quando o preço "de" não foi praticado por 30 dias (RN-C8, `getPromotionEligibility`); campo estranho em `applyCartCoupon` ou `createOrder` (`discountCents`, fonte de custo, `campaignId`) é 422 `FIELD_NOT_EDITABLE`. Nenhum campo, parâmetro ou rota do contrato majora preço, frete ou taxa por causa de cupom (DEC-088, F1).
     Indisponibilidade sob saturação: 503 `SERVICE_UNAVAILABLE` com `Retry-After` (BUG-035), sem pilha.
 servers:
   - url: http://localhost:3000
@@ -88,7 +89,13 @@ tags:
   - name: analytics
     description: "Coleta de eventos de navegação sem identificar a conta (v1.1 R1, WB-361; flag `coleta_eventos`, só staging até o J24)"
   - name: admin-analytics
-    description: Acessos agregados (mínimo de 5 por célula, v1.1 R1, WB-363); a cobertura da medição saiu da R1 (tech-lead I7)
+    description: "Acessos agregados (mínimo de 5 por célula, v1.1 R1, WB-363); a cobertura da medição saiu da R1 (tech-lead I7). R2, funil (WB-362) e porta falsa do módulo (WB-367)"
+  - name: admin-campaigns
+    description: "Campanhas e cupons por fonte de custo (v1.1 R2, ADR-019): orçamento com reserva atômica, adesão da loja, antifraude, relatório de custo real"
+  - name: admin-dashboards
+    description: "Painéis prontos sobre agregados diários com catálogo fechado de métricas (v1.1 R2, ADR-019 D9; o construtor é R3)"
+  - name: store-campaigns
+    description: Convites de campanha e cupom próprio da loja (v1.1 R2, WB-343 e WB-346)
 security:
   - bearerAuth: []
 paths:
@@ -6000,7 +6007,7 @@ paths:
       tags: [cart]
       operationId: applyCartCoupon
       summary: Aplicar ou trocar o cupom (WB-022)
-      description: "Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP."
+      description: "Substitui o cupom anterior (não cumulativo). Recusa com 422 e `code` específico, sem mudar a sacola: `COUPON_NOT_FOUND`, `COUPON_NOT_STARTED`, `COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER`, `COUPON_OTHER_STORE`, `COUPON_FIRST_PURCHASE_ONLY`, `COUPON_EMAIL_UNVERIFIED` (cupom da plataforma e de primeira compra exigem e-mail confirmado), `COUPON_NOT_ALLOWED` (membro da loja na própria loja); `CART_EMPTY` sem itens. O texto em pt-BR vem em `detail`. Cupom que zeraria o total cobra o mínimo (`minimumTotalApplied`); cupom da plataforma é limitado à comissão (`platformDiscountCapped`). Limite de 30 tentativas por hora por IP. **v1.1 R2 (ADR-019 D5):** o corpo só aceita `code` (até 32 caracteres, letras, números e hífen; C-CUP-01): qualquer outro campo (`discountCents`, fonte de custo, `campaignId`, `storeSharePct`) é 422 `FIELD_NOT_EDITABLE`, e o total é sempre o do servidor. Códigos novos de 422 (a sacola não muda): `COUPON_SHORTFALL` (\"Faltam R$ X\": `Cart.coupon.shortfall` também vem na leitura; o total não muda), `COUPON_UNAVAILABLE` (margem do pedido <= 0: \"Cupom não disponível para este pedido\"), `COUPON_EXHAUSTED_TODAY` (\"Cupom esgotado hoje\": o pedido segue sem cupom se o cliente confirmar), `COUPON_NOT_APPLICABLE` (qualquer sinal do antifraude: CPF de outra conta, aparelho, endereço, velocidade ou suspeito aberto; texto neutro \"Não foi possível aplicar este cupom a este pedido\" com \"Falar com o suporte\", e o cliente NUNCA vê qual identificador casou, RN-C11). `COUPON_NOT_FOUND` cobre também código de campanha segmentada, privada, de outro público ou de loja sem aceite: o MESMO texto \"Cupom inválido\" (C-CUP-06); `COUPON_FIRST_PURCHASE_ONLY` (\"Cupom válido só na primeira compra\") só para a conta com pedido pago anterior. O celular do perfil NÃO é critério (DEC-103 D-01); o e-mail confirmado é (`COUPON_EMAIL_UNVERIFIED`). Tentativas: 10 por hora por conta, 30 por hora por IP e 10 por hora por aparelho (`X-Device-Id`); a seguinte é 429 `COUPON_RATE_LIMITED` com `Retry-After` de 1 hora e texto neutro. A aplicação NÃO reserva orçamento: a reserva é atômica na criação do pedido (`createOrder`)."
       parameters:
         - { $ref: '#/components/parameters/CartMode' }
         - { $ref: '#/components/parameters/CartAddressId' }
@@ -6022,7 +6029,10 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          $ref: '#/components/responses/Unprocessable'
+          description: "Cupom recusado (a sacola não muda). `COUPON_SHORTFALL` traz `shortfall` (\"Faltam R$ X\", o total NÃO muda); `FIELD_NOT_EDITABLE` para campo estranho no corpo; os demais `code` estão na descrição da rota"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CouponProblem' }
         '429':
           $ref: '#/components/responses/TooManyRequests'
     delete:
@@ -6365,6 +6375,8 @@ paths:
         **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
 
         SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
+
+        **v1.1 R2 (ADR-019 D4, D6, D7):** a primeira compra passa a ser travada POR IDENTIFICADOR (HMAC de conta, aparelho, endereço normalizado e documento do pagador, `pg_advisory_xact_lock` em ordem fixa), valendo ENTRE campanhas; o celular não é identificador. Com cupom de campanha, o desconto é composto no servidor (`desconto_loja` + `desconto_webag`, RN-C2) e o **orçamento é reservado na MESMA transação do pedido**, sob a trava da linha da campanha (e da adesão da loja quando há parte da loja): orçamento total, do dia (America/Sao_Paulo), usos, teto mensal da loja, estado `active` e aceite são reconferidos ali, sem confiar na cotação nem no cache (C-CUP-02, C-CUP-10). Campanha pausada entre a cotação e o pedido (C-CUP-10): o pedido NUNCA sai com o cupom; como o total muda e `expectedTotalCents` é obrigatório, a criação responde 409 `CART_CHANGED` com `DISCOUNT_CHANGED` (nada reservado, nada cobrado) e o pedido sem cupom só nasce depois de o cliente ver o total novo. Sem saldo de orçamento, de usos ou do teto da loja: o mesmo 409 `CART_CHANGED` com `DISCOUNT_CHANGED`. O corpo continua sem desconto, fonte ou campanha (422 `FIELD_NOT_EDITABLE`). A reserva vira gasto ao pagamento aprovado e volta ao expirar, cancelar ou estornar (parcial: proporcional, RN-08), uma única vez.
       parameters:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
       requestBody:
@@ -8188,7 +8200,7 @@ paths:
       operationId: createPlatformCoupon
       x-admin-permission: 'coupons:write'
       summary: Criar cupom da plataforma (custo da Webag)
-      description: "`coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado."
+      description: "`coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado. **v1.1 R2:** com a flag `campanhas_cupom` ligada a criação de cupom da plataforma por esta rota passa a responder 409 `USE_CAMPAIGNS` (o cupom da plataforma é uma campanha `webag`, com orçamento e reserva: `createCampaign`); os cupons já existentes seguem pela regra de hoje até serem encerrados e ficam fora do orçamento (ADR-019 D13)."
       requestBody:
         required: true
         content:
@@ -10003,6 +10015,883 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  # ---------------------------------------------------------------------------------------------------------------------------
+  # v1.1 R2 (ADR-019): campanhas e cupons, painéis prontos, acessos, porta falsa, código de barras.
+  # Toda operação abaixo leva `x-planned: v1.1 R2` até ser implementada (remover a marca no PR que implementa).
+  # DEC-088/F1: NENHUM campo, parâmetro ou rota majora preço, frete ou taxa por causa de cupom; o cliente nunca envia desconto, fonte ou campanha.
+  # ---------------------------------------------------------------------------------------------------------------------------
+  /v1/admin/campaigns:
+    get:
+      tags: [admin-campaigns]
+      operationId: listCampaigns
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Listar campanhas com barra de orçamento (WB-340, WB-342 C4, WB-349)
+      description: "Permissão `coupons:read` (super admin, operação e financeiro; suporte 403). Cartão por campanha: estado, fonte em texto, convites aceitos, gasto total e do dia contra o orçamento (números exatos do servidor, a barra é só o desenho), usos e, se encerrada, o motivo. Inclui campanhas de loja (`owner: store`), sem orçamento da Webag. Mais recentes primeiro, keyset por `(createdAt, id)`. Os alertas ficam em `listCampaignAlerts`."
+      parameters:
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/CampaignState' } }
+        - { name: fundingSource, in: query, schema: { $ref: '#/components/schemas/CampaignFunding' } }
+        - { name: owner, in: query, schema: { type: string, enum: [webag, store] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de campanhas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [admin-campaigns]
+      operationId: createCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Criar campanha em rascunho com fonte de custo (WB-340 C2, C3, C6, C7)
+      description: "Permissão `coupons:write` (super admin e operação; financeiro 403). Sempre nasce `draft`: criar NÃO ativa nem gasta (C6). Só existem 4 fontes (`webag`, `store`, `split`, `self_funded`) e a porcentagem da loja segue a fonte (RN-C2): webag 0, store 100, split 1 a 99, self_funded 0; frete grátis só com `webag` ou `self_funded` (422 `FREE_SHIPPING_FUNDING_INVALID`: \"O frete é da Webag.\", C3). **Não existe campo para majorar preço, frete ou taxa** (DEC-088): o corpo é estrito e campo fora da lista é 422 `FIELD_NOT_EDITABLE`. Código opcional: sem código a campanha não aparece sozinha; código de campanha `segmented` ou `private` é gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06): enviar `code` com `codeVisibility: private` é 422; código público (\"vaidade\") 4 a 20 letras e números, único (409 `COUPON_CODE_TAKEN`). Campanha de loja (`owner: store`) NÃO nasce aqui, só por `createStoreCoupon` (C-CUP-07). O valor de fonte `store` ou `split` só desconta de lojas com aceite (RN-C5). `reason` (3 a 200) vai ao `audit_log` com antes e depois (C7). `Idempotency-Key` obrigatória."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignCreate' }
+      responses:
+        '201':
+          description: Rascunho criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/campaigns/simulate:
+    post:
+      tags: [admin-campaigns]
+      operationId: simulateCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: "Simular \"quanto isso custa por pedido\" por faixa de entrega (WB-340 C1, C2; WB-341 C11)"
+      description: "Não grava nada; serve ao formulário enquanto o admin digita (a tabela é o centro da tela). Uma linha por faixa da tabela de entrega vigente MAIS a retirada. Para cada faixa: taxa de entrega, **custo previsto do motoboy** (`courierCostCents`, F4: vem de `DeliveryFeeTier.expectedCostCents`; `courierCostSource` diz `delivery_fee_table` ou `provisional` e, enquanto o fundador não cotar, `provisional: true` e a tela mostra \"custo previsto: tabela provisória\"), comissão no pedido de referência, margem prevista (RN-C3, pode ser negativa), desconto da Webag e da loja, **quanto sobra no pedido** (`remainingCents`; negativo = prejuízo, mostrado em texto) e, no `self_funded`, o **pedido mínimo necessário** (`minOrderNeededCents`; nulo = o cupom não se aplica nesta faixa, margem <= 0). O pedido de referência é o mínimo necessário ou R$ 80,00 (`referenceSubtotalCents`). `worstCase` traz o pior caso por pedido do percentual com teto (CU-2 da spec). `globalBudget` mostra o orçamento mensal global da Webag contra o já comprometido (C10, C11). `blockers` repete o que impediria ativar (mesmo formato do `activation` da campanha). Cálculo no servidor com a tabela vigente, centavos inteiros, `round_half_up` (RN-C2)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignSimulationRequest' }
+      responses:
+        '200':
+          description: Simulação
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignSimulation' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/campaigns/{campaignId}:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [admin-campaigns]
+      operationId: getCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Detalhe da campanha, orçamento e o que falta para ativar (WB-340 C4, C10)
+      description: "`activation` é a caixa \"Para ativar\" da tela: `blockers` lista o que falta, em texto e com o código estável (a tela nunca esconde o botão sem dizer o motivo). Histórico de alterações (autor, antes, depois, motivo) sai de `GET /v1/admin/audit` com `targetType=campaign`; nenhum dado pessoal aqui."
+      responses:
+        '200':
+          description: Campanha
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [admin-campaigns]
+      operationId: updateCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Editar rascunho ou campanha agendada (WB-340 C7)
+      description: "Só em `draft` ou `scheduled`. Campanha `active` ou `paused` NÃO muda de regra (nem orçamento): encerrar e duplicar (ADR-019 D3), para o que o cliente viu e o que a loja aceitou continuarem valendo; tentativa: 409 `CAMPAIGN_IMMUTABLE`. `ended` não reabre (409). Confere `expectedVersion` (409 `CAMPAIGN_VERSION_CONFLICT` com a versão atual). Mesmas validações da criação. Alterar uma campanha `scheduled` com convites aceitos zera os aceites (a regra mudou; o lojista aceita de novo). `reason` obrigatório; antes e depois no `audit_log`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignPatch' }
+      responses:
+        '200':
+          description: Campanha atualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/campaigns/{campaignId}/activate:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin-campaigns]
+      operationId: activateCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:activate'
+      x-admin-profiles: [super_admin, finance]
+      summary: Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
+      description: "Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto \"Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações\"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. \"Webag paga\" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` (\"pode gerar prejuízo por pedido\"). Flag `campanhas_cupom` desligada: 409 `CAMPAIGNS_DISABLED`. `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignActivateRequest' }
+      responses:
+        '200':
+          description: Campanha ativa ou agendada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: "`ACTIVATION_BLOCKED` com `blockers` (`ActivationProblem`) ou validação"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ActivationProblem' }
+  /v1/admin/campaigns/{campaignId}/pause:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin-campaigns]
+      operationId: pauseCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Pausar na hora (WB-349 C1, C5)
+      description: "Qualquer admin com permissão de cupom pausa (super admin e operação), com motivo. Vale na hora: a criação do pedido reconfere `state = active` SOB A TRAVA da campanha, sem cache (C-CUP-10); a vitrine e a sacola refletem em até 1 minuto. Pedidos já criados mantêm o desconto e as reservas (a pausa não devolve nada). Pausar campanha já pausada é idempotente (200). Campanha de loja pausada pelo admin: `pausedBy: admin` e o lojista é avisado; ele NÃO retoma (409 `PAUSED_BY_ADMIN` em `updateStoreCoupon`)."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignReasonRequest' }
+      responses:
+        '200':
+          description: Campanha pausada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/admin/campaigns/{campaignId}/resume:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin-campaigns]
+      operationId: resumeCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:activate'
+      x-admin-profiles: [super_admin, finance]
+      summary: Retomar campanha pausada
+      description: "Retomar volta a gastar dinheiro: mesma permissão e mesma reautenticação recente da ativação (403 `REAUTH_REQUIRED`), e as mesmas conferências (`ACTIVATION_BLOCKED`). Só de `paused` (409 `CAMPAIGN_STATE_INVALID`). Validade vencida: 409 `CAMPAIGN_EXPIRED`."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignActivateRequest' }
+      responses:
+        '200':
+          description: Campanha ativa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/campaigns/{campaignId}/end:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin-campaigns]
+      operationId: endCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:activate'
+      x-admin-profiles: [super_admin, finance]
+      summary: Encerrar campanha, sem reabrir (WB-349 C2, WB-340 C6)
+      description: "Super admin e financeiro, com reautenticação recente quando há custo da Webag (403 `REAUTH_REQUIRED`). `ended` é terminal: a campanha NÃO reabre; para repetir, `duplicateCampaign`. Reservas em aberto seguem seu curso (pedido criado mantém o desconto). Encerra com `endReason: admin`. Encerrada por orçamento esgotado, usos ou validade é feito pelo servidor (varredura de 1 minuto), sem esta rota. Idempotente."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignReasonRequest' }
+      responses:
+        '200':
+          description: Campanha encerrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/admin/campaigns/{campaignId}/duplicate:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [admin-campaigns]
+      operationId: duplicateCampaign
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Duplicar como rascunho (WB-349 C6)
+      description: "Cria `draft` com as regras (tipo, valor, público, alvo, pedido mínimo, fonte, usos por cliente) e **sem** orçamento, validade nem código, e sem convites ou aceites (DEC-107). Vale para qualquer estado; campanha de loja não duplica pelo admin (404). `Idempotency-Key` obrigatória."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignReasonRequest' }
+      responses:
+        '201':
+          description: Rascunho criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/campaigns/{campaignId}/stores:
+    parameters:
+      - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [admin-campaigns]
+      operationId: listCampaignStores
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Lojas convidadas e o estado de cada aceite (WB-343)
+      description: "\"2 de 5 lojas aceitaram\". Estados: `pending`, `accepted`, `declined`, `left`, `expired` (7 dias sem resposta, sem aceite tácito, C7). Sem dado pessoal do lojista (só `acceptedByStaff: true`); o aceite (usuário, hora, versão, hash do texto, teto) fica em `campaign_acceptances` e sai na auditoria interna. Paginado."
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de convites
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignEnrollmentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [admin-campaigns]
+      operationId: inviteCampaignStores
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Convidar lojas para campanha com parte da loja (WB-343 C1, C8)
+      description: "Só campanha `webag`-owner com fonte `store` ou `split`, em `draft`, `scheduled` ou `active`. Convite por painel e e-mail do lojista (fila de e-mail existente); validade de 7 dias (`campanha_convite_validade_dias`). **O admin só convida; nunca registra aceite em nome da loja** (C-CUP-07): não existe rota de admin que aceite, e o aceite exige membro da loja com permissão `coupons` (`acceptCampaignInvite`). Nunca existe aceite automático nem \"padrão para novas campanhas\" (RN-C5). Até 50 lojas por chamada; loja já convidada é ignorada (`alreadyInvited`). `Idempotency-Key` obrigatória."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteCampaignStoresRequest' }
+      responses:
+        '200':
+          description: Convites criados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InviteCampaignStoresResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/campaigns/{campaignId}/report:
+    get:
+      tags: [admin-campaigns]
+      operationId: getCampaignReport
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      parameters:
+        - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+      summary: Relatório de custo real da campanha (WB-345)
+      description: "**Custo real da Webag** = soma de `desconto_webag` dos pedidos com pagamento aprovado MENOS o devolvido em cancelamento e estorno (RN-C9, C1), com \"devolvido em cancelamentos\" em campo separado; vem das reservas `confirmed` (`coupon_reservations`) e bate com a soma dos pedidos pagos e com o razão (`reconciled: true|false`, C5; divergência vira alerta). Por loja: quanto a Webag e a loja pagaram (C2). Pedidos, GMV, ticket com cupom e **ticket sem cupom da mesma loja no período**, clientes novos (1º pedido pago com a campanha), custo por cliente novo e recompra em 30 dias (`null` até fechar 30 dias, C3). Margem de contribuição = receita Webag - custo de logística - desconto Webag, `partial: true` quando há corrida sem custo lançado (C4, RN-18). Sem nome, telefone nem endereço: só ids opacos (C8, C-CUP-12). Campanha sem uso: zeros e `empty: true` (\"Nenhum pedido ainda\", C7). Lê agregados e reservas; não escaneia `orders` inteira (índice por `campaign_id`). Cache de 60 s."
+      responses:
+        '200':
+          description: Relatório
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/campaigns/{campaignId}/report.csv:
+    get:
+      tags: [admin-campaigns]
+      operationId: exportCampaignReportCsv
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      parameters:
+        - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+      summary: Exportar o relatório em CSV (WB-345 C6, C8)
+      description: "Valores em reais com vírgula, separador `;`, UTF-8 com BOM; célula iniciada por `=`, `+`, `-` ou `@` sai com apóstrofo (helper do SEC-156). Uma linha por loja mais a linha de total; sem dado pessoal. Cada exportação é auditada (`campaign.report.export`). Até 10 por minuto por admin (429)."
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/campaign-alerts:
+    get:
+      tags: [admin-campaigns]
+      operationId: listCampaignAlerts
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Alertas de campanha no topo da lista (WB-342 C4, WB-349 C3 e C4, WB-344 C7, WB-346 C8)
+      description: "Tipos: `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado."
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Alertas abertos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignAlertPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/campaign-budget:
+    get:
+      tags: [admin-campaigns]
+      operationId: getCampaignBudget
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Orçamento mensal global de cupons da Webag (WB-340 C9, C10, C11; DEC-102 F2)
+      description: "Mostra o orçamento mensal global (parâmetro `cupom_orcamento_mensal_webag_cents`, padrão **R$ 0**: sem ele só campanha \"Loja paga\" ativa), o comprometido pelas campanhas ativas (soma dos orçamentos totais restantes), o gasto confirmado no mês (America/Sao_Paulo) e `autofinTetoPct`. Somente leitura. A alteração é do super admin pelas rotas de parâmetros existentes (`parameters:write`, `audit_log` com antes e depois, C9): operação e financeiro recebem 403 lá."
+      responses:
+        '200':
+          description: Orçamento global
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignGlobalBudget' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/coupon-suspects:
+    get:
+      tags: [admin-campaigns]
+      operationId: listCouponSuspects
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Suspeitos de uso indevido de cupom (WB-344 C6, C12)
+      description: "Só ids opacos: número do pedido, campanha e o sinal (`device_accounts`: 3 contas no mesmo aparelho em 24 h; `address_accounts`; `payer_accounts`; `cancellations`: 3 cancelamentos com cupom em 7 dias). **Nenhum nome, telefone, e-mail, endereço, CPF ou id de aparelho, nem em claro nem em HMAC** (C-CUP-05, C-CUP-12). NÃO existe \"revelar\" nesta rota: quem precisa do dado abre a ficha do pedido (`getAdminOrder`, mascarada e auditada, WB-352 C14; DEC-071 cortou o \"Revelar\" completo), pedido a pedido (ADR-019 pendência Security 1). O próximo pedido da conta fica sem cupom enquanto o sinal estiver `open`. Paginado."
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [open, released], default: open } }
+        - { name: campaignId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Página de suspeitos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponSuspectPage' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/coupon-suspects/{suspectId}/release:
+    post:
+      tags: [admin-campaigns]
+      operationId: releaseCouponSuspect
+      x-planned: v1.1 R2
+      x-admin-permission: 'coupons:write'
+      x-admin-profiles: [super_admin, operations]
+      summary: Liberar cliente bloqueado por engano (WB-344 C9)
+      description: "A conta volta a poder usar cupom. Motivo obrigatório (3 a 200); `audit_log` com o admin, o sinal e o motivo (sem dado pessoal). Idempotente. Libera o sinal, não apaga o HMAC do antifraude."
+      parameters:
+        - { name: suspectId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CampaignReasonRequest' }
+      responses:
+        '200':
+          description: Sinal liberado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponSuspect' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/dashboard/catalog:
+    get:
+      tags: [admin-dashboards]
+      operationId: getDashboardCatalog
+      x-planned: v1.1 R2
+      x-admin-permission: 'dashboards:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Catálogo fechado de métricas e dimensões (WB-356 C1, C2, C3, C7)
+      description: "Os 4 perfis chamam; cada um recebe **só as métricas da sua sensibilidade** (`general`: os 4; `operational`: super admin, operação e financeiro; `financial`: super admin e financeiro, ADR-019 D9). Métrica sem permissão não aparece (não vaza que existe, C3). Cada métrica traz a definição em uma frase (RN-15, C1), a unidade, a polaridade (cancelamento subindo é ruim), as dimensões COMPATÍVEIS (a matriz métrica x dimensão do PRD; combinação incompatível é 422 em `queryDashboardMetric`, C2) e os tipos de gráfico permitidos. **Não existe dimensão de cliente, motoboy, endereço nem bairro** (C-DSH-04, teste da lista fechada). Métricas de acesso trazem `availability: requires_flag` até a coleta ligar. Os ids de `MetricId` e `DimensionId` são enums do contrato, gerados do registro do servidor (um teste compara os dois). Limites em `limits`. Resposta pequena e cacheável por perfil (`Cache-Control: private, max-age=300`)."
+      responses:
+        '200':
+          description: Catálogo do perfil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardCatalog' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/dashboard/query:
+    post:
+      tags: [admin-dashboards]
+      operationId: queryDashboardMetric
+      x-planned: v1.1 R2
+      x-admin-permission: 'dashboards:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Consultar uma métrica do catálogo (WB-356 C5 a C11)
+      description: "**Sem SQL livre** (DEC-091): o corpo é `{metricId, dimensionIds[], filters[{dimensionId, op: eq|in, values}], period, compare}`; ids vêm dos enums, o SQL sai SÓ do registro do servidor e os valores vão como parâmetro (C-DSH-01; `sql.raw` com entrada é barrado por lint no módulo). Id desconhecido, dimensão incompatível, filtro fora da lista ou `__proto__`: 422 `QUERY_NOT_ALLOWED` e **zero consultas executadas** (C5, C6). A permissão por sensibilidade é checada ANTES de ler o cache (403 `METRIC_FORBIDDEN`, C-DSH-02, C8); a chave do cache traz métrica e parâmetros normalizados, nunca o perfil nem dado pessoal. **Limites no servidor (C-DSH-03, C9):** período até 400 dias (401: 422 `PERIOD_TOO_LONG`, \"Período máximo de 400 dias\"), 2 dimensões, 5 filtros, 5.000 pontos, 10 categorias mais \"Outros\"; **30 consultas por minuto e 2 simultâneas por usuário** (a 31ª: 429 `DASHBOARD_RATE_LIMITED` com `Retry-After`); transação somente leitura, `statement_timeout` de 5 s, **pool separado de 2 conexões**, só sobre agregados diários (nunca `orders`); consulta cancelada: 503 `QUERY_TOO_HEAVY` (\"Muito pesado: reduza o período ou o filtro\"). **Frescor e amostra (C11):** `generatedAt` (atualizado_em: última atualização dos agregados, não a hora da resposta), `cached` (em_cache: cache de 5 min por métrica e parâmetros) e, por célula, `n` (amostra) e `suppressed`. Baixa amostra (DEC-108): taxa, ticket médio e comparação pedem 20 pedidos; mediana e p90 pedem 5; abaixo disso `lowSample: true` e SEM percentual de variação. Métrica de acesso: célula com menos de 5 sessões vem `suppressed: true`, sem valor e sem `n`. Período sem dado: `rows: []` (a tela mostra \"Sem dados no período\", nunca zero enganoso). Fuso America/Sao_Paulo, semana começa na segunda. Métrica de contagem distinta (`active_customers`, `repeat_30d`) só aceita os períodos pré-calculados (dia, 7 ou 30 dias terminando em um dia fechado; mês-calendário): outro período é 422 `PERIOD_NOT_SUPPORTED`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MetricQuery' }
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /v1/admin/dashboards:
+    get:
+      tags: [admin-dashboards]
+      operationId: listDashboards
+      x-planned: v1.1 R2
+      x-admin-permission: 'dashboards:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      summary: Painéis prontos e os meus (WB-357 C6)
+      description: "Os painéis prontos (Visão geral, Vendas, Lojas, Entrega, Cupons e, com a coleta de acessos, Acessos) pertencem ao sistema: **duplicáveis, nenhum editável** (`editable: false`). Painéis do usuário são **privados** (`owner_admin_id = :me`, C-DSH-05): nunca aparecem os de outro admin. O painel pronto só traz os widgets que o perfil pode ver; `someWidgetsHidden` avisa sem dizer quais (a tela não renderiza o que não pode). Até 6 prontos e 20 do usuário; paginado por convenção (a lista cabe numa página)."
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Lista
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/dashboards/{dashboardId}:
+    get:
+      tags: [admin-dashboards]
+      operationId: getDashboard
+      x-planned: v1.1 R2
+      x-admin-permission: 'dashboards:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      parameters:
+        - { name: dashboardId, in: path, required: true, schema: { type: string, format: uuid } }
+      summary: Abrir um painel (WB-357 C1 a C5)
+      description: "Devolve a definição (widgets, filtros globais padrão: período, cidade, loja, categoria, modo, campanha); **os dados vêm de `queryDashboardMetric`, um widget por chamada** (widgets carregam independentes: um lento não trava o painel). Painel de outro admin: 404 (nunca 403, C-DSH-05)."
+      responses:
+        '200':
+          description: Painel
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/admin/dashboards/{dashboardId}/duplicate:
+    post:
+      tags: [admin-dashboards]
+      operationId: duplicateDashboard
+      x-planned: v1.1 R2
+      x-admin-permission: 'dashboards:read'
+      x-admin-profiles: [super_admin, operations, finance, support]
+      parameters:
+        - { name: dashboardId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      summary: Duplicar para editar (WB-357 C4; WB-358 C6 na R3)
+      description: "Cria uma cópia EDITÁVEL e privada do painel pronto ou do próprio (o original fica intacto). Widgets de métrica que o perfil não pode ver ficam de fora da cópia. Painel de outro admin: 404. Limite de 20 painéis por usuário (422 `DASHBOARD_LIMIT`, \"Limite de 20 painéis\"); nome até 80 caracteres, exibido como texto e escapado no CSV (C-DSH-06). Criar, renomear, reordenar, excluir widgets e \"Enviar cópia\" são do construtor (R3, WB-358) e não estão neste contrato."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DuplicateDashboardRequest' }
+      responses:
+        '201':
+          description: Cópia criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/admin/analytics/funnel:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminAnalyticsFunnel
+      x-planned: v1.1 R2
+      x-admin-permission: 'analytics:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Funil geral e por cidade (WB-362 C3, C5, C6, C7)
+      description: "Etapas: visita à loja, abriu produto, sacola, início do checkout, pedido pago, cada uma com a conversão da etapa anterior (não só a final). Lê só o agregado diário (nunca o bruto, C-ANA-04); célula com menos de 5 sessões vem `suppressed: true` sem valor nem `n` (C-ANA-05); suporte 403 (C6); sem dado: 200 com `empty: true` (\"Ainda sem dados: o app precisa ser atualizado\", C7). Períodos fechados terminando ontem (7, 30, 90). `profileOnly` é a parcela de visitas que NÃO abriu produto (C2). DEPENDE da R1.4: a etapa `checkout_started` exige o evento novo (`CheckoutStartedEvent`) e a coluna `profile_only_sessions` no agregado (ADR-019 pendência 5)."
+      parameters:
+        - { name: days, in: query, schema: { type: integer, enum: [7, 30, 90], default: 7 } }
+        - { name: cityId, in: query, schema: { type: string, format: uuid } }
+        - { name: storeId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Funil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsFunnel' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/admin/analytics-interest:
+    get:
+      tags: [admin-analytics]
+      operationId: getAdminAnalyticsInterest
+      x-planned: v1.1 R2
+      x-admin-permission: 'analytics:read'
+      x-admin-profiles: [super_admin, operations, finance]
+      summary: Interesse na porta falsa do módulo Análises (WB-367 C3)
+      description: "Quantas lojas tocaram em \"Quero testar\" (`clicked`) e quantas escolheram cada faixa (`bands`), incluindo \"Não pagaria por isso\". Só contagens e o texto curto opcional das últimas 50 respostas (`notes`, até 140 caracteres, sem identificar loja nem pessoa: o texto pede \"Não escreva dados de clientes\"). Não mostra o valor como preço decidido: as faixas são exemplos (DEC-093, HIP-A1). Retenção de 12 meses."
+      responses:
+        '200':
+          description: Contagens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyticsInterestReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/stores/{storeId}/analytics-interest:
+    parameters:
+      - { $ref: '#/components/parameters/StoreIdPath' }
+    post:
+      tags: [analytics]
+      operationId: recordAnalyticsInterest
+      x-planned: v1.1 R2
+      summary: "Porta falsa: \"Quero testar\" e a faixa de preço (WB-367 C1, C2, C4)"
+      description: "Permissão da loja `settings` (só o dono; funcionário 403, não-membro 404). Idempotente por loja: a 1ª chamada com `answer: clicked` registra o toque (`analytics_interest_clicked`); a chamada com `priceBand` grava a faixa (pode mudar de ideia: sobrescreve). Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 140 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordAnalyticsInterestRequest' }
+      responses:
+        '204': { description: Registrado }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/stores/{storeId}/barcodes/{barcode}:
+    get:
+      tags: [catalog]
+      operationId: lookupProductBarcode
+      x-planned: v1.1 R2
+      summary: Conferir código de barras na loja e na base de referência (WB-373 C3 a C7, C9)
+      description: "Permissão da loja `catalog`. O servidor confere o **dígito verificador** (EAN-8, UPC-A de 12, EAN-13 e GTIN-14; inválido: 422 `BARCODE_INVALID`, \"Código inválido: confira os números\") e responde: `inStore` (produto e variação da PRÓPRIA loja com esse código: \"Você já tem este produto\", com `productId` para \"Abrir\" e \"Aumentar estoque\", único por loja) e `reference` (nome, marca e categoria do **catálogo de referência próprio**, dado factual moderado: sem foto e sem descrição; sugestão editável). Código desconhecido: ambos nulos e o cadastro segue normal com o código guardado (C6). **Nenhuma chamada de rede sai do sistema**: a base externa é a flag `ean_base_externa`, desligada, e nenhum adaptador existe (C7, F9). Limite de 60 consultas por hora por loja (a 61ª: 429, C9). Resposta sem cache e sem o corpo do produto."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: barcode, in: path, required: true, schema: { type: string, pattern: '^[0-9]{8}$|^[0-9]{12,14}$' } }
+      responses:
+        '200':
+          description: Resultado da conferência
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BarcodeLookup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/stores/{storeId}/products/{productId}/promotion-eligibility:
+    get:
+      tags: [catalog]
+      operationId: getPromotionEligibility
+      x-planned: v1.1 R2
+      summary: "O selo \"de/por\" aparece para este produto? (WB-348 C1, C3)"
+      description: "Permissão da loja `catalog`. O preço \"de\" e o percentual só aparecem ao cliente se o preço \"de\" foi **praticado de fato por 30 dias seguidos nos últimos 60** (RN-C8, `[HIPÓTESE; J23]`), sem promoção cobrindo o período; senão a vitrine mostra só o preço atual. Aqui o lojista vê ANTES de publicar a promoção: `eligible: false` com `reasonCode: NO_REFERENCE_HISTORY` e o texto \"Seu desconto só aparece depois de 30 dias de preço anterior.\" e `eligibleFrom` (data em que passa a valer); `eligible: true` com o preço de referência e desde quando. A promoção PODE ser salva sem selo (vale o preço atual); o servidor é quem decide o selo na vitrine (`originalPrice` e `discountPercent` de `ProductCard`, `BrowseProduct` e `ProductVariant` vêm nulos quando não comprovado; antes vinham sempre que havia promoção). Histórico em `product_price_history` (preço, data, autor); anterior à v1.1 não existe: ninguém comprova o selo nos primeiros 30 dias."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { $ref: '#/components/parameters/ProductIdPath' }
+        - { name: variantId, in: query, schema: { type: string, format: uuid }, description: 'Variação com preço próprio; sem ela vale o preço base do produto' }
+      responses:
+        '200':
+          description: Elegibilidade
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PromotionEligibility' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/stores/{storeId}/campaign-invites:
+    get:
+      tags: [store-campaigns]
+      operationId: listStoreCampaignInvites
+      x-planned: v1.1 R2
+      summary: Convites de campanha da loja (WB-343 C2, C6, C7)
+      description: "Permissão da loja `coupons` (dono ou funcionário com a permissão; **funcionário sem ela: 403 e o item nem aparece no app**, C6; não-membro: 404; admin com \"Ver como\": 403, a rota não está na lista fechada). Cada convite traz a parte da loja em % e em R$ por pedido de exemplo, \"você recebe R$ X (sem o cupom: R$ Y)\" calculado no servidor com a comissão da loja (a visão do lojista pode ver o líquido dele; `x-view-as` NÃO vale aqui), validade (7 dias sem aceite tácito), o teto mensal sugerido (R$ 150,00) e o **texto do aceite com versão e hash** que a loja confirmará. Estados: `pending`, `accepted`, `declined`, `left`, `expired`. Paginado."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: state, in: query, schema: { type: string, enum: [pending, accepted, declined, left, expired] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Convites
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignInvitePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/stores/{storeId}/campaign-invites/{enrollmentId}/accept:
+    post:
+      tags: [store-campaigns]
+      operationId: acceptCampaignInvite
+      x-planned: v1.1 R2
+      summary: Aceitar o custo da campanha com teto próprio (WB-343 C1, C3, C8)
+      description: "Permissão da loja `coupons`; **a loja vem da rota e da membership, nunca do corpo** (C-CUP-07): admin (qualquer perfil, inclusive por \"Ver como\"), funcionário sem `coupons` e membro de outra loja recebem 403 ou 404 e NADA é gravado. Corpo: `termsVersion` e `termsHash` do texto mostrado, `monthlyCapCents` (teto da loja, R$ 1,00 ou mais) e `confirm: true` (a confirmação \"Você paga 40% de cada desconto, até R$ 150,00 por mês\"). Versão ou hash diferentes dos vigentes: 409 `TERMS_VERSION_MISMATCH` com os atuais (o lojista relê). Grava, em `campaign_acceptances` (append-only): usuário, hora, versão, hash, teto e a parte da loja do momento (C3). Convite vencido: 410 `INVITE_EXPIRED`; já respondido: 409 `INVITE_NOT_PENDING`. Campanha encerrada: 409 `CAMPAIGN_STATE_INVALID`. Sem aceite NÃO há desconto naquela loja (C1). `Idempotency-Key` obrigatória (aceite em 3G não duplica)."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: enrollmentId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptCampaignInviteRequest' }
+      responses:
+        '200':
+          description: Aceite registrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignInvite' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/stores/{storeId}/campaign-invites/{enrollmentId}/decline:
+    post:
+      tags: [store-campaigns]
+      operationId: declineCampaignInvite
+      x-planned: v1.1 R2
+      summary: Recusar o convite
+      description: "Mesmas regras de acesso do aceite. Grava a recusa em `campaign_acceptances` (`action: decline`). Idempotente. A campanha não desconta nesta loja."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: enrollmentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Recusado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignInvite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+  /v1/stores/{storeId}/campaigns/{campaignId}/leave:
+    post:
+      tags: [store-campaigns]
+      operationId: leaveCampaign
+      x-planned: v1.1 R2
+      summary: Sair da campanha a qualquer momento (WB-343 C4)
+      description: "Mesmas regras de acesso do aceite. Vale para pedidos NOVOS: a criação do pedido reconfere o aceite sob a trava; pedidos já criados mantêm o desconto e as reservas (C4). Grava `action: leave`. Idempotente. Saída não é multa nem pendência."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Saiu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignInvite' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/stores/{storeId}/coupons:
+    parameters:
+      - { $ref: '#/components/parameters/StoreIdPath' }
+    get:
+      tags: [store-campaigns]
+      operationId: listStoreCoupons
+      x-planned: v1.1 R2
+      summary: Cupons próprios da loja (WB-346)
+      description: "Permissão da loja `coupons` (funcionário sem ela: 403, C3). Só os cupons da própria loja (`owner: store`, `loja_pct` 100). Cada um traz usos, quanto já gastou no mês contra o teto mensal e `pausedBy` (`merchant`, `admin`, `system`). Paginado."
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Cupons da loja
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreCouponPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [store-campaigns]
+      operationId: createStoreCoupon
+      x-planned: v1.1 R2
+      summary: Criar cupom próprio (absorve WB-073; WB-346 C1, C4, C7)
+      description: "Permissão da loja `coupons`; **a loja vem da rota e da membership**, nunca do corpo; admin NÃO cria por aqui (C-CUP-07). Percentual ou valor fixo, pedido mínimo, validade, usos totais e por cliente e **teto mensal em R$ obrigatório** (C1). O cupom vale só na própria loja e não gera desconto da Webag (`storeSharePct` 100, C4); o desconto sai da parte da loja (reduz a base da comissão, RN-10). **Teto de percentual** `cupom_loja_pct_max` (padrão 30, só o super admin muda, DEC-103 D-03): percentual acima: 422 `STORE_COUPON_PERCENT_ABOVE_MAX` com `maxPct` (\"O desconto máximo da loja é 30%\", C7); valor fixo exige pedido mínimo >= valor / (teto/100), arredondado para cima ao centavo (R$ 20,00 exige R$ 66,67): senão 422 `STORE_COUPON_MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`. A criação equivale a aceite implícito (o criador é a loja, com teto): grava em `campaign_acceptances`. O código é do lojista (4 a 20, único; 409 `COUPON_CODE_TAKEN`); cupom `private` tem código gerado. Nasce `active` (sem custo da Webag e sem orçamento da Webag). `Idempotency-Key` obrigatória."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCouponCreate' }
+      responses:
+        '201':
+          description: Cupom criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreCoupon' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /v1/stores/{storeId}/coupons/preview:
+    post:
+      tags: [store-campaigns]
+      operationId: previewStoreCoupon
+      x-planned: v1.1 R2
+      summary: "Prévia \"Você recebe R$ X por pedido de R$ Y\" (WB-346 C2)"
+      description: "Não grava. Mesma conta do pedido (RN-10): num pedido de R$ 80,00 \"você recebe R$ 60,49 (sem o cupom: R$ 67,21)\". Exige a permissão `coupons` e devolve o líquido da PRÓPRIA loja (por isso fora do \"Ver como\")."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCouponPreviewRequest' }
+      responses:
+        '200':
+          description: Prévia
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreCouponPreview' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/stores/{storeId}/coupons/{couponId}:
+    patch:
+      tags: [store-campaigns]
+      operationId: updateStoreCoupon
+      x-planned: v1.1 R2
+      summary: Pausar, retomar ou ajustar cupom próprio (WB-346 C5, C6)
+      description: "Permissão `coupons`. `active: false` pausa na hora; `active: true` retoma, exceto se `pausedBy: admin` (409 `PAUSED_BY_ADMIN`, C6) ou se o teto mensal acabou (a retomada só vale no mês seguinte ou com teto maior). Antes do 1º uso pode mudar valor, mínimo, validade e usos; **depois do 1º uso só pausa, retoma, encerra e sobe o teto mensal** (409 `COUPON_IN_USE`). O teto mensal atingido pausa o cupom sozinho (`pausedBy: system`) e avisa o lojista (C5). Os tetos de % e de mínimo da criação valem na edição. `expectedVersion` obrigatório."
+      parameters:
+        - { $ref: '#/components/parameters/StoreIdPath' }
+        - { name: couponId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCouponPatch' }
+      responses:
+        '200':
+          description: Cupom atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreCoupon' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /v1/cart/coupon-offers:
+    get:
+      tags: [cart]
+      operationId: listCartCouponOffers
+      x-planned: v1.1 R2
+      summary: "Cupons para este pedido: a vitrine da sacola (WB-347 C2, C7, C9)"
+      description: "\"Cupons para este pedido\" (BottomSheet da sacola). Lista **só cupons públicos** (`codeVisibility: public`) aplicáveis AGORA ou aplicáveis com \"Faltam R$ X\" (`shortfall`); **nunca** lista cupom segmentado ou privado, de outro público (\"primeira compra\" só aparece a quem não tem pedido pago), de campanha sem aceite da loja ou esgotado (C7). Cada oferta traz valor, condição, validade (o dia final vale até 23:59 em America/Sao_Paulo, C9), a origem em texto (`webag`, `store`, `webag_and_store`, `delivery_webag`) e as restrições em lista fechada, para a tela montar o texto sem o servidor mandar frase. O `code` só vai nas ofertas públicas. Tudo calculado no servidor com a sacola e o endereço da conta (mesmos parâmetros de `getCart`); não revela qual identificador antifraude casou. Até 20 ofertas, sem cursor. Limite de 60 chamadas em 10 min por conta (429)."
+      parameters:
+        - { $ref: '#/components/parameters/CartMode' }
+        - { $ref: '#/components/parameters/CartAddressId' }
+      responses:
+        '200':
+          description: Ofertas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponOfferList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 components:
   securitySchemes:
@@ -12744,6 +13633,7 @@ components:
         available: { type: integer, description: estoque menos reservado }
         soldOut: { type: boolean }
         low: { type: boolean, description: Disponível maior que zero e menor ou igual ao limite da loja }
+        barcode: { type: [string, 'null'], description: 'v1.1 R2 (WB-373): EAN/GTIN da variação (8, 12, 13 ou 14 dígitos, dígito verificador conferido no servidor, único por loja). Campo novo opcional' }
     StockAdjustResult:
       description: 'v1.1 R1 (DEC-132): a variação como sempre, mais a versão do produto depois do ajuste. Campo aditivo: cliente antigo ignora `productVersion`'
       allOf:
@@ -12860,6 +13750,7 @@ components:
             properties:
               id: { type: string, format: uuid }
               attributes: { type: object, additionalProperties: { type: string, maxLength: 40 } }
+              barcode: { type: [string, 'null'], pattern: '^[0-9]{8}$|^[0-9]{12,14}$', description: 'v1.1 R2 (WB-373): código de barras da variação; inválido: 422 `BARCODE_INVALID`; já usado por outro produto da loja: 409 `BARCODE_IN_USE` (com `productId`). Campo novo opcional' }
               stock: { type: integer }
               priceCents: { type: [integer, 'null'] }
               sku: { type: [string, 'null'], maxLength: 40 }
@@ -13624,6 +14515,10 @@ components:
         scope: { type: string, enum: [store, platform] }
         applied: { type: boolean }
         rejection: { type: [string, 'null'], description: 'Motivo quando `applied=false` (os mesmos `code` do 422 de `applyCartCoupon`)' }
+        origin: { oneOf: [{ $ref: '#/components/schemas/DiscountOrigin' }, { type: 'null' }], description: 'v1.1 R2 (WB-347 C1): de quem é o desconto aplicado; nulo se `applied=false`. Campo novo opcional' }
+        breakdown: { oneOf: [{ $ref: '#/components/schemas/CouponBreakdown' }, { type: 'null' }], description: 'v1.1 R2: composição do desconto (loja x Webag, itens x entrega). Campo novo opcional' }
+        shortfall: { oneOf: [{ $ref: '#/components/schemas/CouponShortfall' }, { type: 'null' }], description: 'v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional' }
+        validUntil: { type: [string, 'null'], format: date-time, description: 'v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional' }
     CartSummary:
       type: object
       required: [subtotal, delivery, deliveryEstimated, freeShipping, serviceFee, discount, total, minimumTotalApplied, platformDiscountCapped, missingForMinimum]
@@ -13639,6 +14534,7 @@ components:
         minimumTotalApplied: { type: boolean, description: "Cupom que zeraria o total: mostrar 'Valor mínimo cobrado'" }
         platformDiscountCapped: { type: boolean, description: Desconto da plataforma cortado no teto da comissão }
         missingForMinimum: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }], description: "'Faltam R$ X para o pedido mínimo'" }
+        lines: { type: array, items: { $ref: '#/components/schemas/CartSummaryLine' }, description: "v1.1 R2 (WB-347 C1, C3, C8, RN-C1): resumo discriminado na ordem da tela (produtos, entrega, taxa de serviço, desconto com origem, total). `subtotal`, `delivery` e `service_fee` têm o MESMO valor com e sem cupom; frete grátis aparece como `delivery` cheio MAIS `coupon_discount` negativo, nunca como 'Entrega: Grátis'. Campo novo opcional (o app antigo usa os campos acima)" }
     ExposureLimit:
       type: object
       required: [active, mode, maxOrder, endsAt, deliveredOrders, ordersToEnd]
@@ -14075,6 +14971,7 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/OrderItem' } }
         summary: { $ref: '#/components/schemas/CartSummary' }
         couponCode: { type: [string, 'null'] }
+        couponBreakdown: { oneOf: [{ $ref: '#/components/schemas/CouponBreakdown' }, { type: 'null' }], description: 'v1.1 R2 (WB-341 C6, WB-347 C1): composição do desconto GRAVADA no pedido (snapshot: campanha, fonte, parte da loja e da Webag no momento; mudar a campanha depois não altera o pedido). Nulo sem cupom. Campo novo opcional' }
         delivery:
           oneOf:
             - type: 'null'
@@ -15336,6 +16233,7 @@ components:
         attributes: { type: object, additionalProperties: { type: string, maxLength: 40 }, example: { Tamanho: M } }
         stock: { type: integer, minimum: 0, maximum: 99999, default: 1 }
         priceCents: { type: [integer, 'null'], description: 'Preço próprio quando difere do produto (linhas juntadas com preços diferentes)' }
+        barcode: { type: [string, 'null'], pattern: '^[0-9]{8}$|^[0-9]{12,14}$', description: 'v1.1 R2 (WB-373). Campo novo opcional' }
     DraftBatchItem:
       type: object
       additionalProperties: false
@@ -16022,6 +16920,7 @@ components:
         - { $ref: '#/components/schemas/StoreViewedEvent' }
         - { $ref: '#/components/schemas/ProductViewedEvent' }
         - { $ref: '#/components/schemas/ItemAddedEvent' }
+        - { $ref: '#/components/schemas/CheckoutStartedEvent' }
       discriminator:
         propertyName: name
         mapping:
@@ -16029,6 +16928,7 @@ components:
           store_viewed: '#/components/schemas/StoreViewedEvent'
           product_viewed: '#/components/schemas/ProductViewedEvent'
           item_added: '#/components/schemas/ItemAddedEvent'
+          checkout_started: '#/components/schemas/CheckoutStartedEvent'
     AnalyticsEventsRequest:
       type: object
       additionalProperties: false
@@ -16086,3 +16986,804 @@ components:
             rate_session: { type: integer, minimum: 0 }
             unknown_store: { type: integer, minimum: 0 }
             flag_off: { type: integer, minimum: 0 }
+    # ---- v1.1 R2 (ADR-019): campanhas, cupons, painéis, acessos, código de barras
+    CampaignState:
+      type: string
+      enum: [draft, scheduled, active, paused, ended]
+      description: "`draft` -> `scheduled` (início futuro) -> `active` <-> `paused` -> `ended` (terminal: validade, orçamento, usos ou admin). \"Convite enviado\" não é estado: é `enrollments.pending > 0`."
+    CampaignFunding:
+      type: string
+      enum: [webag, store, split, self_funded]
+      description: "As 4 únicas fontes de custo (DEC-088): `webag` (Webag paga), `store` (Loja paga, só com aceite), `split` (Dividido: loja X% e Webag Y%), `self_funded` (Autofinanciado: sai da margem do próprio pedido). Não existe quinta fonte nem campo que majore preço, frete ou taxa."
+    CampaignDiscountKind:
+      type: string
+      enum: [percent, fixed, free_shipping]
+    CampaignAudience:
+      type: string
+      enum: [all, first_purchase, reactivation]
+      description: "`reactivation`: sem pedido entregue há `reactivationDays`. Nada de segmentação por e-mail ou lista de clientes (fora do escopo, WB-196)."
+    CampaignEndReason:
+      type: string
+      enum: [budget, uses, expired, admin]
+    DiscountOrigin:
+      type: string
+      enum: [webag, store, webag_and_store, delivery_webag]
+      description: "Rótulo ao cliente: \"Desconto Webag\", \"Desconto da loja\", \"Desconto Webag e loja\", \"Desconto Webag (entrega)\" (frete grátis). O texto sai do app a partir deste código; a promessa e o comportamento vêm da mesma configuração (RN-C7)."
+    CampaignTarget:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [all, city, store, category] }
+        cityId: { type: [string, 'null'], format: uuid }
+        storeId: { type: [string, 'null'], format: uuid }
+        categoryId: { type: [string, 'null'], format: uuid }
+    CampaignCreate:
+      type: object
+      additionalProperties: false
+      required: [name, fundingSource, kind, audience, target, reason]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80, description: "Texto puro; exibido como texto e escapado no CSV" }
+        fundingSource: { $ref: '#/components/schemas/CampaignFunding' }
+        storeSharePct: { type: integer, minimum: 1, maximum: 99 }
+        kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+        value: { type: integer, minimum: 0 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
+        audience: { $ref: '#/components/schemas/CampaignAudience' }
+        reactivationDays: { type: integer, minimum: 7, maximum: 365, default: 30 }
+        target: { $ref: '#/components/schemas/CampaignTarget' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        budgetTotalCents: { type: [integer, 'null'], minimum: 1, description: "Obrigatório para ATIVAR campanha com `desconto_webag > 0` (RN-C4); opcional em rascunho" }
+        budgetDailyCents: { type: [integer, 'null'], minimum: 1, description: "Idem; o dia vira à meia-noite de America/Sao_Paulo" }
+        maxUses: { type: [integer, 'null'], minimum: 1, description: "WB-342 C6: exige este limite OU o orçamento" }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100, default: 1 }
+        code: { type: [string, 'null'], minLength: 4, maxLength: 20, pattern: '^[A-Z0-9]+$', description: "Só código público (\"vaidade\"). Sem código, o cupom não aparece sozinho (campanha automática sem código é Could e não existe na R2)" }
+        codeVisibility: { type: string, enum: [public, private], default: public, description: "`private`: o servidor gera o código (8 ou mais caracteres aleatórios, C-CUP-06); enviar `code` junto é 422" }
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    CampaignPatch:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion]
+      description: "Todos os campos de `CampaignCreate` são opcionais aqui (só os enviados mudam), mais a versão"
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        fundingSource: { $ref: '#/components/schemas/CampaignFunding' }
+        storeSharePct: { type: integer, minimum: 1, maximum: 99 }
+        kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+        value: { type: integer, minimum: 0 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
+        audience: { $ref: '#/components/schemas/CampaignAudience' }
+        reactivationDays: { type: integer, minimum: 7, maximum: 365 }
+        target: { $ref: '#/components/schemas/CampaignTarget' }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        budgetTotalCents: { type: [integer, 'null'], minimum: 1 }
+        budgetDailyCents: { type: [integer, 'null'], minimum: 1 }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100 }
+        code: { type: [string, 'null'], minLength: 4, maxLength: 20, pattern: '^[A-Z0-9]+$' }
+        codeVisibility: { type: string, enum: [public, private] }
+        reason: { type: string, minLength: 3, maxLength: 200 }
+        expectedVersion: { type: integer, minimum: 1 }
+    CampaignReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    CampaignActivateRequest:
+      type: object
+      additionalProperties: false
+      required: [reason, expectedVersion]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 200 }
+        expectedVersion: { type: integer, minimum: 1 }
+        acknowledgeLossRisk: { type: boolean, description: "Obrigatório (e só o super admin) quando \"Webag paga\" fica acima da margem prevista: \"pode gerar prejuízo por pedido\"" }
+    ActivationBlocker:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [NAME_REQUIRED, VALUE_REQUIRED, BUDGET_REQUIRED, USAGE_OR_BUDGET_REQUIRED, MIN_ORDER_TOO_LOW, GLOBAL_BUDGET_ZERO, GLOBAL_BUDGET_EXCEEDED, ABOVE_MARGIN_SUPER_ADMIN_ONLY, LOSS_RISK_ACK_REQUIRED, NO_ACCEPTED_STORE, FREE_SHIPPING_DISABLED, FREE_SHIPPING_FUNDING_INVALID, STARTS_AFTER_ENDS, CAMPAIGNS_DISABLED]
+        message: { type: string, description: "Texto pt-BR para a caixa \"Para ativar\"; o app decide a ação pelo `code`" }
+        requiredMinOrderCents: { type: integer, description: "`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)" }
+        missingCents: { type: integer, description: "`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)" }
+    CampaignActivation:
+      type: object
+      required: [canActivate, requiresStepUp, requiresSuperAdmin, maxCostCents, blockers]
+      properties:
+        canActivate: { type: boolean, description: "Para o PERFIL de quem pergunta; `false` com `blockers` vazio quando a permissão é o que falta" }
+        requiresStepUp: { type: boolean, description: "Há custo da Webag: ativar e encerrar exigem reautenticação de até 5 min" }
+        requiresSuperAdmin: { type: boolean }
+        maxCostCents: { type: [integer, 'null'], description: "Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)" }
+        blockers: { type: array, items: { $ref: '#/components/schemas/ActivationBlocker' } }
+    ActivationProblem:
+      allOf:
+        - { $ref: '#/components/schemas/Problem' }
+        - type: object
+          description: "Extensão do 422 `ACTIVATION_BLOCKED`"
+          properties:
+            blockers: { type: array, items: { $ref: '#/components/schemas/ActivationBlocker' } }
+    CampaignBudget:
+      type: object
+      required: [totalCents, reservedCents, spentCents, remainingCents, dailyCents, dailyReservedCents, dailySpentCents, dailyRemainingCents, day, maxUses, usesReserved, usesConfirmed]
+      description: "Orçamento da parte da Webag (centavos exatos do servidor; a barra é desenho). Invariante: `reserved + spent <= total` (e, no dia, `<= daily`) por CHECK no banco; `reserved` = reservas de pedidos ainda não pagos; `spent` = confirmado menos o devolvido (RN-C9)."
+      properties:
+        totalCents: { type: [integer, 'null'] }
+        reservedCents: { type: integer, minimum: 0 }
+        spentCents: { type: integer, minimum: 0 }
+        remainingCents: { type: [integer, 'null'] }
+        dailyCents: { type: [integer, 'null'] }
+        dailyReservedCents: { type: integer, minimum: 0 }
+        dailySpentCents: { type: integer, minimum: 0 }
+        dailyRemainingCents: { type: [integer, 'null'] }
+        day: { type: string, format: date, description: "Dia corrente em America/Sao_Paulo" }
+        maxUses: { type: [integer, 'null'] }
+        usesReserved: { type: integer, minimum: 0 }
+        usesConfirmed: { type: integer, minimum: 0 }
+    CampaignEnrollmentCounts:
+      type: object
+      required: [invited, accepted, declined, left, expired]
+      properties:
+        invited: { type: integer, minimum: 0, description: "Lojas ainda `pending`" }
+        accepted: { type: integer, minimum: 0 }
+        declined: { type: integer, minimum: 0 }
+        left: { type: integer, minimum: 0 }
+        expired: { type: integer, minimum: 0 }
+    CampaignCode:
+      type: object
+      required: [code, visibility, active]
+      properties:
+        code: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        active: { type: boolean }
+    CampaignSummary:
+      type: object
+      required: [id, owner, name, state, version, fundingSource, fundingLabel, storeSharePct, endReason, pausedBy, startsAt, endsAt, budget, enrollments, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        owner: { type: string, enum: [webag, store] }
+        name: { type: string }
+        state: { $ref: '#/components/schemas/CampaignState' }
+        version: { type: integer, minimum: 1 }
+        fundingSource: { $ref: '#/components/schemas/CampaignFunding' }
+        fundingLabel: { type: string, description: "\"Autofinanciado\", \"Dividido: loja 40% e Webag 60%\", \"Webag paga\", \"Loja paga\" (padroniza o CU-3 da spec)" }
+        storeSharePct: { type: integer, minimum: 0, maximum: 100 }
+        endReason: { oneOf: [{ $ref: '#/components/schemas/CampaignEndReason' }, { type: 'null' }] }
+        pausedBy: { type: [string, 'null'], enum: [admin, merchant, system, null] }
+        startsAt: { type: [string, 'null'], format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        budget: { $ref: '#/components/schemas/CampaignBudget' }
+        enrollments: { $ref: '#/components/schemas/CampaignEnrollmentCounts' }
+        updatedAt: { type: string, format: date-time }
+    CampaignPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CampaignSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    Campaign:
+      allOf:
+        - { $ref: '#/components/schemas/CampaignSummary' }
+        - type: object
+          required: [kind, value, percentCapCents, minOrderCents, audience, reactivationDays, target, maxUses, perCustomerLimit, codes, activation, courierCostProvisional, createdAt, activatedAt]
+          properties:
+            kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+            value: { type: integer, minimum: 0 }
+            percentCapCents: { type: [integer, 'null'] }
+            minOrderCents: { type: integer, minimum: 0 }
+            audience: { $ref: '#/components/schemas/CampaignAudience' }
+            reactivationDays: { type: integer }
+            target: { $ref: '#/components/schemas/CampaignTarget' }
+            maxUses: { type: [integer, 'null'] }
+            perCustomerLimit: { type: integer }
+            codes: { type: array, items: { $ref: '#/components/schemas/CampaignCode' } }
+            activation: { $ref: '#/components/schemas/CampaignActivation' }
+            courierCostProvisional: { type: boolean, description: "F4: o custo previsto do motoboy ainda é a tabela provisória do seed; a tela diz \"custo previsto: tabela provisória\"" }
+            createdAt: { type: string, format: date-time }
+            activatedAt: { type: [string, 'null'], format: date-time }
+    CampaignSimulationRequest:
+      type: object
+      additionalProperties: false
+      required: [fundingSource, kind]
+      properties:
+        fundingSource: { $ref: '#/components/schemas/CampaignFunding' }
+        storeSharePct: { type: integer, minimum: 1, maximum: 99 }
+        kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+        value: { type: integer, minimum: 0 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
+        target: { $ref: '#/components/schemas/CampaignTarget' }
+        budgetTotalCents: { type: [integer, 'null'], minimum: 1 }
+        budgetDailyCents: { type: [integer, 'null'], minimum: 1 }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        referenceSubtotalCents: { type: integer, minimum: 1000, maximum: 1000000, description: "Pedido de referência; sem ele vale o mínimo necessário ou R$ 80,00" }
+    SimulationBand:
+      type: object
+      required: [id, label, fromM, toM, pickup]
+      properties:
+        id: { type: string, description: "`pickup` ou `tier-<n>` na ordem da tabela de entrega" }
+        label: { type: string, description: "\"Retirada\", \"Até 2 km\", \"2 a 4 km\"..." }
+        fromM: { type: [integer, 'null'] }
+        toM: { type: [integer, 'null'] }
+        pickup: { type: boolean }
+    SimulationRow:
+      type: object
+      required: [band, deliveryFeeCents, courierCostCents, commissionCents, serviceFeeCents, marginCents, discountGrossCents, discountStoreCents, discountWebagCents, remainingCents, loss, minOrderNeededCents, applicable]
+      properties:
+        band: { $ref: '#/components/schemas/SimulationBand' }
+        deliveryFeeCents: { type: integer, minimum: 0 }
+        courierCostCents: { type: integer, minimum: 0, description: "Custo previsto do motoboy da faixa (retirada: 0)" }
+        commissionCents: { type: integer, minimum: 0 }
+        serviceFeeCents: { type: integer, minimum: 0 }
+        marginCents: { type: integer, description: "RN-C3: comissão + taxa de serviço + taxa de entrega - custo previsto do motoboy; PODE ser negativa (seed)" }
+        discountGrossCents: { type: integer, minimum: 0 }
+        discountStoreCents: { type: integer, minimum: 0 }
+        discountWebagCents: { type: integer, minimum: 0 }
+        remainingCents: { type: integer, description: "Quanto sobra no pedido para a Webag depois do desconto dela (margem - desconto Webag); negativo = prejuízo" }
+        loss: { type: boolean, description: "`remainingCents < 0`: a tela escreve \"Prejuízo de R$ X\" (nunca só cor)" }
+        minOrderNeededCents: { type: [integer, 'null'], description: "Só `self_funded`: subtotal mínimo para o desconto valer inteiro; nulo = não se aplica nesta faixa (margem <= 0)" }
+        applicable: { type: boolean }
+    CampaignSimulation:
+      type: object
+      required: [referenceSubtotalCents, commissionPct, autofinTetoPct, courierCostSource, provisional, rows, worstCase, maxCostCents, estimatedOrders, globalBudget, aboveMargin, blockers]
+      properties:
+        referenceSubtotalCents: { type: integer }
+        commissionPct: { type: number, description: "Comissão padrão usada na referência (a real é por loja e categoria)" }
+        autofinTetoPct: { type: integer, minimum: 0, maximum: 100, description: "Parâmetro global `autofin_teto_pct` (padrão 50); não existe por campanha" }
+        courierCostSource: { type: string, enum: [delivery_fee_table, provisional] }
+        provisional: { type: boolean }
+        rows: { type: array, items: { $ref: '#/components/schemas/SimulationRow' } }
+        worstCase: { type: object, required: [discountWebagCents, band], properties: { discountWebagCents: { type: integer }, band: { $ref: '#/components/schemas/SimulationBand' } }, description: "Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2)" }
+        maxCostCents: { type: [integer, 'null'] }
+        estimatedOrders: { type: [integer, 'null'], description: "\"Com R$ 800,00 dá para cerca de 100 pedidos com cupom\": orçamento / desconto de referência" }
+        globalBudget: { $ref: '#/components/schemas/CampaignGlobalBudget' }
+        aboveMargin: { type: boolean, description: "Desconto da Webag acima da margem prevista em alguma faixa: só o super admin ativa (C5)" }
+        blockers: { type: array, items: { $ref: '#/components/schemas/ActivationBlocker' } }
+    CampaignEnrollment:
+      type: object
+      required: [enrollmentId, storeId, storeName, state, invitedAt, expiresAt, respondedAt, monthlyCapCents, spentThisMonthCents, acceptedByStaff]
+      properties:
+        enrollmentId: { type: string, format: uuid }
+        storeId: { type: string, format: uuid }
+        storeName: { type: string }
+        state: { type: string, enum: [pending, accepted, declined, left, expired] }
+        invitedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        respondedAt: { type: [string, 'null'], format: date-time }
+        monthlyCapCents: { type: [integer, 'null'] }
+        spentThisMonthCents: { type: integer, minimum: 0 }
+        acceptedByStaff: { type: boolean, description: "A lista do admin NÃO traz o nome de quem aceitou" }
+    CampaignEnrollmentPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CampaignEnrollment' } }
+        nextCursor: { type: [string, 'null'] }
+    InviteCampaignStoresRequest:
+      type: object
+      additionalProperties: false
+      required: [storeIds, reason]
+      properties:
+        storeIds: { type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: { type: string, format: uuid } }
+        reason: { type: string, minLength: 3, maxLength: 200 }
+    InviteCampaignStoresResult:
+      type: object
+      required: [invited, alreadyInvited, ineligible]
+      properties:
+        invited: { type: integer, minimum: 0 }
+        alreadyInvited: { type: integer, minimum: 0 }
+        ineligible: { type: array, items: { type: object, required: [storeId, reason], properties: { storeId: { type: string, format: uuid }, reason: { type: string, enum: [NOT_APPROVED, NOT_IN_TARGET, UNKNOWN_STORE] } } } }
+    CampaignReport:
+      type: object
+      required: [campaignId, state, period, generatedAt, cached, empty, reconciled, webagCostCents, returnedCents, ordersPaid, ordersCancelled, gmvCents, ticketWithCouponCents, ticketWithoutCouponCents, newCustomers, costPerNewCustomerCents, repeat30dPct, repeat30dReadyAt, contributionMarginCents, marginPartial, budget, byStore]
+      properties:
+        campaignId: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/CampaignState' }
+        period: { type: object, required: [from, to], properties: { from: { type: [string, 'null'], format: date }, to: { type: [string, 'null'], format: date } } }
+        generatedAt: { type: string, format: date-time, description: '`atualizado_em`' }
+        cached: { type: boolean, description: '`em_cache`' }
+        empty: { type: boolean }
+        reconciled: { type: boolean, description: "A soma das reservas confirmadas bate com a dos pedidos pagos e com o razão (WB-345 C5)" }
+        webagCostCents: { type: integer, description: "Custo real da Webag: confirmado menos o devolvido, só pedidos pagos" }
+        returnedCents: { type: integer, minimum: 0, description: "Devolvido em cancelamentos e estornos, separado (C1)" }
+        ordersPaid: { type: integer, minimum: 0 }
+        ordersCancelled: { type: integer, minimum: 0 }
+        gmvCents: { type: integer, minimum: 0 }
+        ticketWithCouponCents: { type: [integer, 'null'] }
+        ticketWithoutCouponCents: { type: [integer, 'null'], description: "Das MESMAS lojas e do mesmo período, sem cupom (C3)" }
+        newCustomers: { type: integer, minimum: 0 }
+        costPerNewCustomerCents: { type: [integer, 'null'] }
+        repeat30dPct: { type: [number, 'null'] }
+        repeat30dReadyAt: { type: [string, 'null'], format: date-time, description: "Preenche 30 dias depois (C3)" }
+        contributionMarginCents: { type: [integer, 'null'] }
+        marginPartial: { type: boolean, description: "Há corrida sem custo de entrega lançado (RN-18, C4)" }
+        budget: { $ref: '#/components/schemas/CampaignBudget' }
+        byStore:
+          type: array
+          maxItems: 100
+          items: { type: object, required: [storeId, storeName, orders, webagPaidCents, storePaidCents], properties: { storeId: { type: string, format: uuid }, storeName: { type: string }, orders: { type: integer }, webagPaidCents: { type: integer }, storePaidCents: { type: integer } } }
+    CampaignAlert:
+      type: object
+      required: [id, kind, campaignId, campaignName, severity, createdAt, detail]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [budget_80, budget_100, no_use_30d, suspect_over_20pct, store_concentration_30pct, store_coupon_concentration, report_unreconciled] }
+        campaignId: { type: string, format: uuid }
+        campaignName: { type: string }
+        severity: { type: string, enum: [info, warning, critical] }
+        scope: { type: [string, 'null'], enum: [total, day, null], description: "`budget_*`: total ou do dia" }
+        valueCents: { type: [integer, 'null'] }
+        detail: { type: string, description: "Texto pt-BR sem dado pessoal" }
+        createdAt: { type: string, format: date-time }
+    CampaignAlertPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CampaignAlert' } }
+        nextCursor: { type: [string, 'null'] }
+    CampaignGlobalBudget:
+      type: object
+      required: [monthlyBudgetCents, committedCents, spentMonthCents, remainingCents, monthStart, autofinTetoPct, webagFundingEnabled, courierCostProvisional]
+      properties:
+        monthlyBudgetCents: { type: integer, minimum: 0, description: "Parâmetro `cupom_orcamento_mensal_webag_cents`; padrão 0 (F2)" }
+        committedCents: { type: integer, minimum: 0, description: "Soma do que as campanhas ativas ainda podem gastar" }
+        spentMonthCents: { type: integer, minimum: 0 }
+        remainingCents: { type: integer, description: "Pode ficar negativo se o orçamento foi reduzido depois de ativar campanhas" }
+        monthStart: { type: string, format: date }
+        autofinTetoPct: { type: integer, minimum: 0, maximum: 100 }
+        webagFundingEnabled: { type: boolean, description: "`false` enquanto o orçamento for R$ 0: só \"Loja paga\" ativa" }
+        courierCostProvisional: { type: boolean }
+    CouponSuspect:
+      type: object
+      required: [id, orderNumber, campaignId, campaignName, signal, state, detectedAt, releasedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderNumber: { type: string, description: "Número público do pedido (opaco, sem dado pessoal)" }
+        campaignId: { type: string, format: uuid }
+        campaignName: { type: string }
+        signal: { type: string, enum: [device_accounts, address_accounts, payer_accounts, cancellations, account_velocity] }
+        state: { type: string, enum: [open, released] }
+        detectedAt: { type: string, format: date-time }
+        releasedAt: { type: [string, 'null'], format: date-time }
+    CouponSuspectPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CouponSuspect' } }
+        nextCursor: { type: [string, 'null'] }
+    # -- painéis
+    MetricId:
+      type: string
+      description: "Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release."
+      enum: [gmv, gmv_delivered, orders_paid, orders_delivered, avg_ticket, webag_revenue, take_rate, new_customers, active_customers, repeat_30d, cancellations_rate, cancellations_count, accept_time, delivered_in_window_pct, pay_to_delivery_time, courier_cost_per_delivery, active_stores, coupon_uses, discount_total, discount_webag, cost_per_new_customer, sessions, store_visits, product_visits, bag_adds, conversion]
+    DimensionId:
+      type: string
+      description: "Lista fechada. NÃO existe cliente, motoboy, endereço nem bairro (C-DSH-04)."
+      enum: [time, city, store, category, mode, payment_method, campaign, distance_band, origin]
+    MetricSensitivity:
+      type: string
+      enum: [general, operational, financial]
+      description: "`general`: os 4 perfis; `operational`: super admin, operação e financeiro; `financial` (receita, take rate, custo de logística, custo e desconto da Webag): super admin e financeiro"
+    MetricDefinition:
+      type: object
+      required: [id, name, definition, sensitivity, unit, polarity, aggregation, dimensions, chartTypes, minSample, availability]
+      properties:
+        id: { $ref: '#/components/schemas/MetricId' }
+        name: { type: string }
+        definition: { type: string, description: "Definição em UMA frase (RN-15), igual em toda tela" }
+        sensitivity: { $ref: '#/components/schemas/MetricSensitivity' }
+        unit: { type: string, enum: [money_cents, count, percent, seconds] }
+        polarity: { type: string, enum: [up_good, down_good, neutral], description: "Cancelamento subindo é ruim: a cor da variação segue a polaridade, sempre com a palavra Subiu ou Caiu" }
+        aggregation: { type: string, enum: [additive, ratio, quantile, distinct], description: "`quantile`: mediana e p90 por histograma fixo (aproximação documentada, `MetricResult.approximate`); `distinct`: só períodos pré-calculados" }
+        dimensions: { type: array, items: { $ref: '#/components/schemas/DimensionId' }, description: "Compatíveis (matriz do PRD). `time` aceita dia, semana ou mês; recompra só `time` mensal e `city`" }
+        chartTypes: { type: array, items: { type: string, enum: [number, line, bar, stacked_bar, donut, table] } }
+        minSample: { type: object, required: [kind, n], properties: { kind: { type: string, enum: [rate, quantile, access, none] }, n: { type: integer, description: "20 para taxa, ticket e comparação; 5 para mediana e p90 (DEC-108); 5 sessões nas métricas de acesso" } } }
+        availability: { type: string, enum: [available, requires_flag], description: "`requires_flag`: métricas de acesso até `coleta_eventos` ligar" }
+    DimensionDefinition:
+      type: object
+      required: [id, name, granularities]
+      properties:
+        id: { $ref: '#/components/schemas/DimensionId' }
+        name: { type: string }
+        granularities: { type: array, items: { type: string, enum: [day, week, month] }, description: "Só `time`; vazio nas demais" }
+    DashboardLimits:
+      type: object
+      required: [maxPeriodDays, maxDimensions, maxFilters, maxPoints, maxCategories, maxWidgetsPerDashboard, maxDashboardsPerUser, queriesPerMinute, concurrentQueries, timeoutSeconds, cacheSeconds, lowSampleRate, lowSampleQuantile]
+      properties:
+        maxPeriodDays: { type: integer, example: 400 }
+        maxDimensions: { type: integer, example: 2 }
+        maxFilters: { type: integer, example: 5 }
+        maxPoints: { type: integer, example: 5000 }
+        maxCategories: { type: integer, example: 10 }
+        maxWidgetsPerDashboard: { type: integer, example: 12 }
+        maxDashboardsPerUser: { type: integer, example: 20 }
+        queriesPerMinute: { type: integer, example: 30 }
+        concurrentQueries: { type: integer, example: 2 }
+        timeoutSeconds: { type: integer, example: 5 }
+        cacheSeconds: { type: integer, example: 300 }
+        lowSampleRate: { type: integer, example: 20 }
+        lowSampleQuantile: { type: integer, example: 5 }
+    DashboardCatalog:
+      type: object
+      required: [metrics, dimensions, limits, generatedAt]
+      properties:
+        metrics: { type: array, items: { $ref: '#/components/schemas/MetricDefinition' } }
+        dimensions: { type: array, items: { $ref: '#/components/schemas/DimensionDefinition' } }
+        limits: { $ref: '#/components/schemas/DashboardLimits' }
+        generatedAt: { type: string, format: date-time, description: "Última atualização dos agregados (`atualizado_em`)" }
+    MetricPeriod:
+      type: object
+      additionalProperties: false
+      description: "Exatamente uma das formas: `preset`, ou `from` e `to` (datas em America/Sao_Paulo, no máximo 400 dias)"
+      properties:
+        preset: { type: string, enum: [today, last_7d, last_28d, last_30d, last_90d, this_month, last_month] }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+    MetricFilter:
+      type: object
+      additionalProperties: false
+      required: [dimensionId, op, values]
+      properties:
+        dimensionId: { $ref: '#/components/schemas/DimensionId' }
+        op: { type: string, enum: [eq, in] }
+        values: { type: array, minItems: 1, maxItems: 50, items: { type: string, maxLength: 64 } }
+    MetricQuery:
+      type: object
+      additionalProperties: false
+      required: [metricId, period]
+      properties:
+        metricId: { $ref: '#/components/schemas/MetricId' }
+        dimensionIds: { type: array, maxItems: 2, uniqueItems: true, items: { $ref: '#/components/schemas/DimensionId' } }
+        filters: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/MetricFilter' } }
+        period: { $ref: '#/components/schemas/MetricPeriod' }
+        granularity: { type: string, enum: [day, week, month], description: "Só com a dimensão `time`" }
+        compare: { type: boolean, default: false, description: "Compara com o período anterior de mesmo tamanho (linha tracejada e variação)" }
+    MetricCell:
+      type: object
+      required: [value, n, lowSample, suppressed, variationPct]
+      description: "`suppressed: true` (acesso com menos de 5 sessões): `value` e `n` nulos. `lowSample: true` (DEC-108): a tarja \"Poucos dados\" e `variationPct` nulo. `n` é o tamanho da amostra (pedidos ou sessões); nunca identifica ninguém."
+      properties:
+        value: { type: [number, 'null'], description: "Na unidade da métrica (`money_cents`: centavos inteiros; `percent`: 0 a 100 com 1 casa; `seconds`)" }
+        n: { type: [integer, 'null'] }
+        lowSample: { type: boolean }
+        suppressed: { type: boolean }
+        variationPct: { type: [number, 'null'], description: "Variação sobre o período anterior; nula em baixa amostra ou sem comparação" }
+    MetricRow:
+      type: object
+      required: [dimensions, isOther, cell, previous]
+      properties:
+        dimensions:
+          type: object
+          description: "Uma entrada por dimensão pedida (chave = `DimensionId`)"
+          additionalProperties: { type: object, required: [key, label], properties: { key: { type: [string, 'null'] }, label: { type: string } } }
+        isOther: { type: boolean, description: "Linha \"Outros\" (além das 10 maiores categorias)" }
+        cell: { $ref: '#/components/schemas/MetricCell' }
+        previous: { oneOf: [{ $ref: '#/components/schemas/MetricCell' }, { type: 'null' }] }
+    MetricResult:
+      type: object
+      required: [metricId, unit, period, previousPeriod, granularity, dimensionIds, rows, approximate, generatedAt, cached]
+      properties:
+        metricId: { $ref: '#/components/schemas/MetricId' }
+        unit: { type: string, enum: [money_cents, count, percent, seconds] }
+        period: { type: object, required: [from, to], properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        previousPeriod: { type: [object, 'null'], properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        granularity: { type: [string, 'null'], enum: [day, week, month, null] }
+        dimensionIds: { type: array, items: { $ref: '#/components/schemas/DimensionId' } }
+        rows: { type: array, maxItems: 5000, items: { $ref: '#/components/schemas/MetricRow' } }
+        approximate: { type: boolean, description: "Mediana e p90 saem de histograma de faixas fixas: aproximação, dita na tela" }
+        generatedAt: { type: string, format: date-time, description: '`atualizado_em`: última atualização dos agregados (a tela diz "Atualizado às HH:MM" e avisa defasagem)' }
+        cached: { type: boolean, description: '`em_cache`' }
+    DashboardWidget:
+      type: object
+      required: [id, position, title, metricId, dimensionIds, chartType, filters, period, compare]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer, minimum: 0, maximum: 11 }
+        title: { type: string, maxLength: 80, description: "Texto puro (nunca HTML); escapado no CSV (C-DSH-06)" }
+        metricId: { $ref: '#/components/schemas/MetricId' }
+        dimensionIds: { type: array, maxItems: 2, items: { $ref: '#/components/schemas/DimensionId' } }
+        chartType: { type: string, enum: [number, line, bar, stacked_bar, donut, table] }
+        filters: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/MetricFilter' } }
+        period: { $ref: '#/components/schemas/MetricPeriod' }
+        compare: { type: boolean }
+    Dashboard:
+      type: object
+      required: [id, kind, presetKey, name, editable, someWidgetsHidden, widgets, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [preset, user] }
+        presetKey: { type: [string, 'null'], enum: [overview, sales, stores, delivery, coupons, access, null] }
+        name: { type: string, maxLength: 80 }
+        editable: { type: boolean, description: "Falso nos prontos; a edição de painel próprio é do construtor (R3)" }
+        someWidgetsHidden: { type: boolean, description: "Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)" }
+        widgets: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/DashboardWidget' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DashboardPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Dashboard' } }
+        nextCursor: { type: [string, 'null'] }
+    DuplicateDashboardRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, description: "Padrão: o nome do original com \" (cópia)\"" }
+    AnalyticsFunnelStage:
+      type: object
+      required: [stage, sessions, conversionFromPrevious]
+      properties:
+        stage: { type: string, enum: [store_visit, product_open, bag, checkout, order_paid] }
+        sessions: { $ref: '#/components/schemas/AnalyticsCell' }
+        conversionFromPrevious: { type: [number, 'null'], description: "Percentual sobre a etapa anterior; nulo se alguma das duas células foi suprimida" }
+    AnalyticsFunnel:
+      type: object
+      required: [period, generatedAt, cached, empty, stages, profileOnly]
+      properties:
+        period: { type: object, required: [from, to], properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+        generatedAt: { type: string, format: date-time }
+        cached: { type: boolean }
+        empty: { type: boolean }
+        stages: { type: array, items: { $ref: '#/components/schemas/AnalyticsFunnelStage' } }
+        profileOnly: { $ref: '#/components/schemas/AnalyticsCell' }
+    CheckoutStartedEvent:
+      type: object
+      additionalProperties: false
+      required: [name, eventId, occurredAt, sessionId, storeId]
+      description: "v1.1 R2 (WB-362 C3): início do checkout. Mesmas regras de privacidade dos demais eventos (sem conta, sem valor, sem endereço). Só passa a existir na coleta quando a R1.4 for construída com ele (ADR-019 pendência 5)."
+      properties:
+        name: { type: string, enum: [checkout_started] }
+        eventId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+        sessionId: { type: string, minLength: 16, maxLength: 64 }
+        storeId: { type: string, format: uuid }
+    RecordAnalyticsInterestRequest:
+      type: object
+      additionalProperties: false
+      required: [answer]
+      properties:
+        answer: { type: string, enum: [clicked, answered] }
+        priceBand: { type: string, enum: [up_to_19, 20_to_39, 40_to_79, 80_plus, would_not_pay], description: "Obrigatória com `answered`. Faixas de EXEMPLO (HIP-A1), não preço decidido" }
+        note: { type: string, maxLength: 140, description: "Texto puro opcional; a tela pede \"Não escreva dados de clientes\"" }
+    AnalyticsInterestReport:
+      type: object
+      required: [clicked, answered, bands, notes]
+      properties:
+        clicked: { type: integer, minimum: 0, description: "Lojas que tocaram em \"Quero testar\"" }
+        answered: { type: integer, minimum: 0 }
+        bands: { type: object, required: [up_to_19, 20_to_39, 40_to_79, 80_plus, would_not_pay], properties: { up_to_19: { type: integer }, 20_to_39: { type: integer }, 40_to_79: { type: integer }, 80_plus: { type: integer }, would_not_pay: { type: integer } } }
+        notes: { type: array, maxItems: 50, items: { type: object, required: [text, at], properties: { text: { type: string, maxLength: 140 }, at: { type: string, format: date-time } } } }
+    BarcodeLookup:
+      type: object
+      required: [barcode, valid, inStore, reference]
+      properties:
+        barcode: { type: string }
+        valid: { type: boolean, enum: [true] }
+        inStore:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [productId, variantId, name]
+              properties:
+                productId: { type: string, format: uuid }
+                variantId: { type: [string, 'null'], format: uuid }
+                name: { type: string }
+        reference:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [name, brand, categoryId]
+              description: "Dado factual moderado; sem foto e sem descrição. Sugestão editável"
+              properties:
+                name: { type: string }
+                brand: { type: [string, 'null'] }
+                categoryId: { type: [string, 'null'], format: uuid }
+    PromotionEligibility:
+      type: object
+      required: [eligible, reasonCode, message, referencePriceCents, practicedSince, eligibleFrom]
+      properties:
+        eligible: { type: boolean }
+        reasonCode: { type: [string, 'null'], enum: [NO_REFERENCE_HISTORY, PRICE_CHANGED_RECENTLY, PROMOTION_COVERED_PERIOD, null] }
+        message: { type: [string, 'null'], description: "\"Seu desconto só aparece depois de 30 dias de preço anterior.\"" }
+        referencePriceCents: { type: [integer, 'null'], description: "O preço \"de\" que seria mostrado" }
+        practicedSince: { type: [string, 'null'], format: date-time }
+        eligibleFrom: { type: [string, 'null'], format: date-time }
+    # -- lojista
+    CampaignInviteTerms:
+      type: object
+      required: [version, hash, text]
+      properties:
+        version: { type: string, description: "Versão do texto do aceite (cláusula nos Termos do Lojista, J27)" }
+        hash: { type: string, pattern: '^[a-f0-9]{64}$', description: "SHA-256 do texto, gravado no aceite" }
+        text: { type: string, maxLength: 4000 }
+    CampaignInviteExample:
+      type: object
+      required: [orderSubtotalCents, discountCents, storeShareCents, youReceiveWithCents, youReceiveWithoutCents]
+      description: "Pedido de exemplo calculado no servidor com a comissão da PRÓPRIA loja: \"você recebe R$ 79,78; sem o cupom, R$ 83,93\""
+      properties:
+        orderSubtotalCents: { type: integer }
+        discountCents: { type: integer }
+        storeShareCents: { type: integer, description: "Quanto o desconto custa à loja por pedido" }
+        youReceiveWithCents: { type: integer }
+        youReceiveWithoutCents: { type: integer }
+    CampaignInvite:
+      type: object
+      required: [enrollmentId, campaignId, name, state, kind, value, percentCapCents, minOrderCents, audience, startsAt, endsAt, storeSharePct, webagSharePct, example, terms, suggestedMonthlyCapCents, monthlyCapCents, spentThisMonthCents, expiresAt, respondedAt]
+      properties:
+        enrollmentId: { type: string, format: uuid }
+        campaignId: { type: string, format: uuid }
+        name: { type: string }
+        state: { type: string, enum: [pending, accepted, declined, left, expired] }
+        kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+        value: { type: integer }
+        percentCapCents: { type: [integer, 'null'] }
+        minOrderCents: { type: integer }
+        audience: { $ref: '#/components/schemas/CampaignAudience' }
+        startsAt: { type: [string, 'null'], format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        storeSharePct: { type: integer, minimum: 1, maximum: 100 }
+        webagSharePct: { type: integer, minimum: 0, maximum: 99 }
+        example: { $ref: '#/components/schemas/CampaignInviteExample' }
+        terms: { $ref: '#/components/schemas/CampaignInviteTerms' }
+        suggestedMonthlyCapCents: { type: integer, example: 15000 }
+        monthlyCapCents: { type: [integer, 'null'] }
+        spentThisMonthCents: { type: integer, minimum: 0 }
+        expiresAt: { type: string, format: date-time, description: "7 dias; sem resposta, expira sem custo e sem aceite tácito" }
+        respondedAt: { type: [string, 'null'], format: date-time }
+    CampaignInvitePage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CampaignInvite' } }
+        nextCursor: { type: [string, 'null'] }
+    AcceptCampaignInviteRequest:
+      type: object
+      additionalProperties: false
+      required: [termsVersion, termsHash, monthlyCapCents, confirm]
+      properties:
+        termsVersion: { type: string, maxLength: 40 }
+        termsHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        monthlyCapCents: { type: integer, minimum: 100, maximum: 100000000 }
+        confirm: { type: boolean, enum: [true] }
+    StoreCoupon:
+      type: object
+      required: [id, campaignId, code, codeVisibility, kind, value, percentCapCents, minOrderCents, startsAt, endsAt, maxUses, perCustomerLimit, monthlyCapCents, spentThisMonthCents, uses, state, pausedBy, version]
+      properties:
+        id: { type: string, format: uuid }
+        campaignId: { type: string, format: uuid }
+        code: { type: string }
+        codeVisibility: { type: string, enum: [public, private] }
+        kind: { type: string, enum: [percent, fixed] }
+        value: { type: integer }
+        percentCapCents: { type: [integer, 'null'] }
+        minOrderCents: { type: integer }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'] }
+        perCustomerLimit: { type: integer }
+        monthlyCapCents: { type: integer }
+        spentThisMonthCents: { type: integer, minimum: 0 }
+        uses: { type: integer, minimum: 0 }
+        state: { $ref: '#/components/schemas/CampaignState' }
+        pausedBy: { type: [string, 'null'], enum: [admin, merchant, system, null] }
+        version: { type: integer, minimum: 1 }
+    StoreCouponPage:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/StoreCoupon' } }
+        nextCursor: { type: [string, 'null'] }
+    StoreCouponCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, value, startsAt, endsAt, monthlyCapCents]
+      description: "Sem `storeId`, `fundingSource`, `storeSharePct`, `campaignId` nem desconto da Webag: a loja vem da rota e o resto é implícito (loja paga 100%)."
+      properties:
+        kind: { type: string, enum: [percent, fixed] }
+        value: { type: integer, minimum: 1, description: "Percentual (1 a `cupom_loja_pct_max`) ou centavos" }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100, default: 1 }
+        monthlyCapCents: { type: integer, minimum: 100, maximum: 100000000, description: "Obrigatório (WB-346 C1)" }
+        code: { type: [string, 'null'], minLength: 4, maxLength: 20, pattern: '^[A-Z0-9]+$' }
+        codeVisibility: { type: string, enum: [public, private], default: public }
+    StoreCouponPatch:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        active: { type: boolean }
+        end: { type: boolean, description: "Encerra (não reabre)" }
+        value: { type: integer, minimum: 1 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
+        endsAt: { type: string, format: date-time }
+        maxUses: { type: [integer, 'null'], minimum: 1 }
+        perCustomerLimit: { type: integer, minimum: 1, maximum: 100 }
+        monthlyCapCents: { type: integer, minimum: 100, maximum: 100000000 }
+    StoreCouponPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, value]
+      properties:
+        kind: { type: string, enum: [percent, fixed] }
+        value: { type: integer, minimum: 1 }
+        percentCapCents: { type: [integer, 'null'], minimum: 1 }
+        orderSubtotalCents: { type: integer, minimum: 1000, maximum: 1000000, default: 8000 }
+    StoreCouponPreview:
+      type: object
+      required: [orderSubtotalCents, discountCents, youReceiveWithCents, youReceiveWithoutCents, maxPct, requiredMinOrderCents]
+      properties:
+        orderSubtotalCents: { type: integer }
+        discountCents: { type: integer }
+        youReceiveWithCents: { type: integer, description: "\"Você recebe R$ 60,49\"" }
+        youReceiveWithoutCents: { type: integer, description: "\"sem o cupom: R$ 67,21\"" }
+        maxPct: { type: integer, description: "`cupom_loja_pct_max` vigente" }
+        requiredMinOrderCents: { type: [integer, 'null'], description: "Só valor fixo: pedido mínimo exigido (valor / (teto/100), para cima ao centavo)" }
+    # -- cliente
+    CouponShortfall:
+      type: object
+      required: [missingCents, requiredSubtotalCents, currentSubtotalCents]
+      description: "\"Faltam R$ 40,00 para usar o cupom\": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido."
+      properties:
+        missingCents: { type: integer, minimum: 1 }
+        requiredSubtotalCents: { type: integer }
+        currentSubtotalCents: { type: integer }
+    CouponProblem:
+      allOf:
+        - { $ref: '#/components/schemas/Problem' }
+        - type: object
+          description: "Extensão do 422 de `applyCartCoupon` (v1.1 R2): o que a sacola precisa para o bloco \"Faltam R$ X\" (só com `COUPON_SHORTFALL`)"
+          properties:
+            shortfall: { $ref: '#/components/schemas/CouponShortfall' }
+    CouponOffer:
+      type: object
+      required: [code, kind, valueCents, percent, percentCapCents, minOrderCents, validUntil, origin, restrictions, applicable, shortfall, estimatedDiscountCents]
+      properties:
+        code: { type: string, description: "Só cupom público" }
+        kind: { $ref: '#/components/schemas/CampaignDiscountKind' }
+        valueCents: { type: [integer, 'null'] }
+        percent: { type: [integer, 'null'] }
+        percentCapCents: { type: [integer, 'null'], description: "O cartão diz \"até R$ N\"" }
+        minOrderCents: { type: integer }
+        validUntil: { type: string, format: date-time, description: "O dia final vale até 23:59 em America/Sao_Paulo" }
+        origin: { $ref: '#/components/schemas/DiscountOrigin' }
+        restrictions: { type: array, items: { type: string, enum: [first_purchase, reactivation, this_store, this_city, this_category, min_order] } }
+        applicable: { type: boolean }
+        shortfall: { oneOf: [{ $ref: '#/components/schemas/CouponShortfall' }, { type: 'null' }] }
+        estimatedDiscountCents: { type: [integer, 'null'] }
+    CouponOfferList:
+      type: object
+      required: [data, nextCursor]
+      properties:
+        data: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/CouponOffer' } }
+        nextCursor: { type: 'null' }
+    CouponBreakdown:
+      type: object
+      required: [origin, totalCents, storeCents, webagCents, appliesTo, label]
+      description: "Composição do desconto (WB-347 C1, C8). O desconto Webag é o `cupom_plataforma` (RN-10) e o da loja é o `cupom_loja`. Frete grátis: a entrega segue com o valor cheio em `summary.delivery` e o desconto aparece aqui e em `summary.lines` (RN-C1; a rubrica final depende do J22)."
+      properties:
+        origin: { $ref: '#/components/schemas/DiscountOrigin' }
+        totalCents: { type: integer, minimum: 0 }
+        storeCents: { type: integer, minimum: 0 }
+        webagCents: { type: integer, minimum: 0 }
+        appliesTo: { type: string, enum: [items, delivery] }
+        label: { type: string, description: "Texto pt-BR da linha (\"Desconto Webag (entrega)\")" }
+    CartSummaryLine:
+      type: object
+      required: [key, label, amountCents]
+      properties:
+        key: { type: string, enum: [subtotal, delivery, service_fee, coupon_discount, total] }
+        label: { type: string }
+        amountCents: { type: integer, description: "Com sinal: o desconto é negativo" }
+        origin: { oneOf: [{ $ref: '#/components/schemas/DiscountOrigin' }, { type: 'null' }] }

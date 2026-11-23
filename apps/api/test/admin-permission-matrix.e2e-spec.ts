@@ -121,7 +121,7 @@ describe('WB-355: matriz de permissões do admin (todas as rotas /v1/admin/*)', 
   it('a tabela única não tem permissão sem rota no contrato nem rota de admin fora dela', () => {
     const used = new Set(adminRoutes().map((r) => r.adminPermission).filter(Boolean));
     // as permissões novas da R1 só passam a ter rota quando a WB correspondente for implementada (`store-catalog:write` já tem: `bulkAdminStoreProducts`, R1.3)
-    const PENDING_R1 = new Set(['store-history:export', 'analytics:read']);
+    const PENDING_R1 = new Set(['store-history:export', 'analytics:read', 'coupons:activate', 'dashboards:read']); // as duas últimas são da R2 (ADR-019): ganham rota na R2.2 e R2.3
     const unused = Object.keys(ADMIN_PERMISSIONS).filter((p) => !used.has(p) && !PENDING_R1.has(p));
     expect(unused).toEqual([]);
   });

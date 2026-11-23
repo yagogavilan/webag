@@ -105,6 +105,13 @@ export const ADMIN_PERMISSIONS = {
   'view-as:open': [SUPER, OPS, FIN, SUP],
   /** WB-363/362: acessos agregados (coleta de navegação); suporte não vê. */
   'analytics:read': [SUPER, OPS, FIN],
+  /**
+   * v1.1 R2 (ADR-019, WB-340, C-CUP-08): ATIVAR, RETOMAR e ENCERRAR campanha de cupom gasta dinheiro da Webag: só super admin e financeiro (com 2º fator recente quando há custo da Webag).
+   * Criar, editar rascunho, pausar, convidar lojas e liberar "Suspeitos" seguem em `coupons:write` (super admin e operação); ler, em `coupons:read`.
+   */
+  'coupons:activate': [SUPER, FIN],
+  /** v1.1 R2 (WB-356, WB-357): porta dos painéis (catálogo, consulta e painéis prontos). Os 4 perfis entram; a SENSIBILIDADE de cada métrica (geral, operacional, financeira) é conferida por métrica no serviço, antes do cache (C-DSH-02). */
+  'dashboards:read': [SUPER, OPS, FIN, SUP],
 } as const satisfies Record<string, readonly AdminProfile[]>;
 
 export type AdminPermission = keyof typeof ADMIN_PERMISSIONS;
