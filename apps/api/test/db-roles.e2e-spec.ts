@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { APPEND_ONLY_COLUMN_UPDATES, APPEND_ONLY_TABLES } from '../src/platform/database/app-grants.js';
+import { APPEND_ONLY_COLUMN_UPDATES, APPEND_ONLY_TABLES, NO_DELETE_TABLES } from '../src/platform/database/app-grants.js';
 import { TEST_ENV } from './test-env.js';
 
 /**
@@ -100,6 +100,15 @@ describe.skipIf(!available)('D-06: o papel da API não altera o histórico nem a
       [`public.${table}`],
     );
     expect(rows.map((r) => r.attname)).toEqual([...columns].sort());
+  });
+
+  it.each([...NO_DELETE_TABLES])('%s (S6/SEC-230): a API lê, insere e atualiza, mas NÃO apaga nem trunca', async (table) => {
+    const priv = async (kind: string): Promise<boolean> => (await app.query<{ ok: boolean }>(`SELECT has_table_privilege(current_user, $1::regclass, $2) AS ok`, [`public.${table}`, kind])).rows[0]!.ok;
+    expect(await priv('SELECT')).toBe(true);
+    expect(await priv('INSERT')).toBe(true);
+    expect(await priv('UPDATE')).toBe(true);
+    expect(await priv('DELETE'), 'DELETE').toBe(false);
+    expect(await priv('TRUNCATE'), 'TRUNCATE').toBe(false);
   });
 
   it('o truncamento de IP da anonimização (SEC-159) continua possível pelo papel da API, e só ele (o privilégio de coluna é checado mesmo sem linha)', async () => {

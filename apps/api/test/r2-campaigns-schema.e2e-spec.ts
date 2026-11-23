@@ -224,13 +224,13 @@ describe('R2.1: reserva atômica e devolução única (C-CUP-02, C-CUP-03)', () 
   it('a reserva tem forma coerente com o estado e o estorno parcial nunca passa do confirmado', async () => {
     await inTx(async () => {
       const campaign = await newCampaign();
-      const ins = (cols: string, vals: string) => `INSERT INTO coupon_reservations (order_id, campaign_id, user_id, store_id, webag_cents, store_cents, day, month, ${cols}) VALUES (gen_random_uuid(), '${campaign}', '${userId}', '${storeId}', 800, 0, current_date, current_date, ${vals})`;
+      const ins = (cols: string, vals: string) => `INSERT INTO coupon_reservations (order_id, campaign_id, user_id, store_id, webag_cents, store_cents, day, month, ${cols}) VALUES (gen_random_uuid(), '${campaign}', '${userId}', '${storeId}', 800, 0, current_date, date_trunc('month', current_date), ${vals})`;
       expect(await failsWith(ins('state, confirmed_at', `'reserved', now()`))).toBe(CHECK);
       expect(await failsWith(ins('state', `'confirmed'`))).toBe(CHECK); // confirmada sem hora
       expect(await failsWith(ins('state, returned_at', `'returned', now()`))).toBe(CHECK); // devolvida sem motivo
       expect(await failsWith(ins('state, confirmed_at, refunded_webag_cents', `'confirmed', now(), 801`))).toBe(CHECK); // devolveu mais que o confirmado
       expect(await failsWith(ins('state, confirmed_at, refunded_webag_cents', `'confirmed', now(), 400`))).toBe('ok'); // estorno parcial
-      expect(await failsWith(`INSERT INTO coupon_reservations (order_id, campaign_id, user_id, store_id, webag_cents, store_cents, day, month) VALUES (gen_random_uuid(), '${campaign}', '${userId}', '${storeId}', 0, 0, current_date, current_date)`)).toBe(CHECK); // desconto zero não reserva
+      expect(await failsWith(`INSERT INTO coupon_reservations (order_id, campaign_id, user_id, store_id, webag_cents, store_cents, day, month) VALUES (gen_random_uuid(), '${campaign}', '${userId}', '${storeId}', 0, 0, current_date, date_trunc('month', current_date))`)).toBe(CHECK); // desconto zero não reserva
     });
   });
 });
@@ -258,12 +258,19 @@ describe('R2.1: diário do orçamento append-only e invariante (ledger da campan
       const campaign = await newCampaign();
       const key = `res:${randomUUID()}:reserve`;
       await entry(campaign, 'reserve', 800, key);
-      expect(await failsWith(`INSERT INTO campaign_budget_entries (campaign_id, kind, funder, amount_cents, day, month, dedupe_key) VALUES ($1, 'reserve', 'webag', 800, current_date, current_date, $2)`, [campaign, key])).toBe(UNIQUE);
-      expect(await failsWith(`INSERT INTO campaign_budget_entries (campaign_id, kind, funder, amount_cents, day, month, dedupe_key) VALUES ($1, 'reserve', 'webag', 0, current_date, current_date, 'zero')`, [campaign])).toBe(CHECK);
+      expect(await failsWith(`INSERT INTO campaign_budget_entries (campaign_id, kind, funder, amount_cents, day, month, dedupe_key) VALUES ($1, 'reserve', 'webag', 800, current_date, date_trunc('month', current_date), $2)`, [campaign, key])).toBe(UNIQUE);
+      expect(await failsWith(`INSERT INTO campaign_budget_entries (campaign_id, kind, funder, amount_cents, day, month, dedupe_key) VALUES ($1, 'reserve', 'webag', 0, current_date, date_trunc('month', current_date), 'zero')`, [campaign])).toBe(CHECK);
     });
   });
 
-  it('`campaign_budget_violations()` fica vazia quando os contadores batem com o diário e acusa o contador adulterado', async () => {
+  /** Reserva `confirmed` com estorno parcial (o que o diário abaixo conta) e a devolvida; a invariante agora também cruza as reservas com os contadores (SEC-229). */
+  const reservation = (campaign: string, over: Record<string, string> = {}) => {
+    const row: Record<string, string> = { order_id: 'gen_random_uuid()', campaign_id: `'${campaign}'`, user_id: `'${userId}'`, store_id: `'${storeId}'`, webag_cents: '800', store_cents: '0', day: 'current_date', month: `date_trunc('month', current_date)`, ...over };
+    return client.query(`INSERT INTO coupon_reservations (${Object.keys(row).join(', ')}) VALUES (${Object.values(row).join(', ')})`);
+  };
+  const violations = (campaign: string) => client.query<{ counter: string; expected: string; actual: string; scope: string }>(`SELECT scope, counter, expected, actual FROM campaign_budget_violations() WHERE campaign_id = $1 ORDER BY counter, scope`, [campaign]).then((r) => r.rows);
+
+  it('`campaign_budget_violations()` fica vazia quando os contadores batem com o diário e as reservas, e acusa o contador adulterado', async () => {
     await inTx(async () => {
       const campaign = await newCampaign();
       // reserva 800, confirma 800, nova reserva 800 e devolve; estorno parcial de 300 do confirmado: reservado 0, gasto 500
@@ -272,16 +279,51 @@ describe('R2.1: diário do orçamento append-only e invariante (ledger da campan
       await entry(campaign, 'reserve', 800, 'a3');
       await entry(campaign, 'release', 800, 'a4');
       await entry(campaign, 'refund', 300, 'a5');
-      await client.query(`UPDATE campaigns SET budget_reserved_cents = 0, budget_spent_cents = 500 WHERE id = $1`, [campaign]);
+      await reservation(campaign, { state: `'confirmed'`, confirmed_at: 'now()', refunded_webag_cents: '300' });
+      await reservation(campaign, { state: `'returned'`, returned_at: 'now()', returned_reason: `'expired'` });
+      await client.query(`UPDATE campaigns SET budget_reserved_cents = 0, budget_spent_cents = 500, uses_confirmed = 1 WHERE id = $1`, [campaign]);
       await client.query(`INSERT INTO campaign_budget_days (campaign_id, day, limit_cents, reserved_cents, spent_cents) VALUES ($1, current_date, 5000, 0, 500)`, [campaign]);
-      const listed = () => client.query<{ counter: string; expected: string; actual: string }>(`SELECT counter, expected, actual FROM campaign_budget_violations() WHERE campaign_id = $1 ORDER BY counter`, [campaign]).then((r) => r.rows);
-      expect(await listed()).toEqual([]);
+      expect(await violations(campaign)).toEqual([]);
       await client.query(`UPDATE campaigns SET budget_spent_cents = 600 WHERE id = $1`, [campaign]); // alguém mexeu no contador
-      expect(await listed()).toEqual([{ counter: 'budget_spent_cents', expected: '500', actual: '600' }]);
+      expect((await violations(campaign)).map((r) => `${r.counter}:${r.expected}:${r.actual}`)).toEqual(['budget_spent_cents:500:600', 'reservations_webag_spent:500:600']);
       await client.query(`UPDATE campaigns SET budget_spent_cents = 500 WHERE id = $1`, [campaign]);
       await client.query(`UPDATE campaign_budget_days SET reserved_cents = 100 WHERE campaign_id = $1`, [campaign]);
-      expect((await listed()).map((r) => r.counter)).toEqual(['reserved_cents']);
+      expect((await violations(campaign)).map((r) => r.counter)).toEqual(['reserved_cents']);
     });
+  });
+
+  it('R1: o invariante enxerga entrada de diário SEM linha de contador (dia e loja-mês), esperado x real com ausente = 0', async () => {
+    await inTx(async () => {
+      const campaign = await newCampaign();
+      await entry(campaign, 'reserve', 800, 'r1-day');
+      await client.query(`UPDATE campaigns SET budget_reserved_cents = 800 WHERE id = $1`, [campaign]); // o contador da campanha existe; a linha do DIA não (o serviço esqueceu)
+      await reservation(campaign);
+      await client.query(`UPDATE campaigns SET uses_reserved = 1 WHERE id = $1`, [campaign]);
+      expect((await violations(campaign)).map((r) => `${r.scope.startsWith('day:') ? 'day' : r.scope}:${r.counter}:${r.expected}:${r.actual}`)).toEqual(['day:reserved_cents:800:0']);
+      const store = await newCampaign({ funding_source: `'store'`, store_share_pct: '100', budget_total_cents: 'null', budget_daily_cents: 'null', max_uses: '10' });
+      await entry(store, 'reserve', 500, 'r1-month', 'store');
+      await reservation(store, { webag_cents: '0', store_cents: '500' });
+      await client.query(`UPDATE campaigns SET uses_reserved = 1 WHERE id = $1`, [store]);
+      expect((await violations(store)).map((r) => `${r.scope.startsWith('store_month:') ? 'month' : r.scope}:${r.counter}:${r.expected}:${r.actual}`)).toEqual(['campaign:reservations_store_reserved:500:0', 'month:reserved_cents:500:0']);
+    });
+  });
+
+  it('SEC-229: campanha "Loja paga" não aceita gasto da Webag, entrada de loja exige a loja, e o mês é o do dia', async () => {
+    await inTx(async () => {
+      const store = await newCampaign({ funding_source: `'store'`, store_share_pct: '100', budget_total_cents: 'null', budget_daily_cents: 'null', max_uses: '10' });
+      expect(await failsWith(`UPDATE campaigns SET budget_reserved_cents = 800 WHERE id = $1`, [store])).toBe(CHECK);
+      expect(await failsWith(`UPDATE campaigns SET budget_spent_cents = 800 WHERE id = $1`, [store])).toBe(CHECK);
+      const ins = (store_id: string, month: string) => `INSERT INTO campaign_budget_entries (campaign_id, kind, funder, amount_cents, day, month, dedupe_key, store_id) VALUES ('${store}', 'reserve', 'store', 100, current_date, ${month}, '${randomUUID()}', ${store_id})`;
+      expect(await failsWith(ins('null', `date_trunc('month', current_date)`))).toBe(CHECK);
+      expect(await failsWith(ins(`'${storeId}'`, `current_date + 40`))).toBe(CHECK); // mês de outro dia
+      expect(await failsWith(ins(`'${storeId}'`, `date_trunc('month', current_date)`))).toBe('ok');
+      expect(await failsWith(`INSERT INTO campaign_store_months (campaign_id, store_id, month, limit_cents) VALUES ('${store}', '${storeId}', (date_trunc('month', current_date) + interval '1 day')::date, 1000)`)).toBe(CHECK); // o mês da loja é sempre o dia 1
+    });
+  });
+
+  it('R4: `orders` tem índice em `updated_at` e em `paid_at` (o job de agregação não varre a tabela)', async () => {
+    const { rows } = await client.query<{ indexname: string }>(`SELECT indexname FROM pg_indexes WHERE tablename = 'orders' AND indexname IN ('orders_updated_idx', 'orders_paid_idx')`);
+    expect(rows.map((r) => r.indexname).sort()).toEqual(['orders_paid_idx', 'orders_updated_idx']);
   });
 });
 
@@ -405,6 +447,43 @@ describe('R2.1: painéis, histórico de preço, código de barras e porta falsa'
       expect(await failsWith(sql, ['answered', '80_plus', 'x'.repeat(201)])).not.toBe('ok');
       const latest = await client.query<{ price_band: string }>(`SELECT DISTINCT ON (store_id) price_band FROM analytics_interest_events WHERE store_id = $1 AND kind = 'answered' ORDER BY store_id, created_at DESC, id DESC`, [storeId]);
       expect(latest.rows[0]!.price_band).toBe('would_not_pay');
+    });
+  });
+});
+
+describe('R2.1 (correções da revisão): visibilidade, posse do convite e histórico de preço', () => {
+  it('R2: `visibility` e `code_origin` só aceitam os valores do enum (o que esconde o código privado também é CHECK)', async () => {
+    await inTx(async () => {
+      const base = (visibility: string, origin: string, code: string) => `INSERT INTO coupons (code, kind, scope, value, starts_at, ends_at, visibility, code_origin) VALUES ('${code}', 'fixed', 'platform', 800, now(), now() + interval '1 day', '${visibility}', '${origin}')`;
+      expect(await failsWith(base('zzz', 'generated', 'ABCDEFGHIJ'))).toBe(CHECK);
+      expect(await failsWith(base('public', 'zzz', 'ABCDEFGHIK'))).toBe(CHECK);
+      expect(await failsWith(base('private', 'generated', 'ABCDEFGHIL'))).toBe('ok');
+    });
+  });
+
+  it('SEC-227: o aceite de uma loja não pode citar o convite de OUTRA loja nem de outra campanha (FK composta)', async () => {
+    await inTx(async () => {
+      const otherOwner = (await client.query<{ id: string }>(`INSERT INTO users (email, name) VALUES ($1, 'R2 outra loja') RETURNING id`, [`r2-other-${randomUUID()}@example.invalid`])).rows[0]!.id;
+      const other = (await client.query<{ id: string }>(`INSERT INTO stores (owner_user_id, document_type, document_number) VALUES ($1, 'cpf', '11111111111') RETURNING id`, [otherOwner])).rows[0]!.id;
+      const campaign = await newCampaign({ funding_source: `'split'`, store_share_pct: '40', kind: `'percent'`, value: '10', percent_cap_cents: '500' });
+      const otherCampaign = await newCampaign({ funding_source: `'split'`, store_share_pct: '40', kind: `'percent'`, value: '10', percent_cap_cents: '500' });
+      const enrollment = (await client.query<{ id: string }>(`INSERT INTO campaign_store_enrollments (campaign_id, store_id, expires_at) VALUES ($1, $2, now() + interval '7 days') RETURNING id`, [campaign, other])).rows[0]!.id;
+      const accept = (store: string, camp: string) =>
+        `INSERT INTO campaign_acceptances (campaign_id, store_id, enrollment_id, user_id, action, store_share_pct, terms_version, terms_hash, monthly_cap_cents) VALUES ('${camp}', '${store}', '${enrollment}', '${userId}', 'accept', 40, 'v1', '${hex('a')}', 15000)`;
+      expect(await failsWith(accept(storeId, campaign))).toBe('23503'); // loja A com o convite da loja B
+      expect(await failsWith(accept(other, otherCampaign))).toBe('23503'); // a loja certa, mas outra campanha
+      expect(await failsWith(accept(other, campaign))).toBe('ok');
+    });
+  });
+
+  it('SEC-230: o histórico de preço só aceita fechar o intervalo; o papel da API não apaga reservas nem histórico', async () => {
+    await inTx(async () => {
+      const product = (await client.query<{ id: string }>(`INSERT INTO products (store_id, name, status, base_price_cents) VALUES ($1, 'Produto SEC-230', 'active', 5000) RETURNING id`, [storeId])).rows[0]!.id;
+      await client.query(`INSERT INTO product_price_history (product_id, kind, price_cents, actor_kind) VALUES ($1, 'base', 5000, 'merchant')`, [product]);
+      expect(await failsWith(`UPDATE product_price_history SET started_at = started_at - interval '40 days' WHERE product_id = $1`, [product])).toBe(RESTRICT); // "comprovar" 30 dias
+      expect(await failsWith(`UPDATE product_price_history SET price_cents = 1 WHERE product_id = $1`, [product])).toBe(RESTRICT);
+      expect(await failsWith(`UPDATE product_price_history SET ended_at = now() WHERE product_id = $1`, [product])).toBe('ok');
+      expect(await failsWith(`UPDATE product_price_history SET ended_at = now() + interval '1 day' WHERE product_id = $1`, [product])).toBe(RESTRICT); // já fechado: não reabre nem muda
     });
   });
 });

@@ -172,9 +172,9 @@ Parâmetros novos (`parameters.definitions.ts`, auditados): `rascunhos_max_por_l
 
 **Versão (`version`) e limites sob concorrência (I2, I3).** `version` sobe por incremento explícito `version = version + 1` num único helper do repositório de catálogo, chamado só pelas edições de catálogo (lojista e admin); sem gatilho de banco. Reserva, venda, devolução, moderação e o sweep de validade NÃO sobem. O teto de rascunhos é contado sob `SELECT ... FROM stores WHERE id = :id FOR UPDATE` (ou `pg_advisory_xact_lock`) em `createProduct`, `createProductDraft`, lote, `duplicateProduct` e `createAdminProductDraft`.
 
-## v1.1 R2 (migrações 0064 e 0065, ADR-019; só schema, o motor é da R2.2 e R2.3)
+## v1.1 R2 (migrações 0064, 0065 e 0066, ADR-019; schema da R2.1 e o motor da R2.2, `modules/campaigns`)
 
-Contrato: `openapi.yaml` 0.5.0. Escritas com `drizzle/down/` testadas por `migrations-down.e2e-spec.ts` (sobe, desce 0065 a 0058, sobe) e regras do banco por `r2-campaigns-schema.e2e-spec.ts`. Convenções: dinheiro em centavos `integer`; `text({ enum })` do Drizzle é só TypeScript, então os enums de dinheiro e segurança também são CHECK (`platform/database/enum-check.ts`).
+Contrato: `openapi.yaml` 0.5.0. Escritas com `drizzle/down/` testadas por `migrations-down.e2e-spec.ts` (sobe, desce 0066 a 0058, sobe) e regras do banco por `r2-campaigns-schema.e2e-spec.ts`. Convenções: dinheiro em centavos `integer`; `text({ enum })` do Drizzle é só TypeScript, então os enums de dinheiro e segurança também são CHECK (`platform/database/enum-check.ts`).
 
 ### 0064 `r2_campaigns` (módulo `campaigns`; colunas em `coupons` e `orders`)
 | Tabela | Conteúdo | Garantias no banco |
@@ -206,6 +206,19 @@ O razão financeiro (`ledger_*`) NÃO recebe lançamento da campanha (o desconto
 | `product_barcodes` | Código de barras por variação, único por loja | Único `(store_id, barcode)`; formato 8 ou 12 a 14 dígitos |
 | `reference_barcodes` | Catálogo de referência próprio (nome, marca, categoria; sem foto) | Formato; origem moderada ou admin |
 | `analytics_interest_events` | Porta falsa: LOG por loja (toque e respostas com a faixa de exemplo; texto de até 200 caracteres); vale a última resposta | Toque sem faixa nem texto; resposta com faixa; 5 faixas de exemplo |
+
+### 0066 `r2_review_fixes` (correções das revisões do tech-lead e do security, 2026-11-23)
+| Mudança | Para quê | Garantia |
+|---|---|---|
+| `campaign_budget_violations()` bidirecional (`FULL JOIN` do diário com os contadores de dia e de loja-mês; confere também reservas x contadores) | R1, SEC-229: entrada no diário sem linha de contador (o serviço "esqueceu") aparece, esperado x real, ausente = 0 | teste: apagar a linha do dia = violação |
+| `campaign_budget_entries`: `funder = store` exige `store_id`; `month` = primeiro dia do mês de `day` (também em `coupon_reservations` e `campaign_store_months`) | R1 | CHECK |
+| `campaigns_store_funded_no_webag_budget` | SEC-229: "Loja paga" nunca gasta orçamento da Webag | CHECK |
+| `coupons.visibility` e `coupons.code_origin` com CHECK de enum | R2 | CHECK |
+| `campaign_store_enrollments_scope_uq (id, store_id, campaign_id)` e FK composta em `campaign_acceptances` | SEC-227: o aceite de uma loja não cita o convite de outra | FK 23503 |
+| `orders_updated_idx (updated_at)` e `orders_paid_idx (paid_at) WHERE paid_at IS NOT NULL` | R4: o job de agregação (R2.3) não varre `orders` | índice |
+| Gatilho `product_price_history_close_only` (só `ended_at` de nulo para valor) e `REVOKE DELETE, TRUNCATE` em `coupon_reservations` e `product_price_history` (`NO_DELETE_TABLES` em `app-grants.ts`) | SEC-230, S6 | gatilho e privilégio |
+
+**Posse (B2):** `coupons` e `coupon_redemptions` são do módulo `campaigns` (a definição Drizzle está em `campaigns/db/schema.ts`; as tabelas são as da 0004, nada migra). Privacidade: `coupon_fraud_claims` e `coupon_identifier_sightings` entram no `PRIVACY_MAP` (SEC-231).
 
 ## Mapa das migrações (0000 a 0053)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.

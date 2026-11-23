@@ -1,7 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { bigserial, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
-import { campaigns } from '../../campaigns/db/schema.js';
-import { coupons } from '../../cart/db/schema.js';
+import { campaigns, coupons } from '../../campaigns/db/schema.js';
 import { products, productVariants } from '../../catalog/db/schema.js';
 import { users } from '../../identity/db/schema.js';
 import { paymentAttempts } from '../../payments/db/schema.js';
@@ -98,6 +97,9 @@ export const orders = pgTable(
     index('orders_user_idx').on(t.userId, t.createdAt.desc(), t.id.desc()),
     index('orders_store_idx').on(t.storeId, t.status, t.createdAt.desc()),
     index('orders_campaign_idx').on(t.campaignId, t.paidAt).where(sql`${t.campaignId} is not null`),
+    // R4 (review R2.1): o job de agregação dos painéis (R2.3) lê pelos pedidos que mudaram (`updated_at`) e pelo dia do PAGAMENTO; sem os índices seria varredura completa por hora.
+    index('orders_updated_idx').on(t.updatedAt),
+    index('orders_paid_idx').on(t.paidAt).where(sql`${t.paidAt} is not null`),
     index('orders_payment_expiry_idx').on(t.paymentExpiresAt).where(sql`${t.status} = 'awaiting_payment'`),
     index('orders_accept_deadline_idx').on(t.acceptDeadlineAt).where(sql`${t.status} = 'received'`),
     check('orders_money_chk', sql`${t.subtotalCents} >= 0 and ${t.deliveryFeeCents} >= 0 and ${t.serviceFeeCents} >= 0 and ${t.discountCents} >= 0 and ${t.totalCents} >= 0 and ${t.commissionCents} >= 0 and ${t.applicationFeeCents} >= 0`),

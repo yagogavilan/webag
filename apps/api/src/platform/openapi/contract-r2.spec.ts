@@ -25,7 +25,9 @@ const all: Op[] = Object.entries(contract.paths as Json).flatMap(([path, item]) 
 );
 /** Operações da R2 já IMPLEMENTADAS (a marca `x-planned` saiu). Vazio na R2.1: só contrato, ADR e migrações. */
 const R2_IMPLEMENTED = new Set<string>();
-const r2 = all.filter((o) => o.op['x-planned'] === 'v1.1 R2' || R2_IMPLEMENTED.has(o.op.operationId as string));
+/** S2 (review R2.1, DEC-138): o funil depende da R1.4 (coleta), sai da R2 (`x-planned: v1.1 R1.4`), mas segue valendo as regras de segurança e de papel deste arquivo. */
+const R1_4_DEPENDENT = new Set(['getAdminAnalyticsFunnel']);
+const r2 = all.filter((o) => o.op['x-planned'] === 'v1.1 R2' || R2_IMPLEMENTED.has(o.op.operationId as string) || R1_4_DEPENDENT.has(o.op.operationId as string));
 const byId = (id: string): Op => {
   const found = r2.find((o) => o.op.operationId === id);
   expect(found, id).toBeDefined();
@@ -79,7 +81,7 @@ const R2_SCHEMA_NAMES = Object.keys(schemas).filter((n) => /^(Campaign|Coupon|Ac
 describe('contrato OpenAPI da v1.1 R2', () => {
   it('a versão do contrato subiu e há operações da R2, todas com id, resumo, descrição e autenticação', () => {
     expect(contract.info.version).toBe('0.5.0');
-    expect(r2.length).toBe(37);
+    expect(r2.length).toBe(37); // 36 da R2 + o funil, que espera a R1.4
     for (const { key, op } of r2) {
       expect(op.operationId, key).toBeTruthy();
       expect(op.summary, key).toBeTruthy();

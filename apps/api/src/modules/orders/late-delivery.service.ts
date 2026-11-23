@@ -6,7 +6,7 @@ import { capOldest } from '../../platform/bounded.js';
 import { DRIZZLE, type Db, type Tx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AuditService, ParametersService } from '../admin/index.js';
-import { coupons } from '../cart/db/schema.js';
+import { coupons } from '../campaigns/db/schema.js';
 import { deliveryEvents, DeliveriesService, type Delivery, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
 import { PaymentsService } from '../payments/index.js';
 import { orderCancelRequests, orders } from './db/schema.js';

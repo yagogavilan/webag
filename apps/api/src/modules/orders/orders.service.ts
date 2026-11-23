@@ -9,7 +9,8 @@ import { safeErrorMessage } from '../../platform/logging/mask.js';
 import { presentAddress } from '../addresses/index.js';
 import { AuditService, FeatureFlagsService, MaintenanceService, ParametersService } from '../admin/index.js';
 import { CartService } from '../cart/index.js';
-import { carts, cartItems, couponRedemptions, coupons } from '../cart/db/schema.js';
+import { carts, cartItems } from '../cart/db/schema.js';
+import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // TODO(R2.2): sai quando `campaigns/index.ts` for a porta de reserva (DT-108)
 import { InventoryService } from '../catalog/index.js';
 import { ExposureLimitService } from '../stores/index.js';
 import { couriers, DeliveriesService, type Delivery, type DeliveryActor, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';

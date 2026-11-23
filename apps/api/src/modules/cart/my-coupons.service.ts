@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Db } from '../../platform/database/database.module.js';
 import { decodeCursor, encodeCursor, parseLimit, timestampCursorBefore, timestampOrderDesc, type Page } from '../../platform/http/pagination.js';
-import { couponRedemptions, coupons } from './db/schema.js';
+import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // TODO(R2.2): `listMyCoupons` passa a ser da porta de `campaigns` (DT-108)
 
 export const MY_COUPON_STATUSES = ['available', 'used', 'expired', 'all'] as const;
 export type MyCouponStatus = (typeof MY_COUPON_STATUSES)[number];

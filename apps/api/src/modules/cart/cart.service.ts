@@ -13,7 +13,8 @@ import { MediaService } from '../media/index.js';
 import { mediaAssets } from '../media/db/schema.js';
 import { stores, storeSettings } from '../stores/db/schema.js';
 import { ExposureLimitService, hoursToday, isOpen, nextOpening, StoreSettingsService, type OpeningInput } from '../stores/index.js';
-import { cartItems, carts, couponRedemptions, coupons } from './db/schema.js';
+import { cartItems, carts } from './db/schema.js';
+import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // TODO(R2.2): sai quando a avaliação do cupom for a porta `campaigns/index.ts` (DT-108)
 import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
 import { serviceFeeCents, summarize } from './domain/pricing.js';
 import { computeEta, DeliveryFeesService, presentEta, type DeliveryFeeSnapshot, type EtaEstimate, type EtaView } from '../logistics/index.js';

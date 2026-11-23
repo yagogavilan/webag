@@ -6372,11 +6372,15 @@ paths:
 
         **Pagamento:** PIX devolve `payment.pix` (copia e cola, QR e validade). Cartão exige `card.token` gerado pelo checkout/Brick do Mercado Pago no aparelho; o servidor nunca recebe nem guarda número de cartão. O status só muda por webhook assinado do provedor (não há rota para 'confirmar' pagamento). O estado inicial é `awaiting_payment`; vira `received` quando o pagamento é aprovado.
 
-        **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado e nenhum pedido ficou aberto.
+        **Erros 409:** `CART_CHANGED`, `ETA_CHANGED` (WB-261: com `eta {fromAt,toAt}`, a faixa nova; só quando o fim piorou em relação a `acceptedEtaToAt`), `STORE_CLOSED` (com `opensAt`), `STOCK_CONFLICT` (a última unidade foi de outro cliente: 'Acabou o estoque de X'), `IDEMPOTENCY_KEY_REUSED`. **422:** `EMPTY_CART`, `ITEM_UNAVAILABLE`, `BELOW_MINIMUM`, `OUT_OF_RANGE`, `LOGISTICS_CLOSED` (BUG-016/021: fora do horário da logística, pausada ou com o FIM da faixa de chegada depois do fechamento, RN-19 item 2; só retirada), `ADDRESS_REQUIRED`, `PICKUP_UNAVAILABLE`, `ABOVE_MAX_ORDER`, `NEW_STORE_LIMIT` (loja nova: pedido acima do teto, WB-225), `EMAIL_UNVERIFIED` (se a flag `confirmacao_email_bloqueia_compra` estiver ligada), `PAYER_DOCUMENT_REQUIRED`, `PAYMENT_DECLINED` (cartão recusado: o pedido fica `expired` e o estoque volta). **429** `TOO_MANY_PENDING_ORDERS` (2 pedidos aguardando pagamento por conta) e `TOO_MANY_PIX_ORDERS` (5 PIX por hora; SEC-131), com `Retry-After`. **503** `PAYMENT_PROVIDER_UNAVAILABLE` ou `SERVICE_BUSY` (v1.1 R2): nada foi cobrado e nenhum pedido ficou aberto.
 
         SEC-170: cupom de primeira compra é reconferido ao criar o pedido, sob a trava do cupom, com CEP + número (sem complemento), telefone, aparelho, `payerDocument` (guardado só como HMAC) e pedidos ainda não pagos de outras contas: 422 `COUPON_FIRST_PURCHASE_ONLY`.
 
         **v1.1 R2 (ADR-019 D4, D6, D7):** a primeira compra passa a ser travada POR IDENTIFICADOR (HMAC de conta, aparelho, endereço normalizado e documento do pagador, `pg_advisory_xact_lock` em ordem fixa), valendo ENTRE campanhas; o celular não é identificador. Com cupom de campanha, o desconto é composto no servidor (`desconto_loja` + `desconto_webag`, RN-C2) e o **orçamento é reservado na MESMA transação do pedido**, sob a trava da linha da campanha (e da adesão da loja quando há parte da loja): orçamento total, do dia (America/Sao_Paulo), usos, teto mensal da loja, estado `active` e aceite são reconferidos ali, sem confiar na cotação nem no cache (C-CUP-02, C-CUP-10). Campanha pausada entre a cotação e o pedido (C-CUP-10): o pedido NUNCA sai com o cupom; como o total muda e `expectedTotalCents` é obrigatório, a criação responde 409 `CART_CHANGED` com `DISCOUNT_CHANGED` (nada reservado, nada cobrado) e o pedido sem cupom só nasce depois de o cliente ver o total novo. Sem saldo de orçamento, de usos ou do teto da loja: o mesmo 409 `CART_CHANGED` com `DISCOUNT_CHANGED`. O corpo continua sem desconto, fonte ou campanha (422 `FIELD_NOT_EDITABLE`). A reserva vira gasto ao pagamento aprovado e volta ao expirar, cancelar ou estornar (parcial: proporcional, RN-08), uma única vez.
+
+        **Ordem global de travas (R2, B1, ADR-019 D4):** a MESMA ordem vale para criar, fechar (expirar, cancelar, recusar, estornar) e confirmar o pagamento: linha do pedido (quando existe) -> advisory por HMAC -> estoque por id -> campanha -> adesão da loja -> linhas de dia e mês -> reserva e diário. Na criação a trava da campanha vem DEPOIS de reservar o estoque e de gravar o pedido (a posse dela é curta). O desconto final é recalculado DENTRO da transação, depois da trava, com a função pura (tetos RN-09 e do autofinanciado, total mínimo) e comparado com `expectedTotalCents`: diferença = 409 `CART_CHANGED` com `DISCOUNT_CHANGED` (R11). `lock_timeout` de 3 s: `55P03` vira **503 `SERVICE_BUSY` com `Retry-After`** (nada reservado, nada cobrado).
+
+        **Antifraude (R2, SEC-225, SEC-226, SEC-228):** o endereço é CEP + número normalizados, **sem o complemento** (complemento diferente na mesma casa não vira outro identificador); o aparelho são TODOS os `device_id` das sessões da conta nos últimos 30 dias, mais o do cabeçalho `X-Device-Id`; a conta tem identificador próprio por **e-mail normalizado** (minúsculo; Gmail/Googlemail sem pontos e sem `+tag`; demais provedores sem `+tag`), além do id. O pedido PAGO antes da R2 não tem registro de antifraude: a checagem de primeira compra do v1.0 (conta, telefone, aparelho, endereço e documento sobre os pedidos pagos) continua valendo como conferência adicional por 12 meses depois do deploy da R2.2. `payerDocument` é o CPF DIGITADO no app (fraco: o provedor não o devolve de forma confiável no Pix `[HIPÓTESE: confirmar no Mercado Pago]`); a trava dele é só uma barreira, e o orçamento segue o controle principal. Pedido com cupom que expira sem pagamento CONTA como sinal (3 cancelamentos ou expirações em 7 dias: o 4º pedido sai sem cupom) e no máximo 1 reserva viva (`reserved`) por aparelho em cada campanha.
       parameters:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 80 } }
       requestBody:
@@ -6411,7 +6415,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '503':
-          description: "`PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado; tentar de novo com a mesma `Idempotency-Key`. `MAINTENANCE` (WB-121): a plataforma está em manutenção e não aceita pedido NOVO; `detail` é a mensagem para mostrar, `expectedBackAt` a previsão (pode ser nula) e `Retry-After` vem em segundos. Nada foi criado nem cobrado; pedido já criado segue normalmente"
+          description: "`PAYMENT_PROVIDER_UNAVAILABLE`: nada foi cobrado; tentar de novo com a mesma `Idempotency-Key`. `SERVICE_BUSY` (v1.1 R2, B1/R5): a trava da campanha ou do estoque não liberou em 3 s (`lock_timeout`, `55P03`); nada reservado, nada cobrado; repetir com a mesma chave depois de `Retry-After`. `MAINTENANCE` (WB-121): a plataforma está em manutenção e não aceita pedido NOVO; `detail` é a mensagem para mostrar, `expectedBackAt` a previsão (pode ser nula) e `Retry-After` vem em segundos. Nada foi criado nem cobrado; pedido já criado segue normalmente"
           headers:
             Retry-After:
               schema: { type: integer }
@@ -10124,7 +10128,9 @@ paths:
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar rascunho ou campanha agendada (WB-340 C7)
-      description: "Só em `draft` ou `scheduled`. Campanha `active` ou `paused` NÃO muda de regra (nem orçamento): encerrar e duplicar (ADR-019 D3), para o que o cliente viu e o que a loja aceitou continuarem valendo; tentativa: 409 `CAMPAIGN_IMMUTABLE`. `ended` não reabre (409). Confere `expectedVersion` (409 `CAMPAIGN_VERSION_CONFLICT` com a versão atual). Mesmas validações da criação. Alterar uma campanha `scheduled` com convites aceitos zera os aceites (a regra mudou; o lojista aceita de novo). `reason` obrigatório; antes e depois no `audit_log`."
+      description: "Só em `draft` ou `scheduled`. Campanha `active` ou `paused` NÃO muda de regra (nem orçamento): encerrar e duplicar (ADR-019 D3), para o que o cliente viu e o que a loja aceitou continuarem valendo; tentativa: 409 `CAMPAIGN_IMMUTABLE`. `ended` não reabre (409). Confere `expectedVersion` (409 `CAMPAIGN_VERSION_CONFLICT` com a versão atual). Mesmas validações da criação. **SEC-224: editar uma campanha `scheduled` a DEVOLVE a `draft`** (a resposta traz `state: draft`; zera `activatedBy`, `activatedAt` e `lossRiskAckBy`, soma 1 à `version` e zera os aceites das lojas, a regra mudou): quem ativou (`coupons:activate`, com reautenticação quando há custo da Webag) precisa ativar de novo; a operação (`coupons:write`) nunca muda regra de uma campanha que já tinha sido ativada por outra pessoa e entra no ar sozinha. `reason` obrigatório; antes e depois no `audit_log`. `Idempotency-Key` opcional (R9): a MESMA chave devolve o resultado guardado, em vez de 409 `CAMPAIGN_VERSION_CONFLICT` por uma edição que já deu certo (3G)."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
         content:
@@ -10152,7 +10158,7 @@ paths:
       x-admin-permission: 'coupons:activate'
       x-admin-profiles: [super_admin, finance]
       summary: Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
-      description: "Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto \"Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações\"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22; `STORE_SHARE_DISABLED` em fonte `store` ou `split` com a flag `campanha_parte_da_loja` desligada, J27). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. \"Webag paga\" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` (\"pode gerar prejuízo por pedido\"). DEC-137: não existe flag-mestra; cada parecer jurídico liga só a sua função (`campanha_frete_gratis` J22, `campanha_parte_da_loja` J27; o selo \"de/por\", `selo_de_por` J23); o dinheiro da Webag é contido pelo orçamento mensal global (F2, R$ 0). `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois."
+      description: "Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto \"Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações\"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22; `STORE_SHARE_DISABLED` em fonte `store` ou `split` com a flag `campanha_parte_da_loja` desligada, J27). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. \"Webag paga\" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` (\"pode gerar prejuízo por pedido\"). DEC-137: não existe flag-mestra; cada parecer jurídico liga só a sua função (`campanha_frete_gratis` J22, `campanha_parte_da_loja` J27; o selo \"de/por\", `selo_de_por` J23); o dinheiro da Webag é contido pelo orçamento mensal global (F2, R$ 0). `startsAt` futuro vira `scheduled`; **a varredura de 1 minuto que liga `scheduled -> active` REPETE as mesmas conferências** (inclusive o orçamento mensal global do mês em que a campanha entra no ar, as flags J22/J27 e o aceite da loja, sob a trava da campanha e do orçamento global): se alguma falhar a campanha continua `scheduled`, abre o alerta `activation_blocked` em `listCampaignAlerts` e nada é gasto (SEC-224, Q1). `reason` obrigatório; `audit_log` com autor, antes e depois. **Blockers adicionais:** `PERCENT_CAP_REQUIRED` também no `self_funded` quando o percentual `p` é maior que `autofin_teto_pct x comissão%` (o desconto cresce mais rápido que a margem e o \"Faltam R$ X\" nunca se resolve, R12)."
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
@@ -10320,7 +10326,7 @@ paths:
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Convidar lojas para campanha com parte da loja (WB-343 C1, C8)
-      description: "Só campanha `webag`-owner com fonte `store` ou `split`, em `draft`, `scheduled` ou `active`. Convite por painel e e-mail do lojista (fila de e-mail existente); validade de 7 dias (`campanha_convite_validade_dias`). **O admin só convida; nunca registra aceite em nome da loja** (C-CUP-07): não existe rota de admin que aceite, e o aceite exige membro da loja com permissão `coupons` (`acceptCampaignInvite`). Nunca existe aceite automático nem \"padrão para novas campanhas\" (RN-C5). Até 50 lojas por chamada; loja já convidada é ignorada (`alreadyInvited`). `Idempotency-Key` obrigatória."
+      description: "Só campanha `webag`-owner com fonte `store` ou `split`, em `draft`, `scheduled` ou `active`. Convite por painel e e-mail do lojista (fila de e-mail existente); validade de 7 dias (`campanha_convite_validade_dias`). **O admin só convida; nunca registra aceite em nome da loja** (C-CUP-07): não existe rota de admin que aceite, e o aceite exige membro da loja com permissão `coupons` (`acceptCampaignInvite`). Nunca existe aceite automático nem \"padrão para novas campanhas\" (RN-C5). Até 50 lojas por chamada e **no máximo 100 lojas convidadas por campanha** (acima: 422 `INVITE_LIMIT_REACHED`; o relatório `byStore` cabe em 100 linhas sem truncar, S3); loja já convidada é ignorada (`alreadyInvited`). **Posse (SEC-227):** as lojas vêm do corpo, mas a campanha vem da rota e tem de ser da Webag (`owner: webag`); loja inexistente ou inativa: 422. `Idempotency-Key` obrigatória."
       parameters:
         - { $ref: '#/components/parameters/IdempotencyKeyRequired' }
       requestBody:
@@ -10585,7 +10591,7 @@ paths:
     get:
       tags: [admin-analytics]
       operationId: getAdminAnalyticsFunnel
-      x-planned: v1.1 R2
+      x-planned: v1.1 R1.4
       x-admin-permission: 'analytics:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Funil geral e por cidade (WB-362 C3, C5, C6, C7)
@@ -10630,7 +10636,9 @@ paths:
       operationId: recordAnalyticsInterest
       x-planned: v1.1 R2
       summary: "Porta falsa: \"Quero testar\" e a faixa de preço (WB-367 C1, C2, C4)"
-      description: "Permissão da loja `analises` (o dono ou o funcionário com essa permissão, nova entre as atribuíveis; WB-367 C6; funcionário sem ela: 403, não-membro 404). Cada loja tem UMA resposta vigente, a última (pode mudar de ideia); as anteriores ficam num log (`analytics_interest_events`) para o admin. `answer: clicked` registra o toque (`analytics_interest_clicked`); `answered` com `priceBand` grava a resposta. Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 200 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429)."
+      description: "Permissão da loja `analises` (o dono ou o funcionário com essa permissão, nova entre as atribuíveis; WB-367 C6; funcionário sem ela: 403, não-membro 404). Cada loja tem UMA resposta vigente, a última (pode mudar de ideia); as anteriores ficam num log (`analytics_interest_events`) para o admin. `answer: clicked` registra o toque (`analytics_interest_clicked`); `answered` com `priceBand` grava a resposta. Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 200 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429). `Idempotency-Key` opcional (R9): repetir a MESMA chave não duplica a contagem, e \"lojas que clicaram\" conta lojas distintas."
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
         content:
@@ -10649,7 +10657,7 @@ paths:
       operationId: lookupProductBarcode
       x-planned: v1.1 R2
       summary: Conferir código de barras na loja e na base de referência (WB-373 C3 a C7, C9)
-      description: "Permissão da loja `catalog`. O servidor confere o **dígito verificador** (EAN-8, UPC-A de 12, EAN-13 e GTIN-14; inválido: 422 `BARCODE_INVALID`, \"Código inválido: confira os números\") e responde: `inStore` (produto e variação da PRÓPRIA loja com esse código: \"Você já tem este produto\", com `productId` para \"Abrir\" e \"Aumentar estoque\", único por loja) e `reference` (nome, marca e categoria do **catálogo de referência próprio**, dado factual moderado: sem foto e sem descrição; sugestão editável). Código desconhecido: ambos nulos e o cadastro segue normal com o código guardado (C6). **Nenhuma chamada de rede sai do sistema**: a base externa é a flag `ean_base_externa`, desligada, e nenhum adaptador existe (C7, F9). Limite de 60 consultas por hora por loja (a 61ª: 429, C9). Resposta sem cache e sem o corpo do produto."
+      description: "Permissão da loja `catalog`. `inStore` só olha `product_barcodes.store_id = :storeId da rota` (a consulta nunca revela código de outra loja, SEC-227). O servidor confere o **dígito verificador** (EAN-8, UPC-A de 12, EAN-13 e GTIN-14; inválido: 422 `BARCODE_INVALID`, \"Código inválido: confira os números\") e responde: `inStore` (produto e variação da PRÓPRIA loja com esse código: \"Você já tem este produto\", com `productId` para \"Abrir\" e \"Aumentar estoque\", único por loja) e `reference` (nome, marca e categoria do **catálogo de referência próprio**, dado factual moderado: sem foto e sem descrição; sugestão editável). Código desconhecido: ambos nulos e o cadastro segue normal com o código guardado (C6). **Nenhuma chamada de rede sai do sistema**: a base externa é a flag `ean_base_externa`, desligada, e nenhum adaptador existe (C7, F9). Limite de 60 consultas por hora por loja (a 61ª: 429, C9). Resposta sem cache e sem o corpo do produto."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: barcode, in: path, required: true, schema: { type: string, pattern: '^[0-9]{8}$|^[0-9]{12,14}$' } }
@@ -10670,7 +10678,7 @@ paths:
       operationId: getPromotionEligibility
       x-planned: v1.1 R2
       summary: "O selo \"de/por\" aparece para este produto? (WB-348 C1, C3)"
-      description: "Permissão da loja `catalog`. O preço \"de\" e o percentual só aparecem ao cliente se o preço \"de\" foi **praticado de fato por 30 dias seguidos nos últimos 60** (RN-C8, `[HIPÓTESE; J23]`), sem promoção cobrindo o período; senão a vitrine mostra só o preço atual. Aqui o lojista vê ANTES de publicar a promoção: `eligible: false` com `reasonCode: NO_REFERENCE_HISTORY` e o texto \"Seu desconto só aparece depois de 30 dias de preço anterior.\" e `eligibleFrom` (data em que passa a valer); `eligible: true` com o preço de referência e desde quando. A promoção PODE ser salva sem selo (vale o preço atual); o servidor é quem decide o selo na vitrine (`originalPrice` e `discountPercent` de `ProductCard`, `BrowseProduct` e `ProductVariant` vêm nulos quando não comprovado; antes vinham sempre que havia promoção). Histórico em `product_price_history` (preço, data, autor); anterior à v1.1 não existe: ninguém comprova o selo nos primeiros 30 dias."
+      description: "Permissão da loja `catalog`. `productId` e `variantId` são buscados pela loja da rota (mesmo helper `getOwned*` do catálogo): produto ou variação de outra loja responde 404 (SEC-227). O preço \"de\" e o percentual só aparecem ao cliente se o preço \"de\" foi **praticado de fato por 30 dias seguidos nos últimos 60** (RN-C8, `[HIPÓTESE; J23]`), sem promoção cobrindo o período; senão a vitrine mostra só o preço atual. Aqui o lojista vê ANTES de publicar a promoção: `eligible: false` com `reasonCode: NO_REFERENCE_HISTORY` e o texto \"Seu desconto só aparece depois de 30 dias de preço anterior.\" e `eligibleFrom` (data em que passa a valer); `eligible: true` com o preço de referência e desde quando. A promoção PODE ser salva sem selo (vale o preço atual); o servidor é quem decide o selo na vitrine (`originalPrice` e `discountPercent` de `ProductCard`, `BrowseProduct` e `ProductVariant` vêm nulos quando não comprovado; antes vinham sempre que havia promoção). Histórico em `product_price_history` (preço, data, autor); anterior à v1.1 não existe: ninguém comprova o selo nos primeiros 30 dias."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { $ref: '#/components/parameters/ProductIdPath' }
@@ -10711,7 +10719,7 @@ paths:
       operationId: acceptCampaignInvite
       x-planned: v1.1 R2
       summary: Aceitar o custo da campanha com teto próprio (WB-343 C1, C3, C8)
-      description: "Permissão da loja `coupons`; **a loja vem da rota e da membership, nunca do corpo** (C-CUP-07): admin (qualquer perfil, inclusive por \"Ver como\"), funcionário sem `coupons` e membro de outra loja recebem 403 ou 404 e NADA é gravado. Corpo: `termsVersion` e `termsHash` do texto mostrado, `monthlyCapCents` (teto da loja, R$ 1,00 ou mais) e `confirm: true` (a confirmação \"Você paga 40% de cada desconto, até R$ 150,00 por mês\"). Versão ou hash diferentes dos vigentes: 409 `TERMS_VERSION_MISMATCH` com os atuais (o lojista relê). Grava, em `campaign_acceptances` (append-only): usuário, hora, versão, hash, teto e a parte da loja do momento (C3). Convite vencido: 410 `INVITE_EXPIRED`; já respondido: 409 `INVITE_NOT_PENDING`. Campanha encerrada: 409 `CAMPAIGN_STATE_INVALID`. Sem aceite NÃO há desconto naquela loja (C1). `Idempotency-Key` obrigatória (aceite em 3G não duplica)."
+      description: "Permissão da loja `coupons`; **a loja vem da rota e da membership, nunca do corpo** (C-CUP-07): admin (qualquer perfil, inclusive por \"Ver como\"), funcionário sem `coupons` e membro de outra loja recebem 403 ou 404 e NADA é gravado. **Posse (SEC-227):** o convite é buscado por `id = :enrollmentId AND store_id = :storeId da rota`; `enrollmentId` de OUTRA loja responde 404 (igual a inexistente) e nada é gravado; o banco também recusa (chave única `(id, store_id, campaign_id)` e FK composta em `campaign_acceptances`). Corpo: `termsVersion` e `termsHash` do texto mostrado, `monthlyCapCents` (teto da loja, R$ 1,00 ou mais) e `confirm: true` (a confirmação \"Você paga 40% de cada desconto, até R$ 150,00 por mês\"). Versão ou hash diferentes dos vigentes: 409 `TERMS_VERSION_MISMATCH` com os atuais (o lojista relê). Grava, em `campaign_acceptances` (append-only): usuário, hora, versão, hash, teto e a parte da loja do momento (C3). Convite vencido: 410 `INVITE_EXPIRED`; já respondido: 409 `INVITE_NOT_PENDING`. Campanha encerrada: 409 `CAMPAIGN_STATE_INVALID`. Sem aceite NÃO há desconto naquela loja (C1). `Idempotency-Key` obrigatória (aceite em 3G não duplica)."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: enrollmentId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -10740,10 +10748,11 @@ paths:
       operationId: declineCampaignInvite
       x-planned: v1.1 R2
       summary: Recusar o convite
-      description: "Mesmas regras de acesso do aceite. Grava a recusa em `campaign_acceptances` (`action: decline`). Idempotente. A campanha não desconta nesta loja."
+      description: "Mesmas regras de acesso do aceite, inclusive a posse (SEC-227): o convite é buscado por `id = :enrollmentId AND store_id = :storeId da rota`; convite de outra loja: 404 e nada gravado. Grava a recusa em `campaign_acceptances` (`action: decline`). Idempotente; `Idempotency-Key` opcional (R9). A campanha não desconta nesta loja."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: enrollmentId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       responses:
         '200':
           description: Recusado
@@ -10761,10 +10770,11 @@ paths:
       operationId: leaveCampaign
       x-planned: v1.1 R2
       summary: Sair da campanha a qualquer momento (WB-343 C4)
-      description: "Mesmas regras de acesso do aceite. Vale para pedidos NOVOS: a criação do pedido reconfere o aceite sob a trava; pedidos já criados mantêm o desconto e as reservas (C4). Grava `action: leave`. Idempotente. Saída não é multa nem pendência."
+      description: "Mesmas regras de acesso do aceite. Vale para pedidos NOVOS: a criação do pedido reconfere o aceite sob a trava; pedidos já criados mantêm o desconto e as reservas (C4). Grava `action: leave`. Idempotente; `Idempotency-Key` opcional (R9). A adesão é buscada por `(campaign_id, store_id da rota)`: campanha em que a loja da rota não tem adesão: 404 (SEC-227). Saída não é multa nem pendência."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: campaignId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       responses:
         '200':
           description: Saiu
@@ -10783,7 +10793,7 @@ paths:
       operationId: listStoreCoupons
       x-planned: v1.1 R2
       summary: Cupons próprios da loja (WB-346)
-      description: "Permissão da loja `coupons` (funcionário sem ela: 403, C3). Só os cupons da própria loja (`owner: store`, `loja_pct` 100). Cada um traz usos, quanto já gastou no mês contra o teto mensal e `pausedBy` (`merchant`, `admin`, `system`). Paginado."
+      description: "Permissão da loja `coupons` (funcionário sem ela: 403, C3). Só os cupons da própria loja (`campaigns.owner = store AND owner_store_id = :storeId da rota`, `loja_pct` 100). Cada um traz usos, quanto já gastou no mês contra o teto mensal e `pausedBy` (`merchant`, `admin`, `system`). Paginado."
       parameters:
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
@@ -10853,10 +10863,11 @@ paths:
       operationId: updateStoreCoupon
       x-planned: v1.1 R2
       summary: Pausar, retomar ou ajustar cupom próprio (WB-346 C5, C6)
-      description: "Permissão `coupons`. `active: false` pausa na hora; `active: true` retoma, exceto se `pausedBy: admin` (409 `PAUSED_BY_ADMIN`, C6) ou se o teto mensal acabou (a retomada só vale no mês seguinte ou com teto maior). Antes do 1º uso pode mudar valor, mínimo, validade e usos; **depois do 1º uso só pausa, retoma, encerra e sobe o teto mensal** (409 `COUPON_IN_USE`). O teto mensal atingido pausa o cupom sozinho (`pausedBy: system`) e avisa o lojista (C5). Os tetos de % e de mínimo da criação valem na edição. `expectedVersion` obrigatório."
+      description: "Permissão `coupons`. **Posse (SEC-227):** o cupom é buscado por `campaigns.owner_store_id = :storeId da rota` (nunca só por id): cupom de outra loja, ou de campanha da Webag, responde 404 e nada é gravado. `active: false` pausa na hora; `active: true` retoma, exceto se `pausedBy: admin` (409 `PAUSED_BY_ADMIN`, C6) ou se o teto mensal acabou (a retomada só vale no mês seguinte ou com teto maior). **Exceção escrita à imutabilidade da campanha ativa (ADR-019 D3, R8), só para `owner: store`:** antes do 1º uso (`uses = 0`) pode mudar valor, mínimo, validade e usos; **depois do 1º uso só pausa, retoma, encerra e sobe o teto mensal** (409 `COUPON_IN_USE`); subir o teto atualiza a linha do mês corrente de `campaign_store_months` sob a trava da campanha (senão o contador antigo continua mandando). `Idempotency-Key` opcional (R9): a mesma chave devolve o resultado guardado, não 409 `CAMPAIGN_VERSION_CONFLICT`. O teto mensal atingido pausa o cupom sozinho (`pausedBy: system`) e avisa o lojista (C5). Os tetos de % e de mínimo da criação valem na edição. `expectedVersion` obrigatório."
       parameters:
         - { $ref: '#/components/parameters/StoreIdPath' }
         - { name: couponId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
         content:
@@ -14612,7 +14623,7 @@ components:
       additionalProperties: false
       required: [code]
       properties:
-        code: { type: string, minLength: 1, maxLength: 30 }
+        code: { type: string, minLength: 1, maxLength: 32, pattern: '^[A-Za-z0-9-]+$', description: "Letras, números e hífen, até 32 (R7); o servidor normaliza para maiúsculas. Código acima de 20 caracteres (o maior que existe, `coupons.code`) responde `COUPON_NOT_FOUND` SEM consulta ao banco." }
     MergeCartRequest:
       type: object
       additionalProperties: false
@@ -17702,8 +17713,8 @@ components:
     StoreCouponCreate:
       type: object
       additionalProperties: false
-      required: [kind, value, startsAt, endsAt, monthlyCapCents]
-      description: "Sem `storeId`, `fundingSource`, `storeSharePct`, `campaignId` nem desconto da Webag: a loja vem da rota e o resto é implícito (loja paga 100%)."
+      required: [kind, value, startsAt, endsAt, maxUses, monthlyCapCents]
+      description: "`maxUses` é OBRIGATÓRIO (R6: o CHECK `campaigns_limit_required` do banco exige limite de usos ou orçamento da Webag, e o cupom da loja não tem orçamento da Webag; sem o campo o `INSERT` daria 23514 e 500). Sem `storeId`, `fundingSource`, `storeSharePct`, `campaignId` nem desconto da Webag: a loja vem da rota e o resto é implícito (loja paga 100%)."
       properties:
         kind: { type: string, enum: [percent, fixed] }
         value: { type: integer, minimum: 1, description: "Percentual (1 a `cupom_loja_pct_max`) ou centavos" }
@@ -17711,7 +17722,7 @@ components:
         minOrderCents: { type: integer, minimum: 0, maximum: 1000000 }
         startsAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
-        maxUses: { type: [integer, 'null'], minimum: 1 }
+        maxUses: { type: integer, minimum: 1, description: "Usos totais; obrigatório (R6)" }
         perCustomerLimit: { type: integer, minimum: 1, maximum: 100, default: 1 }
         monthlyCapCents: { type: integer, minimum: 100, maximum: 100000000, description: "Obrigatório (WB-346 C1)" }
         code: { type: [string, 'null'], minLength: 4, maxLength: 20, pattern: '^[A-Z0-9]+$' }

@@ -32,6 +32,12 @@ export const APPEND_ONLY_TABLES = [
 ] as const;
 
 /**
+ * S6 + SEC-230 (R2.1): tabelas que o `webag_app` pode inserir e atualizar mas NÃO apagar. `coupon_reservations` é o que o invariante do orçamento conta (apagar quebra a conciliação);
+ * `product_price_history` é a PROVA do selo "de/por" (só fecha o intervalo, gatilho `product_price_history_close_only`). Cascata de FK roda como dono e não é afetada.
+ */
+export const NO_DELETE_TABLES = ['coupon_reservations', 'product_price_history'] as const;
+
+/**
  * Exceção deliberada à regra acima (SEC-159, migração 0039/0047): a anonimização trunca o `ip` (e a `platform`) dos aceites e dos
  * consentimentos, e o gatilho `webag_allow_ip_truncation` só deixa passar essa mudança. O papel recebe `UPDATE` SÓ nessas colunas.
  */
@@ -42,6 +48,7 @@ export const APPEND_ONLY_COLUMN_UPDATES: Readonly<Record<string, readonly string
 
 export function appGrantsSql(): string {
   const tables = APPEND_ONLY_TABLES.map((t) => `'${t}'`).join(', ');
+  const noDelete = NO_DELETE_TABLES.map((t) => `'${t}'`).join(', ');
   const columnGrants = Object.entries(APPEND_ONLY_COLUMN_UPDATES)
     .map(([table, columns]) => `GRANT UPDATE (${columns.join(', ')}) ON TABLE public.${table} TO ${APP_ROLE};`)
     .join('\n');
@@ -69,6 +76,16 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[${tables}] LOOP
     IF to_regclass('public.' || t) IS NOT NULL THEN
       EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.%I FROM ${APP_ROLE}', t);
+    END IF;
+  END LOOP;
+END
+$do$;
+DO $do$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[${noDelete}] LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('REVOKE DELETE, TRUNCATE ON TABLE public.%I FROM ${APP_ROLE}', t);
     END IF;
   END LOOP;
 END

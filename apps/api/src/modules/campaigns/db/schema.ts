@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigserial, check, date, index, integer, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { bigserial, boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { categories, cities } from '../../admin/db/schema.js';
 import { users } from '../../identity/db/schema.js';
 import { stores } from '../../stores/db/schema.js';
@@ -7,10 +7,10 @@ import { enumCheck } from '../../../platform/database/enum-check.js';
 
 /**
  * v1.1 R2 (ADR-019): campanhas e cupons por fonte de custo, orçamento com reserva atômica, adesão da loja e antifraude.
- * Só schema nesta rodada (R2.1): o motor (cálculo, reserva, confirmação, devolução, sweeps) é da R2.2.
+ * Schema da R2.1; o motor (cálculo, reserva, confirmação, devolução, varreduras) é a R2.2, em `src/modules/campaigns`.
  *
- * Fronteiras: este arquivo NÃO importa `orders` nem `cart` (o `cart` importa daqui o `campaigns` para `coupons.campaign_id`, e o `orders`
- * para `orders.campaign_id`): sem ciclo de módulos. Por isso `coupon_reservations.order_id` é `uuid` sem FK (como `coupon_redemptions.order_id`)
+ * Fronteiras (B2): este arquivo NÃO importa `orders` nem `cart`: `cart` e `orders` importam DAQUI (`carts.coupon_id`, `orders.campaign_id`),
+ * sem ciclo de módulos; e a posse de `coupons` e `coupon_redemptions` é deste arquivo. Por isso `coupon_reservations.order_id` é `uuid` sem FK (como `coupon_redemptions.order_id`)
  * e a ligação ao cupom usado sai de `orders.coupon_id`. A integridade dessas ligações é do serviço, na mesma transação, e do teste de invariante.
  */
 export const CAMPAIGN_OWNERS = ['webag', 'store'] as const;
@@ -106,6 +106,8 @@ export const campaigns = pgTable(
     check('campaigns_uses_invariant', sql`${t.usesReserved} >= 0 and ${t.usesConfirmed} >= 0 and (${t.maxUses} is null or ${t.usesReserved} + ${t.usesConfirmed} <= ${t.maxUses})`),
     check('campaigns_end_consistency', sql`(${t.state} = 'ended') = (${t.endReason} is not null and ${t.endedAt} is not null)`),
     check('campaigns_paused_by', sql`(${t.state} = 'paused') = (${t.pausedBy} is not null)`),
+    // SEC-229: campanha "Loja paga" nunca consome orçamento da Webag (o gasto dela vive em `campaign_store_months`).
+    check('campaigns_store_funded_no_webag_budget', sql`${t.fundingSource} <> 'store' or (${t.budgetReservedCents} = 0 and ${t.budgetSpentCents} = 0)`),
     check('campaigns_percent_cap', sql`${t.percentCapCents} is null or ${t.kind} = 'percent'`),
     // WB-340 C12 (design CU-2): o custo de um percentual com custo da Webag varia com o ticket; sem teto em R$ o percentual não salva (Webag paga ou Dividido). No Autofinanciado o teto é a margem.
     check('campaigns_percent_cap_required', sql`${t.kind} <> 'percent' or ${t.fundingSource} not in ('webag', 'split') or ${t.percentCapCents} is not null`),
@@ -138,6 +140,8 @@ export const campaignStoreEnrollments = pgTable(
   },
   (t) => [
     uniqueIndex('campaign_store_enrollments_uq').on(t.campaignId, t.storeId),
+    // SEC-227: alvo da FK composta de `campaign_acceptances`, para o aceite de uma loja nunca apontar para o convite de outra.
+    uniqueIndex('campaign_store_enrollments_scope_uq').on(t.id, t.storeId, t.campaignId),
     enumCheck('campaign_store_enrollments_state_enum', t.state, CAMPAIGN_ENROLLMENT_STATES),
     index('campaign_store_enrollments_store_idx').on(t.storeId, t.state),
     index('campaign_store_enrollments_pending_idx').on(t.expiresAt).where(sql`${t.state} = 'pending'`),
@@ -169,6 +173,8 @@ export const campaignAcceptances = pgTable(
   (t) => [
     index('campaign_acceptances_campaign_idx').on(t.campaignId, t.storeId, t.at.desc()),
     enumCheck('campaign_acceptances_action_enum', t.action, ['accept', 'decline', 'leave', 'create']),
+    // SEC-227: o convite citado tem de ser da MESMA loja e da MESMA campanha do registro (`enrollment_id` nulo = ação sem convite, ex. criação).
+    foreignKey({ name: 'campaign_acceptances_enrollment_scope_fk', columns: [t.enrollmentId, t.storeId, t.campaignId], foreignColumns: [campaignStoreEnrollments.id, campaignStoreEnrollments.storeId, campaignStoreEnrollments.campaignId] }),
     check('campaign_acceptances_proof', sql`${t.action} not in ('accept', 'create') or (${t.termsVersion} is not null and ${t.termsHash} ~ '^[a-f0-9]{64}$' and ${t.monthlyCapCents} is not null)`),
   ],
 );
@@ -206,6 +212,7 @@ export const campaignStoreMonths = pgTable(
   (t) => [
     primaryKey({ columns: [t.campaignId, t.storeId, t.month] }),
     index('campaign_store_months_store_idx').on(t.storeId, t.month),
+    check('campaign_store_months_month_first_day', sql`${t.month} = date_trunc('month', ${t.month}::timestamp)::date`),
     check('campaign_store_months_invariant', sql`${t.limitCents} > 0 and ${t.reservedCents} >= 0 and ${t.spentCents} >= 0 and ${t.reservedCents} + ${t.spentCents} <= ${t.limitCents}`),
   ],
 );
@@ -247,6 +254,7 @@ export const couponReservations = pgTable(
     // Limite por cliente da campanha (conta só o que está vivo), lido sob a trava da campanha.
     index('coupon_reservations_user_campaign_idx').on(t.userId, t.campaignId).where(sql`${t.state} in ('reserved', 'confirmed')`),
     index('coupon_reservations_store_idx').on(t.storeId, t.campaignId),
+    check('coupon_reservations_month', sql`${t.month} = date_trunc('month', ${t.day}::timestamp)::date`),
     check('coupon_reservations_amounts', sql`${t.webagCents} >= 0 and ${t.storeCents} >= 0 and ${t.webagCents} + ${t.storeCents} > 0`),
     check('coupon_reservations_refund_cap', sql`${t.refundedWebagCents} between 0 and ${t.webagCents} and ${t.refundedStoreCents} between 0 and ${t.storeCents}`),
     check('coupon_reservations_state_shape', sql`(${t.state} = 'reserved' and ${t.confirmedAt} is null and ${t.returnedAt} is null and ${t.returnedReason} is null and ${t.refundedWebagCents} = 0 and ${t.refundedStoreCents} = 0) or (${t.state} = 'confirmed' and ${t.confirmedAt} is not null and ${t.returnedAt} is null and ${t.returnedReason} is null) or (${t.state} = 'returned' and ${t.returnedAt} is not null and ${t.returnedReason} is not null)`),
@@ -283,6 +291,9 @@ export const campaignBudgetEntries = pgTable(
     index('campaign_budget_entries_campaign_idx').on(t.campaignId, t.funder, t.kind),
     index('campaign_budget_entries_reservation_idx').on(t.reservationId),
     check('campaign_budget_entries_amount', sql`${t.amountCents} > 0`),
+    // R1 (review R2.1): o diário de loja sempre diz QUAL loja, e o mês é o do dia (forma imutável, sem depender de fuso).
+    check('campaign_budget_entries_store_funder', sql`${t.funder} <> 'store' or ${t.storeId} is not null`),
+    check('campaign_budget_entries_month', sql`${t.month} = date_trunc('month', ${t.day}::timestamp)::date`),
   ],
 );
 
@@ -373,6 +384,93 @@ export const couponFraudSignals = pgTable(
     uniqueIndex('coupon_fraud_signals_order_signal_uq').on(t.orderId, t.signal),
     check('coupon_fraud_signals_release', sql`(${t.state} = 'released') = (${t.releasedBy} is not null and ${t.releasedAt} is not null and ${t.releaseReason} is not null)`),
   ],
+);
+
+/**
+ * B2 (review R2.1, ADR-019 D1): a POSSE de `coupons` e `coupon_redemptions` é deste módulo (o módulo `cart` e o `orders` só falam com `campaigns/index.ts`).
+ * As tabelas são as mesmas da 0004 (nada migra); só o arquivo de schema mudou de dono, para a ligação `coupons.campaign_id` e a escrita dos espelhos ficarem no
+ * mesmo módulo e o `cart` não importar `campaigns` e ser importado por ele (ciclo).
+ */
+export const COUPON_KINDS = ['percent', 'fixed', 'free_shipping'] as const;
+export type CouponKind = (typeof COUPON_KINDS)[number];
+export const COUPON_SCOPES = ['store', 'platform'] as const;
+export type CouponScope = (typeof COUPON_SCOPES)[number];
+
+/**
+ * Cupom (RN-09). `value`: percentual (1 a 100) ou centavos (fixo); ignorado em frete grátis. Escopo `store` (custo do
+ * lojista, `storeId` obrigatório) ou `platform` (custo Webag, limitado à comissão do pedido, DEC-016). A gestão pelo
+ * lojista e pelo admin é WB-073/WB-116; aqui só a leitura e a validação no carrinho.
+ */
+export const coupons = pgTable(
+  'coupons',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    /** 4 a 20 caracteres A-Z0-9, guardado em maiúsculas. */
+    code: varchar({ length: 20 }).notNull(),
+    kind: text({ enum: COUPON_KINDS }).notNull(),
+    scope: text({ enum: COUPON_SCOPES }).notNull(),
+    storeId: uuid().references(() => stores.id, { onDelete: 'cascade' }),
+    value: integer().notNull().default(0),
+    /** Teto do desconto percentual (centavos); nulo = sem teto. */
+    percentCapCents: integer(),
+    minOrderCents: integer().notNull().default(0),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    maxUses: integer(),
+    perCustomerLimit: integer().notNull().default(1),
+    firstPurchaseOnly: boolean().notNull().default(false),
+    active: boolean().notNull().default(true),
+    /** WB-254: cupom pessoal e intransferível (compensação por atraso); só o dono o enxerga e usa. Apagado com a conta (LGPD). */
+    ownerUserId: uuid().references(() => users.id, { onDelete: 'cascade' }),
+    /** WB-254 C5: pedido atrasado que originou o cupom; único, e por isso um cupom por pedido mesmo se reprocessar. */
+    sourceOrderId: uuid(),
+    /**
+     * v1.1 R2 (ADR-019 D3): código de uma CAMPANHA. Nulo = cupom legado (WB-116) ou de compensação por atraso, que seguem pela regra de hoje e FICAM FORA do orçamento (D13).
+     * Quando preenchido, `kind`, `value`, `min_order`, `starts_at`, `ends_at`, `max_uses`, `per_customer_limit`, `first_purchase_only` e `scope` são ESPELHOS da campanha, escritos pelo serviço
+     * na mesma transação (a campanha não muda depois de ativa); a verdade das regras, do orçamento e do estado é a linha de `campaigns`.
+     */
+    campaignId: uuid().references(() => campaigns.id),
+    /** `private`: código gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06); nunca entra na vitrine. */
+    visibility: text({ enum: ['public', 'private'] }).notNull().default('public'),
+    codeOrigin: text({ enum: ['manual', 'generated'] }).notNull().default('manual'),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('coupons_campaign_idx').on(t.campaignId).where(sql`${t.campaignId} is not null`),
+    // R2 (review R2.1): enum de segurança também é CHECK; `visibility` é o que esconde o código privado (C-CUP-06).
+    enumCheck('coupons_visibility_enum', t.visibility, ['public', 'private']),
+    enumCheck('coupons_code_origin_enum', t.codeOrigin, ['manual', 'generated']),
+    check('coupons_private_code_strength', sql`${t.visibility} = 'public' or (${t.codeOrigin} = 'generated' and char_length(${t.code}) >= 8)`),
+    uniqueIndex('coupons_source_order_uq').on(t.sourceOrderId).where(sql`${t.sourceOrderId} is not null`),
+    index('coupons_owner_idx').on(t.ownerUserId).where(sql`${t.ownerUserId} is not null`),
+    uniqueIndex('coupons_code_uq').on(sql`upper(${t.code})`),
+    check('coupons_code_format', sql`${t.code} ~ '^[A-Z0-9]{4,20}$'`),
+    check('coupons_store_scope', sql`(${t.scope} = 'store') = (${t.storeId} is not null)`),
+    check('coupons_value_range', sql`(${t.kind} = 'free_shipping') or (${t.kind} = 'percent' and ${t.value} between 1 and 100) or (${t.kind} = 'fixed' and ${t.value} >= 1)`),
+    check('coupons_period', sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+/**
+ * Uso de cupom por pedido (limite total e por cliente). Quem grava é a criação do pedido (Onda 4), na mesma transação
+ * do pedido; cancelamento devolve o uso (RN-08). Sem FK para `orders` até a Onda 4.
+ */
+export const couponRedemptions = pgTable(
+  'coupon_redemptions',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    couponId: uuid()
+      .notNull()
+      .references(() => coupons.id),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id),
+    orderId: uuid().notNull(),
+    discountCents: integer().notNull(),
+    releasedAt: timestamp({ withTimezone: true }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('coupon_redemptions_order_uq').on(t.orderId), index('coupon_redemptions_coupon_idx').on(t.couponId, t.userId)],
 );
 
 export type Campaign = typeof campaigns.$inferSelect;

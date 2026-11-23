@@ -29,6 +29,13 @@ describe('SEC-167: toda tabela ligada a users.id tem decisão de privacidade', (
     expect(missing, `Classifique em apps/api/src/modules/privacy/privacy-map.ts (delete | anonymize | retain:<base legal>): ${missing.join(', ')}`).toEqual([]);
   });
 
+  it('SEC-231: tabela com coluna `hmac` (dado pseudonimizado, mesmo sem FK para users) também tem decisão', async () => {
+    const { rows } = await client.query<{ table_name: string }>(`select distinct table_name from information_schema.columns where table_schema = 'public' and column_name in ('hmac', 'account_hmac') order by 1`);
+    const names = rows.map((r) => r.table_name);
+    expect(names).toEqual(expect.arrayContaining(['coupon_fraud_claims', 'coupon_identifier_sightings']));
+    expect(names.filter((table) => !(table in PRIVACY_MAP)), 'HMAC com chave nossa é dado pessoal pseudonimizado: classifique em privacy-map.ts').toEqual([]);
+  });
+
   it('não sobra decisão de tabela que não existe mais (o mapa não apodrece)', async () => {
     const existing = new Set((await client.query<{ tablename: string }>(`select tablename from pg_tables where schemaname = 'public'`)).rows.map((r) => r.tablename));
     expect(Object.keys(PRIVACY_MAP).filter((table) => !existing.has(table))).toEqual([]);
