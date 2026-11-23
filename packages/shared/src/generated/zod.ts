@@ -8711,6 +8711,7 @@ export const GetCartResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -8875,6 +8876,7 @@ export const ClearCartResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9052,6 +9054,7 @@ export const SetCartItemResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9220,6 +9223,7 @@ export const RemoveCartItemResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9392,6 +9396,7 @@ export const ApplyCartCouponResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9555,6 +9560,7 @@ export const RemoveCartCouponResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9719,6 +9725,7 @@ export const AcknowledgeCartResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -9896,6 +9903,7 @@ export const MergeCartResponse = zod.object({
   "requiredSubtotalCents": zod.int(),
   "currentSubtotalCents": zod.int()
 }).describe('"Faltam R$ 40,00 para usar o cupom": a oferta é inteira ou não é (CDC art. 30). O TOTAL NÃO MUDA. Estimativa com a comissão efetiva da sacola atual; a decisão final é recalculada na criação do pedido.'),zod.null()]).optional().describe('v1.1 R2 (WB-341 C2): com `applied=false` e `rejection: COUPON_SHORTFALL`, quanto falta de subtotal; o total NÃO muda. Campo novo opcional'),
+  "campaignId": zod.uuid().nullish().describe('v1.1 R2: id opaco da campanha, só para os eventos do app (`coupon_shortfall_*`); nunca é enviado de volta como entrada (C-CUP-01). Campo novo opcional'),
   "validUntil": zod.iso.datetime({"offset":true}).nullish().describe('v1.1 R2 (WB-347 C9): fim da validade ("Válido até 31/12"; o dia final vale até 23:59 em America/Sao_Paulo). Campo novo opcional')
 })]),
   "delivery": zod.object({
@@ -14754,7 +14762,7 @@ export const ListPlatformCouponsResponse = zod.object({
 
 
 /**
- * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado. **v1.1 R2:** com a flag `campanhas_cupom` ligada a criação de cupom da plataforma por esta rota passa a responder 409 `USE_CAMPAIGNS` (o cupom da plataforma é uma campanha `webag`, com orçamento e reserva: `createCampaign`); os cupons já existentes seguem pela regra de hoje até serem encerrados e ficam fora do orçamento (ADR-019 D13).
+ * `coupons:write` (super admin e operação). DT-059/DEC-060: `maxUses` (teto de usos da campanha) é OBRIGATÓRIO em todo cupom da plataforma (400; no PATCH, `maxUses: null` é recusado); SEC-170: com `firstPurchaseOnly` o teto vale também no PATCH. Código 4 a 20 letras/números em maiúsculas, único (409 `COUPON_CODE_TAKEN`). O desconto é cortado na taxa Webag do pedido (`notice`). Alvo por cidade, categoria ou loja ainda não existe no modelo (vale em todas as lojas). Auditado. **v1.1 R2:** quando o motor de campanhas entra (R2.2) a criação de cupom da plataforma por esta rota passa a responder 409 `USE_CAMPAIGNS` (o cupom da plataforma é uma campanha `webag`, com orçamento e reserva: `createCampaign`); os cupons já existentes seguem pela regra de hoje até serem encerrados e ficam fora do orçamento (ADR-019 D13).
  * @summary Criar cupom da plataforma (custo da Webag)
  */
 export const createPlatformCouponBodyCodeMin = 4;
@@ -17865,6 +17873,12 @@ export const ingestAnalyticsEventsBodyEventsItemOneAppVersionRegExp = new RegExp
 export const ingestAnalyticsEventsBodyEventsItemFiveSessionIdMin = 16;
 export const ingestAnalyticsEventsBodyEventsItemFiveSessionIdMax = 64;
 
+export const ingestAnalyticsEventsBodyEventsItemSixSessionIdMin = 16;
+export const ingestAnalyticsEventsBodyEventsItemSixSessionIdMax = 64;
+
+export const ingestAnalyticsEventsBodyEventsItemSixShortfallBandCentsMin = 0;
+export const ingestAnalyticsEventsBodyEventsItemSixShortfallBandCentsMultipleOf = 1000;
+
 export const ingestAnalyticsEventsBodyEventsMax = 100;
 
 
@@ -17906,7 +17920,15 @@ export const IngestAnalyticsEventsBody = zod.object({
   "occurredAt": zod.iso.datetime({"offset":true}),
   "sessionId": zod.string().min(ingestAnalyticsEventsBodyEventsItemFiveSessionIdMin).max(ingestAnalyticsEventsBodyEventsItemFiveSessionIdMax),
   "storeId": zod.uuid()
-}).describe('v1.1 R2 (WB-362 C3): início do checkout. Mesmas regras de privacidade dos demais eventos (sem conta, sem valor, sem endereço). Só passa a existir na coleta quando a R1.4 for construída com ele (ADR-019 pendência 5).')])).min(1).max(ingestAnalyticsEventsBodyEventsMax)
+}).describe('v1.1 R2 (WB-362 C3): início do checkout. Mesmas regras de privacidade dos demais eventos (sem conta, sem valor, sem endereço). Só passa a existir na coleta quando a R1.4 for construída com ele (ADR-019 pendência 5).'),zod.object({
+  "name": zod.enum(['coupon_showcase_viewed', 'coupon_shortfall_shown', 'coupon_shortfall_resolved', 'coupon_shortfall_abandoned']),
+  "eventId": zod.uuid(),
+  "occurredAt": zod.iso.datetime({"offset":true}),
+  "sessionId": zod.string().min(ingestAnalyticsEventsBodyEventsItemSixSessionIdMin).max(ingestAnalyticsEventsBodyEventsItemSixSessionIdMax),
+  "storeId": zod.uuid(),
+  "campaignId": zod.uuid().optional(),
+  "shortfallBandCents": zod.int().min(ingestAnalyticsEventsBodyEventsItemSixShortfallBandCentsMin).multipleOf(ingestAnalyticsEventsBodyEventsItemSixShortfallBandCentsMultipleOf).optional().describe('Quanto faltava, em faixa de R$ 10 (nunca o valor exato)')
+}).describe('v1.1 R2 (PRD cupons, desenho CC-1: medir se o "Faltam R$ X" empurra ou ajuda): `coupon_showcase_viewed`, `coupon_shortfall_shown`, `coupon_shortfall_resolved` (o mesmo pedido chegou ao valor) e `coupon_shortfall_abandoned`. Mesmas regras de privacidade dos demais eventos (sem conta, sem código digitado, sem valor exato: só a faixa de R$ 10). Passam pela coleta da R1.4 (flag `coleta_eventos`, só staging até o J24).')])).min(1).max(ingestAnalyticsEventsBodyEventsMax)
 })
 
 export const IngestAnalyticsEventsResponse = zod.object({
@@ -18083,7 +18105,7 @@ export const ListCampaignsResponse = zod.object({
 
 
 /**
- * Permissão `coupons:write` (super admin e operação; financeiro 403). Sempre nasce `draft`: criar NÃO ativa nem gasta (C6). Só existem 4 fontes (`webag`, `store`, `split`, `self_funded`) e a porcentagem da loja segue a fonte (RN-C2): webag 0, store 100, split 1 a 99, self_funded 0; frete grátis só com `webag` ou `self_funded` (422 `FREE_SHIPPING_FUNDING_INVALID`: "O frete é da Webag.", C3). **Não existe campo para majorar preço, frete ou taxa** (DEC-088): o corpo é estrito e campo fora da lista é 422 `FIELD_NOT_EDITABLE`. Código opcional: sem código a campanha não aparece sozinha; código de campanha `segmented` ou `private` é gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06): enviar `code` com `codeVisibility: private` é 422; código público ("vaidade") 4 a 20 letras e números, único (409 `COUPON_CODE_TAKEN`). Campanha de loja (`owner: store`) NÃO nasce aqui, só por `createStoreCoupon` (C-CUP-07). O valor de fonte `store` ou `split` só desconta de lojas com aceite (RN-C5). `reason` (3 a 200) vai ao `audit_log` com antes e depois (C7). `Idempotency-Key` obrigatória.
+ * Permissão `coupons:write` (super admin e operação; financeiro 403). Sempre nasce `draft`: criar NÃO ativa nem gasta (C6). Só existem 4 fontes (`webag`, `store`, `split`, `self_funded`) e a porcentagem da loja segue a fonte (RN-C2): webag 0, store 100, split 1 a 99, self_funded 0; frete grátis só com `webag` ou `self_funded` (422 `FREE_SHIPPING_FUNDING_INVALID`: "O frete é da Webag.", C3). **Não existe campo para majorar preço, frete ou taxa** (DEC-088): o corpo é estrito e campo fora da lista é 422 `FIELD_NOT_EDITABLE`. **Percentual com custo da Webag (`webag` ou `split`) exige `percentCapCents`** (o custo varia com o ticket; sem o teto em R$ não salva: 422 `PERCENT_CAP_REQUIRED`, WB-340 C12; CHECK no banco). Código opcional: sem código a campanha não aparece sozinha; código de campanha `segmented` ou `private` é gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06): enviar `code` com `codeVisibility: private` é 422; código público ("vaidade") 4 a 20 letras e números, único (409 `COUPON_CODE_TAKEN`). Campanha de loja (`owner: store`) NÃO nasce aqui, só por `createStoreCoupon` (C-CUP-07). O valor de fonte `store` ou `split` só desconta de lojas com aceite (RN-C5). `reason` (3 a 200) vai ao `audit_log` com antes e depois (C7). `Idempotency-Key` obrigatória.
  * @summary Criar campanha em rascunho com fonte de custo (WB-340 C2, C3, C6, C7)
  */
 export const createCampaignHeaderIdempotencyKeyMin = 8;
@@ -18247,7 +18269,7 @@ export const CreateCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -18260,7 +18282,7 @@ export const CreateCampaignResponse = zod.object({
 
 
 /**
- * Não grava nada; serve ao formulário enquanto o admin digita (a tabela é o centro da tela). Uma linha por faixa da tabela de entrega vigente MAIS a retirada. Para cada faixa: taxa de entrega, **custo previsto do motoboy** (`courierCostCents`, F4: vem de `DeliveryFeeTier.expectedCostCents`; `courierCostSource` diz `delivery_fee_table` ou `provisional` e, enquanto o fundador não cotar, `provisional: true` e a tela mostra "custo previsto: tabela provisória"), comissão no pedido de referência, margem prevista (RN-C3, pode ser negativa), desconto da Webag e da loja, **quanto sobra no pedido** (`remainingCents`; negativo = prejuízo, mostrado em texto) e, no `self_funded`, o **pedido mínimo necessário** (`minOrderNeededCents`; nulo = o cupom não se aplica nesta faixa, margem <= 0). O pedido de referência é o mínimo necessário ou R$ 80,00 (`referenceSubtotalCents`). `worstCase` traz o pior caso por pedido do percentual com teto (CU-2 da spec). `globalBudget` mostra o orçamento mensal global da Webag contra o já comprometido (C10, C11). `blockers` repete o que impediria ativar (mesmo formato do `activation` da campanha). Cálculo no servidor com a tabela vigente, centavos inteiros, `round_half_up` (RN-C2).
+ * Não grava nada; serve ao formulário enquanto o admin digita (a tabela é o centro da tela). Uma linha por faixa da tabela de entrega vigente MAIS a retirada. Para cada faixa: taxa de entrega, **custo previsto do motoboy** (`courierCostCents`, F4: vem de `DeliveryFeeTier.expectedCostCents`; `courierCostSource` diz `delivery_fee_table` ou `provisional` e, enquanto o fundador não cotar, `provisional: true` e a tela mostra "custo previsto: tabela provisória"), comissão no pedido de referência, margem prevista (RN-C3, pode ser negativa), desconto da Webag e da loja, **quanto sobra no pedido** (`remainingCents`; negativo = prejuízo, mostrado em texto) e, no `self_funded`, o **pedido mínimo necessário** (`minOrderNeededCents`; nulo = o cupom não se aplica nesta faixa, margem <= 0). O pedido de referência é o mínimo necessário ou R$ 80,00 (`referenceSubtotalCents`). `worstCase` traz o pior caso por pedido do percentual com teto (CU-2 da spec, WB-340 C12): o teto em R$ do desconto da Webag e "até N pedidos no pior caso" contra o orçamento do dia (`maxOrdersPerDay`) e o total (`maxOrdersTotal`). `globalBudget` mostra o orçamento mensal global da Webag contra o já comprometido (C10, C11). `blockers` repete o que impediria ativar (mesmo formato do `activation` da campanha). Cálculo no servidor com a tabela vigente, centavos inteiros, `round_half_up` (RN-C2).
  * @summary Simular "quanto isso custa por pedido" por faixa de entrega (WB-340 C1, C2; WB-341 C11)
  */
 export const simulateCampaignBodyStoreSharePctMax = 99;
@@ -18361,8 +18383,10 @@ export const SimulateCampaignResponse = zod.object({
   "fromM": zod.int().nullable(),
   "toM": zod.int().nullable(),
   "pickup": zod.boolean()
-})
-}).describe('Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2)'),
+}),
+  "maxOrdersPerDay": zod.int().nullable().describe('Orçamento do dia / pior caso por pedido (arredondado para baixo): "até N pedidos no pior caso"'),
+  "maxOrdersTotal": zod.int().nullable()
+}).describe('Pior caso por pedido (teto do percentual): o custo de um percentual varia com o ticket (CU-2, WB-340 C12)'),
   "maxCostCents": zod.int().nullable(),
   "estimatedOrders": zod.int().nullable().describe('"Com R$ 800,00 dá para cerca de 100 pedidos com cupom": orçamento / desconto de referência'),
   "globalBudget": zod.object({
@@ -18377,7 +18401,7 @@ export const SimulateCampaignResponse = zod.object({
 }),
   "aboveMargin": zod.boolean().describe('Desconto da Webag acima da margem prevista em alguma faixa: só o super admin ativa (C5)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -18486,7 +18510,7 @@ export const GetCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -18657,7 +18681,7 @@ export const UpdateCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -18670,7 +18694,7 @@ export const UpdateCampaignResponse = zod.object({
 
 
 /**
- * Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto "Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. "Webag paga" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` ("pode gerar prejuízo por pedido"). Flag `campanhas_cupom` desligada: 409 `CAMPAIGNS_DISABLED`. `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois.
+ * Permissão `coupons:activate` (super admin e financeiro; **operação 403**, C8). Com custo da Webag (`desconto_webag > 0`) exige **reautenticação recente** (até 5 min): sem ela 403 `REAUTH_REQUIRED` e o app pede o código do autenticador em `POST /v1/auth/reauth` (a spec do PRD diz 401; o contrato mantém o padrão já usado em todas as rotas sensíveis, ADR-019 pendência PO 3). Reconfere TUDO no servidor, dentro da transação e sob a trava da campanha (nunca confia na simulação): `422 ACTIVATION_BLOCKED` com `blockers` (`BUDGET_REQUIRED` C4; `USAGE_OR_BUDGET_REQUIRED` C6; `MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`, C1; `GLOBAL_BUDGET_ZERO`, C10, texto "Orçamento mensal de cupons da Webag é R$ 0. Defina em Configurações"; `GLOBAL_BUDGET_EXCEEDED` com `missingCents`, C11; `ABOVE_MARGIN_SUPER_ADMIN_ONLY`, C5; `LOSS_RISK_ACK_REQUIRED`; `NO_ACCEPTED_STORE` em fonte `store`/`split` sem nenhuma loja com aceite; `FREE_SHIPPING_DISABLED` com a flag `campanha_frete_gratis` desligada, J22; `STORE_SHARE_DISABLED` em fonte `store` ou `split` com a flag `campanha_parte_da_loja` desligada, J27). Campanha `store` (fonte da loja) não consome orçamento da Webag e não é afetada por C10. "Webag paga" acima da margem prevista só o super admin ativa e exige `acknowledgeLossRisk: true` ("pode gerar prejuízo por pedido"). DEC-137: não existe flag-mestra; cada parecer jurídico liga só a sua função (`campanha_frete_gratis` J22, `campanha_parte_da_loja` J27; o selo "de/por", `selo_de_por` J23); o dinheiro da Webag é contido pelo orçamento mensal global (F2, R$ 0). `startsAt` futuro vira `scheduled`. `reason` obrigatório; `audit_log` com autor, antes e depois.
  * @summary Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
  */
 export const ActivateCampaignParams = zod.object({
@@ -18791,7 +18815,7 @@ export const ActivateCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -18922,7 +18946,7 @@ export const PauseCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -19056,7 +19080,7 @@ export const ResumeCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -19187,7 +19211,7 @@ export const EndCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -19318,7 +19342,7 @@ export const DuplicateCampaignResponse = zod.object({
   "requiresSuperAdmin": zod.boolean(),
   "maxCostCents": zod.int().nullable().describe('Custo máximo da Webag (o orçamento total; nulo sem custo da Webag)'),
   "blockers": zod.array(zod.object({
-  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'STARTS_AFTER_ENDS', 'CAMPAIGNS_DISABLED']),
+  "code": zod.enum(['NAME_REQUIRED', 'VALUE_REQUIRED', 'BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'NO_ACCEPTED_STORE', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'FREE_SHIPPING_FUNDING_INVALID', 'PERCENT_CAP_REQUIRED', 'STARTS_AFTER_ENDS']),
   "message": zod.string().describe('Texto pt-BR para a caixa "Para ativar"; o app decide a ação pelo `code`'),
   "requiredMinOrderCents": zod.int().optional().describe('`MIN_ORDER_TOO_LOW`: pedido mínimo necessário na faixa mais cara que a campanha cobre (C1)'),
   "missingCents": zod.int().optional().describe('`GLOBAL_BUDGET_EXCEEDED`: quanto falta (C11)')
@@ -19761,7 +19785,7 @@ export const QueryDashboardMetricResponse = zod.object({
 
 
 /**
- * Os painéis prontos (Visão geral, Vendas, Lojas, Entrega, Cupons e, com a coleta de acessos, Acessos) pertencem ao sistema: **duplicáveis, nenhum editável** (`editable: false`). Painéis do usuário são **privados** (`owner_admin_id = :me`, C-DSH-05): nunca aparecem os de outro admin. O painel pronto só traz os widgets que o perfil pode ver; `someWidgetsHidden` avisa sem dizer quais (a tela não renderiza o que não pode). Até 6 prontos e 20 do usuário; paginado por convenção (a lista cabe numa página).
+ * Os painéis prontos (Visão geral, Vendas, Lojas, Entrega, Cupons e, com a coleta de acessos, Acessos) pertencem ao sistema: **duplicáveis, nenhum editável** (`editable: false`). Painéis do usuário são **privados** (`owner_admin_id = :me`, C-DSH-05): nunca aparecem os de outro admin. Widget de métrica que o perfil não pode ver vem com `blocked: true` e **NÃO é consultado** (zero chamadas ao banco para ele; WB-357 C8; o PRD prevalece sobre a spec de tela, DEC-137): a tela mostra "Sem permissão" sem valor. O catálogo (`getDashboardCatalog`), ao contrário, não lista a métrica proibida. Até 6 prontos e 20 do usuário; paginado por convenção (a lista cabe numa página).
  * @summary Painéis prontos e os meus (WB-357 C6)
  */
 export const listDashboardsQueryCursorMax = 200;
@@ -19777,6 +19801,8 @@ export const ListDashboardsQueryParams = zod.object({
 })
 
 export const listDashboardsResponseDataItemNameMax = 80;
+
+export const listDashboardsResponseDataItemBlockedWidgetsMin = 0;
 
 export const listDashboardsResponseDataItemWidgetsItemPositionMin = 0;
 export const listDashboardsResponseDataItemWidgetsItemPositionMax = 11;
@@ -19802,9 +19828,10 @@ export const ListDashboardsResponse = zod.object({
   "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
   "name": zod.string().max(listDashboardsResponseDataItemNameMax),
   "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
-  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "blockedWidgets": zod.int().min(listDashboardsResponseDataItemBlockedWidgetsMin).describe('Quantos widgets estão `blocked` para este perfil (a tela diz "Alguns gráficos não aparecem para o seu perfil")'),
   "widgets": zod.array(zod.object({
   "id": zod.uuid(),
+  "blocked": zod.boolean().describe('`true`: a métrica exige uma sensibilidade que o perfil não tem; o widget NÃO é consultado (WB-357 C8) e `queryDashboardMetric` responderia 403 `METRIC_FORBIDDEN`'),
   "position": zod.int().min(listDashboardsResponseDataItemWidgetsItemPositionMin).max(listDashboardsResponseDataItemWidgetsItemPositionMax),
   "title": zod.string().max(listDashboardsResponseDataItemWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
   "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
@@ -19839,6 +19866,8 @@ export const GetDashboardParams = zod.object({
 
 export const getDashboardResponseNameMax = 80;
 
+export const getDashboardResponseBlockedWidgetsMin = 0;
+
 export const getDashboardResponseWidgetsItemPositionMin = 0;
 export const getDashboardResponseWidgetsItemPositionMax = 11;
 
@@ -19862,9 +19891,10 @@ export const GetDashboardResponse = zod.object({
   "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
   "name": zod.string().max(getDashboardResponseNameMax),
   "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
-  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "blockedWidgets": zod.int().min(getDashboardResponseBlockedWidgetsMin).describe('Quantos widgets estão `blocked` para este perfil (a tela diz "Alguns gráficos não aparecem para o seu perfil")'),
   "widgets": zod.array(zod.object({
   "id": zod.uuid(),
+  "blocked": zod.boolean().describe('`true`: a métrica exige uma sensibilidade que o perfil não tem; o widget NÃO é consultado (WB-357 C8) e `queryDashboardMetric` responderia 403 `METRIC_FORBIDDEN`'),
   "position": zod.int().min(getDashboardResponseWidgetsItemPositionMin).max(getDashboardResponseWidgetsItemPositionMax),
   "title": zod.string().max(getDashboardResponseWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
   "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
@@ -19888,7 +19918,7 @@ export const GetDashboardResponse = zod.object({
 
 
 /**
- * Cria uma cópia EDITÁVEL e privada do painel pronto ou do próprio (o original fica intacto). Widgets de métrica que o perfil não pode ver ficam de fora da cópia. Painel de outro admin: 404. Limite de 20 painéis por usuário (422 `DASHBOARD_LIMIT`, "Limite de 20 painéis"); nome até 80 caracteres, exibido como texto e escapado no CSV (C-DSH-06). Criar, renomear, reordenar, excluir widgets e "Enviar cópia" são do construtor (R3, WB-358) e não estão neste contrato.
+ * Cria uma cópia EDITÁVEL e privada do painel pronto ou do próprio (o original fica intacto). Widgets bloqueados para o perfil não vão para a cópia. Painel de outro admin: 404. Limite de 20 painéis por usuário (422 `DASHBOARD_LIMIT`, "Limite de 20 painéis"); nome até 80 caracteres, exibido como texto e escapado no CSV (C-DSH-06). Criar, renomear, reordenar, excluir widgets e "Enviar cópia" são do construtor (R3, WB-358) e não estão neste contrato.
  * @summary Duplicar para editar (WB-357 C4; WB-358 C6 na R3)
  */
 export const DuplicateDashboardParams = zod.object({
@@ -19914,6 +19944,8 @@ export const DuplicateDashboardBody = zod.object({
 
 export const duplicateDashboardResponseNameMax = 80;
 
+export const duplicateDashboardResponseBlockedWidgetsMin = 0;
+
 export const duplicateDashboardResponseWidgetsItemPositionMin = 0;
 export const duplicateDashboardResponseWidgetsItemPositionMax = 11;
 
@@ -19937,9 +19969,10 @@ export const DuplicateDashboardResponse = zod.object({
   "presetKey": zod.union([zod.literal('overview'),zod.literal('sales'),zod.literal('stores'),zod.literal('delivery'),zod.literal('coupons'),zod.literal('access'),zod.literal(null)]).nullable(),
   "name": zod.string().max(duplicateDashboardResponseNameMax),
   "editable": zod.boolean().describe('Falso nos prontos; a edição de painel próprio é do construtor (R3)'),
-  "someWidgetsHidden": zod.boolean().describe('Algum widget exige métrica que o perfil não vê e NÃO foi enviado (não vaza que existe)'),
+  "blockedWidgets": zod.int().min(duplicateDashboardResponseBlockedWidgetsMin).describe('Quantos widgets estão `blocked` para este perfil (a tela diz "Alguns gráficos não aparecem para o seu perfil")'),
   "widgets": zod.array(zod.object({
   "id": zod.uuid(),
+  "blocked": zod.boolean().describe('`true`: a métrica exige uma sensibilidade que o perfil não tem; o widget NÃO é consultado (WB-357 C8) e `queryDashboardMetric` responderia 403 `METRIC_FORBIDDEN`'),
   "position": zod.int().min(duplicateDashboardResponseWidgetsItemPositionMin).max(duplicateDashboardResponseWidgetsItemPositionMax),
   "title": zod.string().max(duplicateDashboardResponseWidgetsItemTitleMax).describe('Texto puro (nunca HTML); escapado no CSV (C-DSH-06)'),
   "metricId": zod.enum(['gmv', 'gmv_delivered', 'orders_paid', 'orders_delivered', 'avg_ticket', 'webag_revenue', 'take_rate', 'new_customers', 'active_customers', 'repeat_30d', 'cancellations_rate', 'cancellations_count', 'accept_time', 'delivered_in_window_pct', 'pay_to_delivery_time', 'courier_cost_per_delivery', 'active_stores', 'coupon_uses', 'discount_total', 'discount_webag', 'cost_per_new_customer', 'sessions', 'store_visits', 'product_visits', 'bag_adds', 'conversion']).describe('Gerado do registro do servidor (teste compara). Os ids de R3 (OK da loja, saída por fonte) e R4 (mapa, sem sinal, ETA) entram com a release.'),
@@ -20004,14 +20037,14 @@ export const GetAdminAnalyticsFunnelResponse = zod.object({
 
 
 /**
- * Quantas lojas tocaram em "Quero testar" (`clicked`) e quantas escolheram cada faixa (`bands`), incluindo "Não pagaria por isso". Só contagens e o texto curto opcional das últimas 50 respostas (`notes`, até 140 caracteres, sem identificar loja nem pessoa: o texto pede "Não escreva dados de clientes"). Não mostra o valor como preço decidido: as faixas são exemplos (DEC-093, HIP-A1). Retenção de 12 meses.
+ * Quantas lojas tocaram em "Quero testar" (`clicked`) e quantas escolheram cada faixa (`bands`), incluindo "Não pagaria por isso". Só contagens (da resposta VIGENTE de cada loja; o critério de matar a HIP-A1 do PRD, WB-367 C7, lê estes números absolutos) e o texto curto opcional das últimas 50 respostas (`notes`, até 200 caracteres, sem identificar loja nem pessoa: o texto pede "Não escreva dados de clientes"). Não mostra o valor como preço decidido: as faixas são exemplos (DEC-093, HIP-A1). Retenção de 12 meses.
  * @summary Interesse na porta falsa do módulo Análises (WB-367 C3)
  */
 export const getAdminAnalyticsInterestResponseClickedMin = 0;
 
 export const getAdminAnalyticsInterestResponseAnsweredMin = 0;
 
-export const getAdminAnalyticsInterestResponseNotesItemTextMax = 140;
+export const getAdminAnalyticsInterestResponseNotesItemTextMax = 200;
 
 export const getAdminAnalyticsInterestResponseNotesMax = 50;
 
@@ -20035,21 +20068,21 @@ export const GetAdminAnalyticsInterestResponse = zod.object({
 
 
 /**
- * Permissão da loja `settings` (só o dono; funcionário 403, não-membro 404). Idempotente por loja: a 1ª chamada com `answer: clicked` registra o toque (`analytics_interest_clicked`); a chamada com `priceBand` grava a faixa (pode mudar de ideia: sobrescreve). Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 140 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429).
+ * Permissão da loja `analises` (o dono ou o funcionário com essa permissão, nova entre as atribuíveis; WB-367 C6; funcionário sem ela: 403, não-membro 404). Cada loja tem UMA resposta vigente, a última (pode mudar de ideia); as anteriores ficam num log (`analytics_interest_events`) para o admin. `answer: clicked` registra o toque (`analytics_interest_clicked`); `answered` com `priceBand` grava a resposta. Faixas de exemplo: `up_to_19`, `20_to_39`, `40_to_79`, `80_plus` e `would_not_pay`. `note` opcional até 200 caracteres (texto puro, controle removido). A resposta NÃO promete data nem recurso (C4) e não diz que será cobrado o valor escolhido. Limite de 20 por hora por loja (429).
  * @summary Porta falsa: "Quero testar" e a faixa de preço (WB-367 C1, C2, C4)
  */
 export const RecordAnalyticsInterestParams = zod.object({
   "storeId": zod.uuid()
 })
 
-export const recordAnalyticsInterestBodyNoteMax = 140;
+export const recordAnalyticsInterestBodyNoteMax = 200;
 
 
 
 export const RecordAnalyticsInterestBody = zod.object({
   "answer": zod.enum(['clicked', 'answered']),
   "priceBand": zod.enum(['up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay']).optional().describe('Obrigatória com `answered`. Faixas de EXEMPLO (HIP-A1), não preço decidido'),
-  "note": zod.string().max(recordAnalyticsInterestBodyNoteMax).optional().describe('Texto puro opcional; a tela pede "Não escreva dados de clientes"')
+  "note": zod.string().max(recordAnalyticsInterestBodyNoteMax).optional().describe('Texto puro opcional (WB-367 C5), associado à loja e não a pessoa, sem HTML, escapado no CSV e fora de todo evento de analytics; a tela pede "Não escreva dados de clientes"')
 })
 
 export const RecordAnalyticsInterestResponse = zod.void()
@@ -20418,7 +20451,7 @@ export const ListStoreCouponsResponse = zod.object({
 
 
 /**
- * Permissão da loja `coupons`; **a loja vem da rota e da membership**, nunca do corpo; admin NÃO cria por aqui (C-CUP-07). Percentual ou valor fixo, pedido mínimo, validade, usos totais e por cliente e **teto mensal em R$ obrigatório** (C1). O cupom vale só na própria loja e não gera desconto da Webag (`storeSharePct` 100, C4); o desconto sai da parte da loja (reduz a base da comissão, RN-10). **Teto de percentual** `cupom_loja_pct_max` (padrão 30, só o super admin muda, DEC-103 D-03): percentual acima: 422 `STORE_COUPON_PERCENT_ABOVE_MAX` com `maxPct` ("O desconto máximo da loja é 30%", C7); valor fixo exige pedido mínimo >= valor / (teto/100), arredondado para cima ao centavo (R$ 20,00 exige R$ 66,67): senão 422 `STORE_COUPON_MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`. A criação equivale a aceite implícito (o criador é a loja, com teto): grava em `campaign_acceptances`. O código é do lojista (4 a 20, único; 409 `COUPON_CODE_TAKEN`); cupom `private` tem código gerado. Nasce `active` (sem custo da Webag e sem orçamento da Webag). `Idempotency-Key` obrigatória.
+ * Permissão da loja `coupons`; **a loja vem da rota e da membership**, nunca do corpo; admin NÃO cria por aqui (C-CUP-07). Percentual ou valor fixo, pedido mínimo, validade, usos totais e por cliente e **teto mensal em R$ obrigatório** (C1). O cupom vale só na própria loja e não gera desconto da Webag (`storeSharePct` 100, C4); o desconto sai da parte da loja (reduz a base da comissão, RN-10). **Teto de percentual** `cupom_loja_pct_max` (padrão 30, só o super admin muda, DEC-103 D-03): percentual acima: 422 `STORE_COUPON_PERCENT_ABOVE_MAX` com `maxPct` ("O desconto máximo da loja é 30%", C7); valor fixo exige pedido mínimo >= valor / (teto/100), arredondado para cima ao centavo (R$ 20,00 exige R$ 66,67): senão 422 `STORE_COUPON_MIN_ORDER_TOO_LOW` com `requiredMinOrderCents`. A criação equivale a aceite implícito (o criador é a loja, com teto): grava em `campaign_acceptances`. O código é do lojista (4 a 20, único; 409 `COUPON_CODE_TAKEN`); cupom `private` tem código gerado. Nasce `active` (sem custo da Webag e sem orçamento da Webag). Com a flag `campanha_parte_da_loja` desligada (J27: o cupom da loja é parte da loja): 409 `STORE_SHARE_DISABLED`. `Idempotency-Key` obrigatória.
  * @summary Criar cupom próprio (absorve WB-073; WB-346 C1, C4, C7)
  */
 export const CreateStoreCouponParams = zod.object({
@@ -20612,6 +20645,7 @@ export const listCartCouponOffersResponseDataMax = 20;
 
 export const ListCartCouponOffersResponse = zod.object({
   "data": zod.array(zod.object({
+  "campaignId": zod.uuid().optional().describe('Id opaco da campanha, para os eventos do app (`coupon_shortfall_*`); só de cupom público'),
   "code": zod.string().describe('Só cupom público'),
   "kind": zod.enum(['percent', 'fixed', 'free_shipping']),
   "valueCents": zod.int().nullable(),

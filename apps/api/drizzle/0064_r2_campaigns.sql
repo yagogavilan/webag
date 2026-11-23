@@ -140,11 +140,13 @@ CREATE TABLE "campaigns" (
 	CONSTRAINT "campaigns_uses_invariant" CHECK ("campaigns"."uses_reserved" >= 0 and "campaigns"."uses_confirmed" >= 0 and ("campaigns"."max_uses" is null or "campaigns"."uses_reserved" + "campaigns"."uses_confirmed" <= "campaigns"."max_uses")),
 	CONSTRAINT "campaigns_end_consistency" CHECK (("campaigns"."state" = 'ended') = ("campaigns"."end_reason" is not null and "campaigns"."ended_at" is not null)),
 	CONSTRAINT "campaigns_paused_by" CHECK (("campaigns"."state" = 'paused') = ("campaigns"."paused_by" is not null)),
-	CONSTRAINT "campaigns_percent_cap" CHECK ("campaigns"."percent_cap_cents" is null or "campaigns"."kind" = 'percent')
+	CONSTRAINT "campaigns_percent_cap" CHECK ("campaigns"."percent_cap_cents" is null or "campaigns"."kind" = 'percent'),
+	CONSTRAINT "campaigns_percent_cap_required" CHECK ("campaigns"."kind" <> 'percent' or "campaigns"."funding_source" not in ('webag', 'split') or "campaigns"."percent_cap_cents" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "coupon_fraud_claims" (
 	"id" bigserial PRIMARY KEY NOT NULL,
+	"scope" text DEFAULT 'first_purchase' NOT NULL,
 	"kind" text NOT NULL,
 	"hmac" varchar(64) NOT NULL,
 	"key_version" smallint DEFAULT 1 NOT NULL,
@@ -153,6 +155,7 @@ CREATE TABLE "coupon_fraud_claims" (
 	"state" text DEFAULT 'active' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"released_at" timestamp with time zone,
+	CONSTRAINT "coupon_fraud_claims_scope_enum" CHECK ("coupon_fraud_claims"."scope" in ('first_purchase', 'campaign_use')),
 	CONSTRAINT "coupon_fraud_claims_kind_enum" CHECK ("coupon_fraud_claims"."kind" in ('account', 'device', 'address', 'document')),
 	CONSTRAINT "coupon_fraud_claims_state_enum" CHECK ("coupon_fraud_claims"."state" in ('active', 'released')),
 	CONSTRAINT "coupon_fraud_claims_hmac" CHECK ("coupon_fraud_claims"."hmac" ~ '^[a-f0-9]{64}$'),
@@ -255,7 +258,8 @@ CREATE INDEX "campaign_store_months_store_idx" ON "campaign_store_months" USING 
 CREATE INDEX "campaigns_list_idx" ON "campaigns" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
 CREATE INDEX "campaigns_live_idx" ON "campaigns" USING btree ("state","ends_at") WHERE "campaigns"."state" in ('scheduled', 'active', 'paused');--> statement-breakpoint
 CREATE INDEX "campaigns_owner_store_idx" ON "campaigns" USING btree ("owner_store_id") WHERE "campaigns"."owner_store_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX "coupon_fraud_claims_active_uq" ON "coupon_fraud_claims" USING btree ("kind","hmac") WHERE "coupon_fraud_claims"."state" = 'active';--> statement-breakpoint
+CREATE UNIQUE INDEX "coupon_fraud_claims_active_uq" ON "coupon_fraud_claims" USING btree ("kind","hmac") WHERE "coupon_fraud_claims"."state" = 'active' and "coupon_fraud_claims"."scope" = 'first_purchase';--> statement-breakpoint
+CREATE INDEX "coupon_fraud_claims_use_idx" ON "coupon_fraud_claims" USING btree ("campaign_id","kind","hmac") WHERE "coupon_fraud_claims"."state" = 'active' and "coupon_fraud_claims"."scope" = 'campaign_use';--> statement-breakpoint
 CREATE INDEX "coupon_fraud_claims_order_idx" ON "coupon_fraud_claims" USING btree ("order_id");--> statement-breakpoint
 CREATE INDEX "coupon_fraud_claims_created_idx" ON "coupon_fraud_claims" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "coupon_fraud_signals_open_user_idx" ON "coupon_fraud_signals" USING btree ("user_id") WHERE "coupon_fraud_signals"."state" = 'open';--> statement-breakpoint

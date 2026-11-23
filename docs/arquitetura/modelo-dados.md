@@ -179,14 +179,14 @@ Contrato: `openapi.yaml` 0.5.0. Escritas com `drizzle/down/` testadas por `migra
 ### 0064 `r2_campaigns` (módulo `campaigns`; colunas em `coupons` e `orders`)
 | Tabela | Conteúdo | Garantias no banco |
 |---|---|---|
-| `campaigns` | A REGRA: dono (`webag` ou `store`), fonte de custo (`webag`, `store`, `split`, `self_funded`), parte da loja, tipo, valor, teto do percentual, mínimo, público, alvo (todas, cidade, loja, categoria), validade, orçamento total e diário (Webag), usos, estado, `version`, contadores (`budget_reserved_cents`, `budget_spent_cents`, `uses_*`) | Fonte x parte da loja; frete grátis só com `webag` ou `self_funded`; cupom da loja = fonte `store` na própria loja; alvo coerente; **orçamento e limite obrigatórios fora de rascunho**; `reservado + gasto <= total` e usos; enums |
+| `campaigns` | A REGRA: dono (`webag` ou `store`), fonte de custo (`webag`, `store`, `split`, `self_funded`), parte da loja, tipo, valor, teto do percentual, mínimo, público, alvo (todas, cidade, loja, categoria), validade, orçamento total e diário (Webag), usos, estado, `version`, contadores (`budget_reserved_cents`, `budget_spent_cents`, `uses_*`) | Fonte x parte da loja; frete grátis só com `webag` ou `self_funded`; cupom da loja = fonte `store` na própria loja; alvo coerente; **orçamento e limite obrigatórios fora de rascunho**; percentual com custo da Webag exige teto em R$; `reservado + gasto <= total` e usos; enums |
 | `campaign_store_enrollments` | Convite e adesão por (campanha, loja): estado (`pending`, `accepted`, `declined`, `left`, `expired`), validade de 7 dias, teto mensal próprio | `accepted` exige teto, versão, hash e quem aceitou; único por (campanha, loja) |
 | `campaign_acceptances` | PROVA do aceite, recusa, saída e criação do cupom da loja (usuário, hora, versão e hash do texto, teto, parte da loja). **Append-only** | Gatilho `campaign_acceptances_append_only`; `webag_app` só INSERT e SELECT |
 | `campaign_budget_days` | Orçamento do DIA (America/Sao_Paulo, dia calculado no banco): limite, reservado, gasto | `reservado + gasto <= limite` |
 | `campaign_store_months` | Teto MENSAL da loja por campanha | idem |
 | `coupon_reservations` | Reserva por pedido: `reserved` -> `confirmed` -> `returned`, Webag e loja em centavos, dia e mês da reserva, estorno parcial acumulado | Único por pedido; forma coerente com o estado; estorno <= confirmado; desconto > 0 |
 | `campaign_budget_entries` | DIÁRIO do orçamento (`reserve`, `confirm`, `release`, `refund`, por quem paga). **Append-only**, `dedupe_key` única | Gatilho append-only; `webag_app` só INSERT e SELECT; `campaign_budget_violations()` devolve os contadores que divergem do diário |
-| `coupon_fraud_claims` | Primeira compra consumida por identificador (`account`, `device`, `address`, `document`), SÓ HMAC | **Único parcial `(kind, hmac) WHERE state = 'active'`** (vale entre campanhas); HMAC = 64 hexadecimais |
+| `coupon_fraud_claims` | Consumo por identificador (`account`, `device`, `address`, `document`), SÓ HMAC, em 2 escopos: `first_purchase` (primeira compra, entre campanhas) e `campaign_use` (limite de usos por cliente da campanha, contado sob a trava) | **Único parcial `(kind, hmac) WHERE state = 'active' AND scope = 'first_purchase'`**; HMAC = 64 hexadecimais |
 | `coupon_identifier_sightings` | Contas DISTINTAS (HMAC) por identificador, para o sinal de velocidade | Único por (identificador, conta); só HMAC |
 | `coupon_fraud_signals` | "Suspeitos": pedido, campanha, sinal e liberação (quem, quando, motivo). Sem identificador | Único por (pedido, sinal); liberar exige autor e motivo |
 | `coupons.campaign_id`, `visibility`, `code_origin` | Liga o CÓDIGO à campanha; `private` só com código gerado de 8+ caracteres | FK; CHECK de força do código |
@@ -205,7 +205,7 @@ O razão financeiro (`ledger_*`) NÃO recebe lançamento da campanha (o desconto
 | `product_price_history` | Intervalos de preço `base` e `promo` por produto e variação, com autor | Um intervalo aberto por (produto, variação, tipo); preço 1 a 9.999.999; **semente: preço de hoje com início `now()`** (sem passado) |
 | `product_barcodes` | Código de barras por variação, único por loja | Único `(store_id, barcode)`; formato 8 ou 12 a 14 dígitos |
 | `reference_barcodes` | Catálogo de referência próprio (nome, marca, categoria; sem foto) | Formato; origem moderada ou admin |
-| `analytics_interest` | Porta falsa: uma linha por loja, faixa de exemplo, texto de 140 caracteres | Único por loja; faixa só com data da resposta |
+| `analytics_interest_events` | Porta falsa: LOG por loja (toque e respostas com a faixa de exemplo; texto de até 200 caracteres); vale a última resposta | Toque sem faixa nem texto; resposta com faixa; 5 faixas de exemplo |
 
 ## Mapa das migrações (0000 a 0053)
 Aplicadas em ordem por `pnpm db:migrate` (Drizzle). O arquivo `apps/api/drizzle/<n>_*.sql` é a verdade; esta tabela só orienta a leitura.

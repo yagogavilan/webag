@@ -107,6 +107,8 @@ export const campaigns = pgTable(
     check('campaigns_end_consistency', sql`(${t.state} = 'ended') = (${t.endReason} is not null and ${t.endedAt} is not null)`),
     check('campaigns_paused_by', sql`(${t.state} = 'paused') = (${t.pausedBy} is not null)`),
     check('campaigns_percent_cap', sql`${t.percentCapCents} is null or ${t.kind} = 'percent'`),
+    // WB-340 C12 (design CU-2): o custo de um percentual com custo da Webag varia com o ticket; sem teto em R$ o percentual não salva (Webag paga ou Dividido). No Autofinanciado o teto é a margem.
+    check('campaigns_percent_cap_required', sql`${t.kind} <> 'percent' or ${t.fundingSource} not in ('webag', 'split') or ${t.percentCapCents} is not null`),
   ],
 );
 
@@ -297,6 +299,8 @@ export const couponFraudClaims = pgTable(
   'coupon_fraud_claims',
   {
     id: bigserial({ mode: 'number' }).primaryKey(),
+    /** `first_purchase`: a PRIMEIRA COMPRA, 1 por identificador ENTRE campanhas (único parcial). `campaign_use`: o limite de usos por cliente DA campanha (WB-344 C14: outra conta no mesmo aparelho; contado sob a trava da campanha). */
+    scope: text({ enum: ['first_purchase', 'campaign_use'] }).notNull().default('first_purchase'),
     kind: text({ enum: FRAUD_IDENTIFIER_KINDS }).notNull(),
     hmac: varchar({ length: 64 }).notNull(),
     keyVersion: smallint().notNull().default(1),
@@ -307,7 +311,9 @@ export const couponFraudClaims = pgTable(
     releasedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('coupon_fraud_claims_active_uq').on(t.kind, t.hmac).where(sql`${t.state} = 'active'`),
+    enumCheck('coupon_fraud_claims_scope_enum', t.scope, ['first_purchase', 'campaign_use']),
+    uniqueIndex('coupon_fraud_claims_active_uq').on(t.kind, t.hmac).where(sql`${t.state} = 'active' and ${t.scope} = 'first_purchase'`),
+    index('coupon_fraud_claims_use_idx').on(t.campaignId, t.kind, t.hmac).where(sql`${t.state} = 'active' and ${t.scope} = 'campaign_use'`),
     enumCheck('coupon_fraud_claims_kind_enum', t.kind, FRAUD_IDENTIFIER_KINDS),
     enumCheck('coupon_fraud_claims_state_enum', t.state, ['active', 'released']),
     index('coupon_fraud_claims_order_idx').on(t.orderId),

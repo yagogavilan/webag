@@ -1,6 +1,6 @@
 {
-  "id": "0cc94fc2-2951-4a0f-b006-2c13f53915e2",
-  "prevId": "dee87389-96fe-4f41-8621-11bebe68e3dc",
+  "id": "d01e7973-935e-4852-812f-238fee54c24a",
+  "prevId": "cee372a3-6695-443d-8503-e57132c7c217",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1138,16 +1138,15 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.analytics_interest": {
-      "name": "analytics_interest",
+    "public.analytics_interest_events": {
+      "name": "analytics_interest_events",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "bigserial",
           "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
+          "notNull": true
         },
         "store_id": {
           "name": "store_id",
@@ -1161,12 +1160,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "clicked_at": {
-          "name": "clicked_at",
-          "type": "timestamp with time zone",
+        "kind": {
+          "name": "kind",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": true
         },
         "price_band": {
           "name": "price_band",
@@ -1176,13 +1174,7 @@
         },
         "note": {
           "name": "note",
-          "type": "varchar(140)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "answered_at": {
-          "name": "answered_at",
-          "type": "timestamp with time zone",
+          "type": "varchar(200)",
           "primaryKey": false,
           "notNull": false
         },
@@ -1195,26 +1187,38 @@
         }
       },
       "indexes": {
-        "analytics_interest_store_uq": {
-          "name": "analytics_interest_store_uq",
+        "analytics_interest_events_store_idx": {
+          "name": "analytics_interest_events_store_idx",
           "columns": [
             {
               "expression": "store_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "analytics_interest_store_id_stores_id_fk": {
-          "name": "analytics_interest_store_id_stores_id_fk",
-          "tableFrom": "analytics_interest",
+        "analytics_interest_events_store_id_stores_id_fk": {
+          "name": "analytics_interest_events_store_id_stores_id_fk",
+          "tableFrom": "analytics_interest_events",
           "tableTo": "stores",
           "columnsFrom": [
             "store_id"
@@ -1225,9 +1229,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "analytics_interest_user_id_users_id_fk": {
-          "name": "analytics_interest_user_id_users_id_fk",
-          "tableFrom": "analytics_interest",
+        "analytics_interest_events_user_id_users_id_fk": {
+          "name": "analytics_interest_events_user_id_users_id_fk",
+          "tableFrom": "analytics_interest_events",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
@@ -1243,13 +1247,17 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "analytics_interest_band_enum": {
-          "name": "analytics_interest_band_enum",
-          "value": "\"analytics_interest\".\"price_band\" in ('up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay')"
+        "analytics_interest_events_kind_enum": {
+          "name": "analytics_interest_events_kind_enum",
+          "value": "\"analytics_interest_events\".\"kind\" in ('clicked', 'answered')"
         },
-        "analytics_interest_answer": {
-          "name": "analytics_interest_answer",
-          "value": "(\"analytics_interest\".\"price_band\" is null) = (\"analytics_interest\".\"answered_at\" is null)"
+        "analytics_interest_events_band_enum": {
+          "name": "analytics_interest_events_band_enum",
+          "value": "\"analytics_interest_events\".\"price_band\" in ('up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay')"
+        },
+        "analytics_interest_events_shape": {
+          "name": "analytics_interest_events_shape",
+          "value": "(\"analytics_interest_events\".\"kind\" = 'answered') = (\"analytics_interest_events\".\"price_band\" is not null) and (\"analytics_interest_events\".\"kind\" = 'answered' or \"analytics_interest_events\".\"note\" is null)"
         }
       },
       "isRLSEnabled": false
@@ -2540,6 +2548,10 @@
         "campaigns_percent_cap": {
           "name": "campaigns_percent_cap",
           "value": "\"campaigns\".\"percent_cap_cents\" is null or \"campaigns\".\"kind\" = 'percent'"
+        },
+        "campaigns_percent_cap_required": {
+          "name": "campaigns_percent_cap_required",
+          "value": "\"campaigns\".\"kind\" <> 'percent' or \"campaigns\".\"funding_source\" not in ('webag', 'split') or \"campaigns\".\"percent_cap_cents\" is not null"
         }
       },
       "isRLSEnabled": false
@@ -2553,6 +2565,13 @@
           "type": "bigserial",
           "primaryKey": true,
           "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'first_purchase'"
         },
         "kind": {
           "name": "kind",
@@ -2624,7 +2643,35 @@
             }
           ],
           "isUnique": true,
-          "where": "\"coupon_fraud_claims\".\"state\" = 'active'",
+          "where": "\"coupon_fraud_claims\".\"state\" = 'active' and \"coupon_fraud_claims\".\"scope\" = 'first_purchase'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "coupon_fraud_claims_use_idx": {
+          "name": "coupon_fraud_claims_use_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "hmac",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"coupon_fraud_claims\".\"state\" = 'active' and \"coupon_fraud_claims\".\"scope\" = 'campaign_use'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2679,6 +2726,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "coupon_fraud_claims_scope_enum": {
+          "name": "coupon_fraud_claims_scope_enum",
+          "value": "\"coupon_fraud_claims\".\"scope\" in ('first_purchase', 'campaign_use')"
+        },
         "coupon_fraud_claims_kind_enum": {
           "name": "coupon_fraud_claims_kind_enum",
           "value": "\"coupon_fraud_claims\".\"kind\" in ('account', 'device', 'address', 'document')"

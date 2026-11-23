@@ -26,4 +26,4 @@ DROP TABLE IF EXISTS "campaign_budget_days";
 DROP TABLE IF EXISTS "campaign_acceptances";
 DROP TABLE IF EXISTS "campaign_store_enrollments";
 DROP TABLE IF EXISTS "campaigns";
-DELETE FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1795391778616;
+DELETE FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1795393639610;

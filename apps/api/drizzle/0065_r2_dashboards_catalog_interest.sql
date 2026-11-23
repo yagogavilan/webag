@@ -3,17 +3,17 @@
 -- Semente: o preço de HOJE com início em `now()`. O passado do preço é desconhecido, então ninguém comprova o selo "de/por" nos primeiros 30 dias (honesto, RN-C8).
 -- Reversão: drizzle/down/0065.sql (apaga as 10 tabelas: histórico de preço, painéis salvos, respostas da porta falsa; só em staging ou com autorização do fundador).
 SET LOCAL lock_timeout = '5s';--> statement-breakpoint
-CREATE TABLE "analytics_interest" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+CREATE TABLE "analytics_interest_events" (
+	"id" bigserial PRIMARY KEY NOT NULL,
 	"store_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
-	"clicked_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"kind" text NOT NULL,
 	"price_band" text,
-	"note" varchar(140),
-	"answered_at" timestamp with time zone,
+	"note" varchar(200),
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "analytics_interest_band_enum" CHECK ("analytics_interest"."price_band" in ('up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay')),
-	CONSTRAINT "analytics_interest_answer" CHECK (("analytics_interest"."price_band" is null) = ("analytics_interest"."answered_at" is null))
+	CONSTRAINT "analytics_interest_events_kind_enum" CHECK ("analytics_interest_events"."kind" in ('clicked', 'answered')),
+	CONSTRAINT "analytics_interest_events_band_enum" CHECK ("analytics_interest_events"."price_band" in ('up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay')),
+	CONSTRAINT "analytics_interest_events_shape" CHECK (("analytics_interest_events"."kind" = 'answered') = ("analytics_interest_events"."price_band" is not null) and ("analytics_interest_events"."kind" = 'answered' or "analytics_interest_events"."note" is null))
 );
 --> statement-breakpoint
 CREATE TABLE "product_barcodes" (
@@ -161,8 +161,8 @@ CREATE TABLE "dashboards" (
 	CONSTRAINT "dashboards_name_len" CHECK (char_length("dashboards"."name") between 1 and 80)
 );
 --> statement-breakpoint
-ALTER TABLE "analytics_interest" ADD CONSTRAINT "analytics_interest_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "analytics_interest" ADD CONSTRAINT "analytics_interest_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "analytics_interest_events" ADD CONSTRAINT "analytics_interest_events_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "analytics_interest_events" ADD CONSTRAINT "analytics_interest_events_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "product_barcodes" ADD CONSTRAINT "product_barcodes_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "product_barcodes" ADD CONSTRAINT "product_barcodes_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "product_barcodes" ADD CONSTRAINT "product_barcodes_variant_id_product_variants_id_fk" FOREIGN KEY ("variant_id") REFERENCES "public"."product_variants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -172,7 +172,7 @@ ALTER TABLE "product_price_history" ADD CONSTRAINT "product_price_history_actor_
 ALTER TABLE "reference_barcodes" ADD CONSTRAINT "reference_barcodes_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "dashboard_widgets" ADD CONSTRAINT "dashboard_widgets_dashboard_id_dashboards_id_fk" FOREIGN KEY ("dashboard_id") REFERENCES "public"."dashboards"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "dashboards" ADD CONSTRAINT "dashboards_owner_admin_id_users_id_fk" FOREIGN KEY ("owner_admin_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE UNIQUE INDEX "analytics_interest_store_uq" ON "analytics_interest" USING btree ("store_id");--> statement-breakpoint
+CREATE INDEX "analytics_interest_events_store_idx" ON "analytics_interest_events" USING btree ("store_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
 CREATE UNIQUE INDEX "product_barcodes_store_uq" ON "product_barcodes" USING btree ("store_id","barcode");--> statement-breakpoint
 CREATE INDEX "product_barcodes_product_idx" ON "product_barcodes" USING btree ("product_id");--> statement-breakpoint
 CREATE INDEX "product_price_history_product_idx" ON "product_price_history" USING btree ("product_id","started_at" DESC NULLS LAST);--> statement-breakpoint

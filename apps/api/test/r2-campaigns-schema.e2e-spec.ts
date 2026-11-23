@@ -96,6 +96,18 @@ describe('R2.1: campanha (regras de custo no banco, DEC-088)', () => {
     });
   });
 
+  it('percentual com custo da Webag exige o teto em R$ (WB-340 C12); no Autofinanciado e na Loja paga o teto é opcional', async () => {
+    await inTx(async () => {
+      const pct = { kind: `'percent'`, value: '10' };
+      expect(await failsWith(campaignSql({ ...pct, funding_source: `'webag'` }).sql)).toBe(CHECK);
+      expect(await failsWith(campaignSql({ ...pct, funding_source: `'split'`, store_share_pct: '40' }).sql)).toBe(CHECK);
+      expect(await failsWith(campaignSql({ ...pct, funding_source: `'webag'`, percent_cap_cents: '1500' }).sql)).toBe('ok');
+      expect(await failsWith(campaignSql({ ...pct, funding_source: `'self_funded'`, store_share_pct: '0' }).sql)).toBe('ok');
+      expect(await failsWith(campaignSql({ ...pct, funding_source: `'store'`, store_share_pct: '100', budget_total_cents: 'null', budget_daily_cents: 'null', max_uses: '5' }).sql)).toBe('ok');
+      expect(await failsWith(campaignSql({ kind: `'fixed'`, value: '800', percent_cap_cents: '1500' }).sql)).toBe(CHECK); // teto só existe no percentual
+    });
+  });
+
   it('cupom da loja: a fonte é da loja (100%), alvo na própria loja e nunca frete', async () => {
     await inTx(async () => {
       const own = { owner: `'store'`, owner_store_id: `'${storeId}'`, funding_source: `'store'`, store_share_pct: '100', target_kind: `'store'`, target_store_id: `'${storeId}'`, budget_total_cents: 'null', budget_daily_cents: 'null', max_uses: '10' };
@@ -288,6 +300,19 @@ describe('R2.1: antifraude por HMAC (C-CUP-04, C-CUP-05)', () => {
     });
   });
 
+  it('o limite de usos por cliente da campanha (mesmo aparelho) é outro escopo: vários por identificador entre campanhas, contado sob a trava da campanha', async () => {
+    await inTx(async () => {
+      const a = await newCampaign();
+      const b = await newCampaign();
+      const use = (campaign: string, mac: string) => client.query(`INSERT INTO coupon_fraud_claims (scope, kind, hmac, order_id, campaign_id) VALUES ('campaign_use', 'device', $1, gen_random_uuid(), $2)`, [mac, campaign]);
+      await use(a, hex('9'));
+      await use(b, hex('9')); // outra campanha, mesmo aparelho: permitido (a primeira compra é que é única entre campanhas)
+      expect(await failsWith(`INSERT INTO coupon_fraud_claims (scope, kind, hmac, order_id, campaign_id) VALUES ('first_purchase', 'device', $1, gen_random_uuid(), $2)`, [hex('9'), a])).toBe('ok'); // escopo distinto
+      expect(await failsWith(`INSERT INTO coupon_fraud_claims (scope, kind, hmac, order_id, campaign_id) VALUES ('first_purchase', 'device', $1, gen_random_uuid(), $2)`, [hex('9'), b])).toBe(UNIQUE);
+      expect(await failsWith(`INSERT INTO coupon_fraud_claims (scope, kind, hmac, order_id, campaign_id) VALUES ('outro', 'device', $1, gen_random_uuid(), $2)`, [hex('8'), a])).toBe(CHECK);
+    });
+  });
+
   it('só entra HMAC (64 hexadecimais): CPF, endereço, id de aparelho ou telefone em claro são recusados pelo banco', async () => {
     await inTx(async () => {
       const campaign = await newCampaign();
@@ -366,13 +391,20 @@ describe('R2.1: painéis, histórico de preço, código de barras e porta falsa'
     });
   });
 
-  it('a porta falsa guarda uma linha por loja e a faixa só junto da data da resposta', async () => {
+  it('a porta falsa é um LOG por loja: o toque não leva faixa nem texto, a resposta leva a faixa de exemplo e o texto de até 200 caracteres', async () => {
     await inTx(async () => {
-      await client.query(`INSERT INTO analytics_interest (store_id, user_id) VALUES ($1, $2)`, [storeId, userId]);
-      expect(await failsWith(`INSERT INTO analytics_interest (store_id, user_id) VALUES ($1, $2)`, [storeId, userId])).toBe(UNIQUE);
-      expect(await failsWith(`UPDATE analytics_interest SET price_band = '20_to_39' WHERE store_id = $1`, [storeId])).toBe(CHECK); // faixa sem data
-      expect(await failsWith(`UPDATE analytics_interest SET price_band = '20_to_39', answered_at = now() WHERE store_id = $1`, [storeId])).toBe('ok');
-      expect(await failsWith(`UPDATE analytics_interest SET price_band = 'R$ 25', answered_at = now() WHERE store_id = $1`, [storeId])).toBe(CHECK); // só as 5 faixas de exemplo
+      const ins = (kind: string, band: string | null, note: string | null) => client.query(`INSERT INTO analytics_interest_events (store_id, user_id, kind, price_band, note) VALUES ($1, $2, $3, $4, $5)`, [storeId, userId, kind, band, note]);
+      await ins('clicked', null, null);
+      await ins('answered', '20_to_39', 'depende do que vier');
+      await ins('answered', 'would_not_pay', null); // mudou de ideia: a última vale, as anteriores ficam
+      const sql = `INSERT INTO analytics_interest_events (store_id, user_id, kind, price_band, note) VALUES ('${storeId}', '${userId}', $1, $2, $3)`;
+      expect(await failsWith(sql, ['clicked', '20_to_39', null])).toBe(CHECK); // toque com faixa
+      expect(await failsWith(sql, ['clicked', null, 'texto'])).toBe(CHECK); // toque com texto
+      expect(await failsWith(sql, ['answered', null, null])).toBe(CHECK); // resposta sem faixa
+      expect(await failsWith(sql, ['answered', 'R$ 25', null])).toBe(CHECK); // só as 5 faixas de exemplo
+      expect(await failsWith(sql, ['answered', '80_plus', 'x'.repeat(201)])).not.toBe('ok');
+      const latest = await client.query<{ price_band: string }>(`SELECT DISTINCT ON (store_id) price_band FROM analytics_interest_events WHERE store_id = $1 AND kind = 'answered' ORDER BY store_id, created_at DESC, id DESC`, [storeId]);
+      expect(latest.rows[0]!.price_band).toBe('would_not_pay');
     });
   });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "dee87389-96fe-4f41-8621-11bebe68e3dc",
+  "id": "cee372a3-6695-443d-8503-e57132c7c217",
   "prevId": "414c7838-3747-45da-b179-a74c190642d2",
   "version": "7",
   "dialect": "postgresql",
@@ -2424,6 +2424,10 @@
         "campaigns_percent_cap": {
           "name": "campaigns_percent_cap",
           "value": "\"campaigns\".\"percent_cap_cents\" is null or \"campaigns\".\"kind\" = 'percent'"
+        },
+        "campaigns_percent_cap_required": {
+          "name": "campaigns_percent_cap_required",
+          "value": "\"campaigns\".\"kind\" <> 'percent' or \"campaigns\".\"funding_source\" not in ('webag', 'split') or \"campaigns\".\"percent_cap_cents\" is not null"
         }
       },
       "isRLSEnabled": false
@@ -2437,6 +2441,13 @@
           "type": "bigserial",
           "primaryKey": true,
           "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'first_purchase'"
         },
         "kind": {
           "name": "kind",
@@ -2508,7 +2519,35 @@
             }
           ],
           "isUnique": true,
-          "where": "\"coupon_fraud_claims\".\"state\" = 'active'",
+          "where": "\"coupon_fraud_claims\".\"state\" = 'active' and \"coupon_fraud_claims\".\"scope\" = 'first_purchase'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "coupon_fraud_claims_use_idx": {
+          "name": "coupon_fraud_claims_use_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "hmac",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"coupon_fraud_claims\".\"state\" = 'active' and \"coupon_fraud_claims\".\"scope\" = 'campaign_use'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2563,6 +2602,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "coupon_fraud_claims_scope_enum": {
+          "name": "coupon_fraud_claims_scope_enum",
+          "value": "\"coupon_fraud_claims\".\"scope\" in ('first_purchase', 'campaign_use')"
+        },
         "coupon_fraud_claims_kind_enum": {
           "name": "coupon_fraud_claims_kind_enum",
           "value": "\"coupon_fraud_claims\".\"kind\" in ('account', 'device', 'address', 'document')"

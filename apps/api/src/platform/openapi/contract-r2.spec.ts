@@ -247,9 +247,11 @@ describe('contrato OpenAPI da v1.1 R2', () => {
   describe('ativar com custo da Webag (WB-340 C4 a C11, C-CUP-08)', () => {
     it('os bloqueios têm código estável para cada critério e a ativação documenta o 2º fator recente e a flag', () => {
       const codes = schemas.ActivationBlocker.properties.code.enum as string[];
-      for (const c of ['BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'FREE_SHIPPING_FUNDING_INVALID', 'FREE_SHIPPING_DISABLED']) expect(codes, c).toContain(c);
+      for (const c of ['BUDGET_REQUIRED', 'USAGE_OR_BUDGET_REQUIRED', 'MIN_ORDER_TOO_LOW', 'GLOBAL_BUDGET_ZERO', 'GLOBAL_BUDGET_EXCEEDED', 'ABOVE_MARGIN_SUPER_ADMIN_ONLY', 'LOSS_RISK_ACK_REQUIRED', 'FREE_SHIPPING_FUNDING_INVALID', 'FREE_SHIPPING_DISABLED', 'STORE_SHARE_DISABLED', 'PERCENT_CAP_REQUIRED']) expect(codes, c).toContain(c);
+      expect(codes, 'DEC-137: não existe flag-mestra').not.toContain('CAMPAIGNS_DISABLED');
+      expect(JSON.stringify(contract.paths) + JSON.stringify(schemas), 'DEC-137').not.toContain('campanhas_cupom');
       const text = String(byId('activateCampaign').op.description);
-      for (const part of ['REAUTH_REQUIRED', 'ACTIVATION_BLOCKED', 'campanhas_cupom', 'super admin', 'R$ 0']) expect(text, part).toContain(part);
+      for (const part of ['REAUTH_REQUIRED', 'ACTIVATION_BLOCKED', 'campanha_parte_da_loja', 'super admin', 'R$ 0']) expect(text, part).toContain(part);
       expect(schemas.ActivationBlocker.properties.requiredMinOrderCents).toBeDefined();
       expect(schemas.ActivationBlocker.properties.missingCents).toBeDefined();
     });
@@ -260,6 +262,7 @@ describe('contrato OpenAPI da v1.1 R2', () => {
       const sim = schemas.CampaignSimulation;
       expect(sim.properties.courierCostSource.enum).toEqual(['delivery_fee_table', 'provisional']);
       expect(sim.required).toEqual(expect.arrayContaining(['provisional', 'worstCase', 'globalBudget']));
+      expect(sim.properties.worstCase.required).toEqual(expect.arrayContaining(['discountWebagCents', 'maxOrdersPerDay', 'maxOrdersTotal'])); // WB-340 C12
       expect(schemas.Campaign.allOf[1].required).toContain('courierCostProvisional');
     });
 
@@ -329,6 +332,12 @@ describe('contrato OpenAPI da v1.1 R2', () => {
       expect(schemas.DashboardWidget.properties.title.maxLength).toBe(80);
     });
 
+    it('widget sem permissão vem bloqueado e não é consultado (WB-357 C8), sem listar a métrica no catálogo', () => {
+      expect(schemas.DashboardWidget.required).toContain('blocked');
+      expect(schemas.Dashboard.required).toContain('blockedWidgets');
+      expect(String(byId('listDashboards').op.description)).toContain('NÃO é consultado');
+    });
+
     it('painel pronto não edita (só duplica) e painel de outro admin é 404', () => {
       expect(schemas.Dashboard.required).toContain('editable');
       expect(String(byId('listDashboards').op.description)).toContain('nenhum editável');
@@ -374,11 +383,19 @@ describe('contrato OpenAPI da v1.1 R2', () => {
       expect(schemas.AnalyticsEvent.oneOf.map((o: Json) => o.$ref)).toContain('#/components/schemas/CheckoutStartedEvent');
     });
 
+    it('a porta falsa é do dono ou de quem tem a permissão `analises`, e os eventos de "Faltam R$ X" são só do app, sem valor exato', () => {
+      expect(String(byId('recordAnalyticsInterest').op.description)).toContain('`analises`');
+      const ev = schemas.CouponUxEvent;
+      expect(ev.additionalProperties).toBe(false);
+      expect(ev.properties.name.enum).toEqual(['coupon_showcase_viewed', 'coupon_shortfall_shown', 'coupon_shortfall_resolved', 'coupon_shortfall_abandoned']);
+      expect(ev.properties.shortfallBandCents.multipleOf).toBe(1000);
+    });
+
     it('a porta falsa guarda a faixa de exemplo e não promete preço nem data; o texto livre é curto', () => {
       const req = schemas.RecordAnalyticsInterestRequest;
       expect(req.additionalProperties).toBe(false);
       expect(req.properties.priceBand.enum).toEqual(['up_to_19', '20_to_39', '40_to_79', '80_plus', 'would_not_pay']);
-      expect(req.properties.note.maxLength).toBe(140);
+      expect(req.properties.note.maxLength).toBe(200);
     });
 
     it('o código de barras é conferido no servidor, único por loja, sem rede externa e limitado a 60 por hora', () => {
