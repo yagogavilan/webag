@@ -122,7 +122,7 @@ Todo valor abaixo vive em tabela de parâmetros editável (super admin), com his
 | ACEITO | Loja confirmou | EM_SEPARACAO, PRONTO_PARA_COLETA*, PRONTO_PARA_RETIRADA*, CANCELADO | loja, cliente, admin |
 | EM_SEPARACAO | Loja preparando | PRONTO_PARA_COLETA, PRONTO_PARA_RETIRADA, CANCELADO | loja, admin (cliente só por solicitação aprovada) |
 | PRONTO_PARA_COLETA | **Só entrega Webag (DEC-036):** a loja terminou; a corrida está na fila da Logística, com ou sem motoboy ainda a caminho da loja (estados da entrega em RN-18) | SAIU_PARA_ENTREGA, EM_SEPARACAO (loja desfaz só sem motoboy; admin sempre), CANCELADO | loja (marca), admin |
-| SAIU_PARA_ENTREGA | Motoboy coletou e está a caminho (só entrega) | ENTREGUE, CANCELADO (falha de entrega, RN-18) | **admin/logística** (a loja **não** marca "saiu" nem "entregue" na entrega Webag), sistema (24h) |
+| SAIU_PARA_ENTREGA | Motoboy coletou e está a caminho (só entrega) | ENTREGUE, CANCELADO (falha de entrega, RN-18) | **admin/logística** (a loja **não** marca "saiu" nem "entregue" na entrega Webag), sistema (24h). **v1.1 R3 (DEC-099, flag `loja_confirma_saida`, nasce desligada):** com a flag ligada, **a loja confirma a saída** ("Saiu com o motoboy"), a operação é o fallback e o sistema só confirma sozinho com `saida_automatica` (R4, GPS); "entregue" segue com a operação (R3) ou com o motoboy no app (R4). Flag desligada = comportamento da v1.0 (`prd/v1-1-rastreio-e-notificacoes.md`, escopo R3) |
 | PRONTO_PARA_RETIRADA | Aguardando cliente (só retirada) | ENTREGUE, CANCELADO | loja (com código), sistema (48h) |
 | ENTREGUE | Concluído (retirado = entregue) | (terminal; abre avaliação e troca) | n/a |
 | CANCELADO | Cancelado; guarda ator e motivo | terminal | cliente, loja, admin, sistema |
@@ -271,12 +271,15 @@ Qualquer outra transição (inclusive RECUSADA ou SUSPENSA direto para APROVADA,
 |---|---|---|---|---|
 | PRONTA_PARA_COLETA | Loja marcou pronto; corrida na fila sem motoboy | AGUARDANDO_MOTOBOY, CANCELADA+ | loja (cria), admin | PRONTO_PARA_COLETA |
 | AGUARDANDO_MOTOBOY | Motoboy atribuído e mensagem enviada, sem confirmação | MOTOBOY_A_CAMINHO, PRONTA_PARA_COLETA (reatribuir), CANCELADA+ | operação | PRONTO_PARA_COLETA |
-| MOTOBOY_A_CAMINHO | Motoboy confirmou e vai à loja | SAIU_PARA_ENTREGA, PRONTA_PARA_COLETA (reatribuir), CANCELADA+ | operação | PRONTO_PARA_COLETA |
+| MOTOBOY_A_CAMINHO | Motoboy confirmou e vai à loja | SAIU_PARA_ENTREGA, MOTOBOY_NA_LOJA++ , PRONTA_PARA_COLETA (reatribuir), CANCELADA+ | operação; com `loja_confirma_saida`, a **loja** também leva a SAIU (marca `sem_chegada`) | PRONTO_PARA_COLETA |
+| MOTOBOY_NA_LOJA++ | **v1.1 (R3, atrás da flag `loja_confirma_saida`):** motoboy chegou à loja; aguarda a saída. Na R3 a **operação** marca a chegada a partir do aviso do motoboy no WhatsApp (opcional: a loja pode confirmar a saída direto de MOTOBOY_A_CAMINHO); com o app (R4) é o motoboy | SAIU_PARA_ENTREGA, PRONTA_PARA_COLETA (reatribuir) | operação (R3), motoboy (R4) | PRONTO_PARA_COLETA |
 | SAIU_PARA_ENTREGA | Motoboy coletou e vai ao cliente | ENTREGUE, NAO_ENTREGUE | operação | SAIU_PARA_ENTREGA |
 | ENTREGUE | Cliente recebeu (código de entrega se a flag estiver ligada) | terminal | operação | ENTREGUE |
 | NAO_ENTREGUE | Tentativa falhou, com motivo (cliente ausente, endereço não encontrado, recusou, risco, outro) | SAIU_PARA_ENTREGA (reentrega, até `entrega_reentrega_max`), DEVOLVIDA_A_LOJA+ | operação | SAIU_PARA_ENTREGA |
 | DEVOLVIDA_A_LOJA+ | Pacote voltou e a loja confirmou | terminal | operação, loja (confirma) | CANCELADO (estorno total) |
 | CANCELADA+ | Corrida cancelada (pedido cancelado, loja desfez) | terminal | operação, sistema | conforme o pedido |
+
+`++` = estado novo da v1.1; timeouts, fonte de cada transição (`loja`, `sistema`, `admin`, `app`) e divergências: `prd/v1-1-rastreio-e-notificacoes.md` (máquina de estados e WB-391) e `prd/v1-1-despacho-e-app-motoboy.md` (RN-D5, RN-D11, RN-D13, RN-D14). Reatribuir só vale **antes da saída registrada** (R3) ou antes do "Peguei o pedido" (R4); depois, "Marcar problema".
 
 Para as corridas de troca, os mesmos estados valem com os rótulos "a caminho do cliente", "item coletado", "item entregue na loja"; o fim exige a confirmação da **loja** (ITEM_RECEBIDO).
 Atribuir, reatribuir e desfazer exigem motivo e auditoria; todo estado grava ator e hora e notifica o cliente (push só em SAIU e ENTREGUE e em falha).
