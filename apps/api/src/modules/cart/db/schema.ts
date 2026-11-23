@@ -3,6 +3,7 @@ import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, 
 import { productVariants, products } from '../../catalog/db/schema.js';
 import { users } from '../../identity/db/schema.js';
 import { stores } from '../../stores/db/schema.js';
+import { campaigns } from '../../campaigns/db/schema.js';
 
 export const COUPON_KINDS = ['percent', 'fixed', 'free_shipping'] as const;
 export type CouponKind = (typeof COUPON_KINDS)[number];
@@ -37,9 +38,20 @@ export const coupons = pgTable(
     ownerUserId: uuid().references(() => users.id, { onDelete: 'cascade' }),
     /** WB-254 C5: pedido atrasado que originou o cupom; único, e por isso um cupom por pedido mesmo se reprocessar. */
     sourceOrderId: uuid(),
+    /**
+     * v1.1 R2 (ADR-019 D3): código de uma CAMPANHA. Nulo = cupom legado (WB-116) ou de compensação por atraso, que seguem pela regra de hoje e FICAM FORA do orçamento (D13).
+     * Quando preenchido, `kind`, `value`, `min_order`, `starts_at`, `ends_at`, `max_uses`, `per_customer_limit`, `first_purchase_only` e `scope` são ESPELHOS da campanha, escritos pelo serviço
+     * na mesma transação (a campanha não muda depois de ativa); a verdade das regras, do orçamento e do estado é a linha de `campaigns`.
+     */
+    campaignId: uuid().references(() => campaigns.id),
+    /** `private`: código gerado pelo servidor (8 ou mais caracteres aleatórios, C-CUP-06); nunca entra na vitrine. */
+    visibility: text({ enum: ['public', 'private'] }).notNull().default('public'),
+    codeOrigin: text({ enum: ['manual', 'generated'] }).notNull().default('manual'),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    index('coupons_campaign_idx').on(t.campaignId).where(sql`${t.campaignId} is not null`),
+    check('coupons_private_code_strength', sql`${t.visibility} = 'public' or (${t.codeOrigin} = 'generated' and char_length(${t.code}) >= 8)`),
     uniqueIndex('coupons_source_order_uq').on(t.sourceOrderId).where(sql`${t.sourceOrderId} is not null`),
     index('coupons_owner_idx').on(t.ownerUserId).where(sql`${t.ownerUserId} is not null`),
     uniqueIndex('coupons_code_uq').on(sql`upper(${t.code})`),

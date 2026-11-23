@@ -18,3 +18,6 @@ export * from '../../modules/notifications/db/schema.js';
 export * from '../../modules/privacy/db/schema.js';
 export * from '../../modules/marketing/db/schema.js';
 export * from '../../modules/feedback/db/schema.js';
+export * from '../../modules/campaigns/db/schema.js';
+export * from '../../modules/dashboards/db/schema.js';
+export * from '../../modules/analytics/db/schema.js';

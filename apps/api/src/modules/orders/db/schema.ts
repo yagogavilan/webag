@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { bigserial, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { campaigns } from '../../campaigns/db/schema.js';
 import { coupons } from '../../cart/db/schema.js';
 import { products, productVariants } from '../../catalog/db/schema.js';
 import { users } from '../../identity/db/schema.js';
@@ -41,6 +42,9 @@ export const orders = pgTable(
     pickupCode: varchar({ length: 6 }),
     couponId: uuid().references(() => coupons.id, { onDelete: 'set null' }),
     couponCode: varchar({ length: 20 }),
+    /** v1.1 R2 (WB-341 C6): campanha do cupom e o SNAPSHOT do que o cliente viu e do que o motor decidiu (fonte, parte da loja, `autofin_teto_pct`, margem prevista, custo previsto do motoboy e sua origem, desconto bruto, da loja e da Webag). Mudar a campanha ou a tabela depois não altera o pedido (RN-05). */
+    campaignId: uuid().references(() => campaigns.id),
+    couponSnapshot: jsonb().$type<Record<string, unknown> | null>(),
     subtotalCents: integer().notNull(),
     deliveryFeeCents: integer().notNull(),
     serviceFeeCents: integer().notNull(),
@@ -93,6 +97,7 @@ export const orders = pgTable(
     uniqueIndex('orders_number_uq').on(t.number),
     index('orders_user_idx').on(t.userId, t.createdAt.desc(), t.id.desc()),
     index('orders_store_idx').on(t.storeId, t.status, t.createdAt.desc()),
+    index('orders_campaign_idx').on(t.campaignId, t.paidAt).where(sql`${t.campaignId} is not null`),
     index('orders_payment_expiry_idx').on(t.paymentExpiresAt).where(sql`${t.status} = 'awaiting_payment'`),
     index('orders_accept_deadline_idx').on(t.acceptDeadlineAt).where(sql`${t.status} = 'received'`),
     check('orders_money_chk', sql`${t.subtotalCents} >= 0 and ${t.deliveryFeeCents} >= 0 and ${t.serviceFeeCents} >= 0 and ${t.discountCents} >= 0 and ${t.totalCents} >= 0 and ${t.commissionCents} >= 0 and ${t.applicationFeeCents} >= 0`),

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, jsonb, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { bigserial, boolean, check, index, integer, jsonb, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { categories } from '../../admin/db/schema.js';
+import { enumCheck } from '../../../platform/database/enum-check.js';
 import { users } from '../../identity/db/schema.js';
 import { mediaAssets } from '../../media/db/schema.js';
 import { stores } from '../../stores/db/schema.js';
@@ -262,4 +263,75 @@ export const productBulkBatchItems = pgTable(
     primaryKey({ columns: [t.batchId, t.productId] }),
     index('product_bulk_batch_items_product_idx').on(t.productId),
   ],
+);
+
+/**
+ * v1.1 R2 (ADR-019 D10, RN-C8, WB-348): histórico do preço PRATICADO, para o selo "de/por" só aparecer com o preço "de" praticado por 30 dias seguidos nos últimos 60.
+ * Intervalos: `base` (preço normal) e `promo` (período de promoção). UMA linha aberta (`ended_at` nulo) por (produto, variação, tipo). Quem grava é o ÚNICO helper de
+ * edição de preço do catálogo (R2.3); o histórico anterior à v1.1 NÃO existe: a migração semeia só o preço de hoje, então ninguém comprova o selo nos primeiros 30 dias.
+ * O autor é guardado (preço, data, autor: WB-348 C4); `actor_user_id` vira nulo se a conta for removida (a casca anonimizada mantém o histórico).
+ */
+export const productPriceHistory = pgTable(
+  'product_price_history',
+  {
+    id: bigserial({ mode: 'number' }).primaryKey(),
+    productId: uuid().notNull().references(() => products.id, { onDelete: 'cascade' }),
+    /** Variação com preço PRÓPRIO; nulo = o preço base do produto. */
+    variantId: uuid().references(() => productVariants.id, { onDelete: 'cascade' }),
+    kind: text({ enum: ['base', 'promo'] }).notNull(),
+    priceCents: integer().notNull(),
+    startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp({ withTimezone: true }),
+    actorKind: text({ enum: ['merchant', 'admin', 'system', 'import'] }).notNull(),
+    actorUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    enumCheck('product_price_history_kind_enum', t.kind, ['base', 'promo']),
+    enumCheck('product_price_history_actor_enum', t.actorKind, ['merchant', 'admin', 'system', 'import']),
+    index('product_price_history_product_idx').on(t.productId, t.startedAt.desc()),
+    uniqueIndex('product_price_history_open_uq')
+      .on(t.productId, sql`coalesce(${t.variantId}, '00000000-0000-0000-0000-000000000000'::uuid)`, t.kind)
+      .where(sql`${t.endedAt} is null`),
+    check('product_price_history_price', sql`${t.priceCents} between 1 and 9999999`),
+    check('product_price_history_period', sql`${t.endedAt} is null or ${t.endedAt} >= ${t.startedAt}`),
+  ],
+);
+
+/**
+ * v1.1 R2 (WB-373, C-CAD-06): código de barras (EAN-8, UPC-A, EAN-13, GTIN-14) da variação, ÚNICO por loja. O dígito verificador é conferido no servidor
+ * (`isValidGtin`); o banco garante só o formato e a unicidade. Tabela própria (em vez de coluna em `product_variants`) porque a unicidade é por LOJA e a variação não tem `store_id`.
+ */
+export const productBarcodes = pgTable(
+  'product_barcodes',
+  {
+    id: uuid().primaryKey().default(sql`gen_random_uuid()`),
+    storeId: uuid().notNull().references(() => stores.id),
+    barcode: varchar({ length: 14 }).notNull(),
+    productId: uuid().notNull().references(() => products.id, { onDelete: 'cascade' }),
+    variantId: uuid().references(() => productVariants.id, { onDelete: 'cascade' }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('product_barcodes_store_uq').on(t.storeId, t.barcode),
+    index('product_barcodes_product_idx').on(t.productId),
+    check('product_barcodes_format', sql`${t.barcode} ~ '^[0-9]{8}$' or ${t.barcode} ~ '^[0-9]{12,14}$'`),
+  ],
+);
+
+/**
+ * Catálogo de referência PRÓPRIO de códigos de barras (WB-373 C5): dado FACTUAL (nome, marca, categoria), sem foto e sem descrição, alimentado só por cadastro MODERADO
+ * (produto aprovado) ou pelo admin. Não referencia usuário nem loja identificável ao consumidor. Nenhuma base externa (flag `ean_base_externa` desligada, F9).
+ */
+export const referenceBarcodes = pgTable(
+  'reference_barcodes',
+  {
+    barcode: varchar({ length: 14 }).primaryKey(),
+    name: varchar({ length: 120 }).notNull(),
+    brand: varchar({ length: 60 }),
+    categoryId: uuid().references(() => categories.id),
+    source: text({ enum: ['moderated_catalog', 'admin'] }).notNull(),
+    moderatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [enumCheck('reference_barcodes_source_enum', t.source, ['moderated_catalog', 'admin']), check('reference_barcodes_format', sql`${t.barcode} ~ '^[0-9]{8}$' or ${t.barcode} ~ '^[0-9]{12,14}$'`)],
 );

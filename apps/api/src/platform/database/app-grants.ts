@@ -19,6 +19,8 @@ export const APP_ROLE = 'webag_app';
  */
 export const APPEND_ONLY_TABLES = [
   'audit_log',
+  'campaign_acceptances',
+  'campaign_budget_entries',
   'consents',
   'delivery_events',
   'ledger_entries',

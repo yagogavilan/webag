@@ -449,6 +449,20 @@
       "when": 1795377034068,
       "tag": "0063_r1_bulk_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795391778616,
+      "tag": "0064_r2_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795391779698,
+      "tag": "0065_r2_dashboards_catalog_interest",
+      "breakpoints": true
     }
   ]
 }

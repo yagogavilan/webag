@@ -486,11 +486,13 @@ describe('QA R1.3: reajuste em massa, desfazer e massa do admin (exploratório)'
         expect(await tables(c)).toEqual(['product_bulk_batch_items', 'product_bulk_batches']);
         const snap = await countsOf(c);
         await c.query('BEGIN');
-        await c.query(readFileSync(nodePath.join(ROOT, 'drizzle/down/0063.sql'), 'utf8'));
+        // O migrator do Drizzle só aplica o que é MAIS NOVO que a última migração registrada: reverter a 0063 com migrações posteriores aplicadas exige reverter as posteriores antes
+        // (v1.1 R2: 0065 e 0064, que não mexem em `product_bulk_batches`), senão a 0063 nunca mais é reaplicada. A ordem é a do guia de deploy §16: da mais nova para a mais antiga.
+        for (const n of ['0065', '0064', '0063']) await c.query(readFileSync(nodePath.join(ROOT, `drizzle/down/${n}.sql`), 'utf8'));
         await c.query('COMMIT');
         expect(await tables(c)).toEqual([]);
         const after = await countsOf(c);
-        expect(after).toEqual({ ...snap, j: snap.j - 1 });
+        expect(after).toEqual({ ...snap, j: snap.j - 3 });
         return snap;
       });
       await runMigrations(TEST_ENV.migratorDatabaseUrl);
