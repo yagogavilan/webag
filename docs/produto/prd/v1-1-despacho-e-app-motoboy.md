@@ -217,7 +217,7 @@ Como motoboy, quero que o app rastreie só enquanto trabalho e não perca dado s
 ### WB-388 Admin: motoboys ao vivo, sem sinal e reatribuir — Should — dep: WB-380, WB-387
 Como operação, quero ver quem está sem sinal e reatribuir, para não deixar cliente esperando.
 - **C1** Dado motoboy sem ponto há mais de 3 minutos em corrida, então aparece "Sem sinal" no mapa e na lista e um alerta ao admin (RN-19 alerta de atraso segue valendo).
-- **C2** (RN-D11) Dado "Reatribuir" com motivo, então a corrida volta a PRONTA_PARA_COLETA ou vai a outro motoboy, com auditoria, **só se ainda não houve "Peguei o pedido"**; com "Peguei" ou já SAIU, o botão vira "Marcar problema" (NAO_ENTREGUE ou DEVOLVIDA_A_LOJA, RN-18) com motivo.
+- **C2** (RN-D11) Dado "Reatribuir" com motivo, então a corrida volta a PRONTA_PARA_COLETA ou vai a outro motoboy, com auditoria, **só se ainda não houve "Peguei o pedido"**; com "Peguei" ou já SAIU, o botão vira "Marcar problema" (NAO_ENTREGUE ou DEVOLVIDA_A_LOJA, RN-18) com motivo. **A parte "Reatribuir antes da saída registrada" é entregue na R3 pela WB-391 C21** (sem "Peguei", a saída registrada é o marco); o "Peguei" do app entra na R4.
 - **C3** Dado o histórico de uma corrida, então a operação vê a linha do tempo de etapas com hora e fonte (app, admin, automático).
 - **C4** Dado perfil suporte, então vê a posição só de corrida ativa e sem histórico de pontos (C-MOT-12).
 - **C5** (RN-D12) Dado motoboy "Disponível", então a lista mostra "disponível há N min" e "última entrega: bairro e hora", sem pino no mapa; "Atribuir" a motoboy sem posição mostra o aviso e segue.
@@ -233,7 +233,7 @@ Como motoboy, quero saber e controlar o que o app coleta, para confiar nele.
 - **C7** (D-07, recomendação do PO; o designer decide) Dado aparelho sem bloqueio de tela, então o app avisa no 1º acesso e registra `device_unsecured`, sem bloquear a corrida na v1.1 `[HIPÓTESE]`.
 
 ## Eventos de analytics (servidor)
-`route_generated` (stops, total_km, late_warnings), `route_sent` (channel: app, whatsapp), `courier_offer_accepted` (seconds), `courier_offer_declined` (reason), `courier_step` (step, source: app, admin), `courier_offline_flush` (points, delay_s), `courier_signal_lost` (seconds), `delivery_code_failed`. IDs opacos; sem nome nem endereço.
+`route_generated` (stops, total_km, late_warnings), `route_sent` (channel: app, whatsapp), `courier_offer_accepted` (seconds), `courier_offer_declined` (reason, source: admin, app), `courier_offer_expired` (seconds), `route_reassigned` (reason), `courier_step` (step, source: app, admin), `courier_offline_flush` (points, delay_s), `courier_signal_lost` (seconds), `delivery_code_failed`. IDs opacos; sem nome nem endereço.
 
 ## Dependências e riscos
 | Item | Tratamento |
