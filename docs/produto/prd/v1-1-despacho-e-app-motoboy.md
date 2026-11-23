@@ -85,6 +85,7 @@ Base: `prd/logistica.md` (WB-229 a 262), `regras-de-negocio.md` RN-18 (estados e
 **RN-D13 Modo operação (R3, sem app) (2026-11-23).** Quem despacha é a **operação da Webag** (perfis Operação e Super admin, RN-13; Suporte só vê; Financeiro só lê). A operação gera o lote, **envia por WhatsApp** (link `wa.me` com o texto pronto; **não há envio automático de WhatsApp**, DEC-003) e **registra no painel, em nome do motoboy**, o que ele responder: "aceitou", "recusou" (com motivo), "chegou à loja", e depois "entregue" (com o código que o cliente informa). Cada registro grava fonte `admin`, ator e hora (RN-07). O estado do motoboy na lista é só **Disponível** (sem rota ativa) ou **Em corrida** (com rota ativa); "Sem sinal" e "Offline" existem só com o app (R4). Não há posição de motoboy em nenhuma tela da R3 (RN-D7, RN-D12). Parâmetros: `courier_accept_timeout_min` (3).
 
 **RN-D14 Motoboy não aceita ou some (2026-11-23).**
+
 | Situação | O que acontece (R3; na R4 o app faz o registro) | Quem decide |
 |---|---|---|
 | **Recusa** | Operação registra "recusou" + motivo (Sem moto, Longe, Outro). O **lote inteiro** volta a PRONTA_PARA_COLETA **na mesma posição da fila** (o prazo restante e os alertas de 10 e 20 min contam do "pronto", **nunca reiniciam**). Nenhuma nota, contagem exibida ou penalidade ao motoboy (RN-D7, J8); a operação pode oferecer a outro | Operação |

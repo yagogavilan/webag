@@ -248,6 +248,10 @@ Como fundador, quero montar meus gráficos, para responder minhas perguntas sem 
 - **C8** Dado excluir painel, então pede confirmação e não afeta os prontos.
 - **C9** (C-DSH-06) Dado nome de painel ou widget com até 80 caracteres, então é exibido como texto (sem HTML) e escapado no CSV: `<img onerror>` e `=1+1` saem literais.
 - **C10** Dado "Enviar cópia a outro admin", então a cópia leva só a definição (nunca dados) e nasce no destinatário; widget de métrica sem permissão do destinatário aparece bloqueado e não é consultado.
+- **C11** (vazio, 2026-11-23) Dado um painel novo sem gráficos, então mostra "Adicione o seu primeiro gráfico" com o botão do construtor; dado nenhum dado no período, o widget mostra "Sem dados neste período", nunca um gráfico zerado.
+- **C12** (erro, C-DSH-03) Dado consulta cancelada por demora (WB-356 C9), então o widget mostra "Muito pesado: reduza o período ou o filtro" e os demais widgets do painel seguem; a 31ª consulta no minuto mostra "Muitas consultas. Aguarde um instante." (429).
+- **C13** (permissão) Dado admin sem permissão para a métrica escolhida, então a métrica aparece bloqueada na lista e **não pode ser salva** no widget (a API devolve 403, não só a tela); dado o perfil Suporte, só as métricas de classe Geral (WB-357 C8).
+- **Fatia mínima para o corte (R3):** C1, C2, C3, C6, C7, C8, C9, C11, C12, C13 e a flag `painel_construtor` (nasce desligada) formam a versão mínima; **C4 e C5** (agrupar em "Outros") e **C10** ("Enviar cópia") saem primeiro. Pré-requisito: DT-102 (papel de banco dedicado à leitura de painel) e WB-356 (R2).
 
 ### WB-359 Exportar widget — CORTADA na DEC-104 (2026-11-22); proteção das consultas movida para a WB-356 C9 a C11
 Só o **export de widget em CSV** foi cortado (gatilho de volta: o fundador pedir para levar um número ao contador; o export do histórico por loja segue na WB-354 C3). **Não cortar a proteção das consultas** (limite por minuto, tempo limite, cache, carga): é o controle do risco nº 3 do threat model (pontuação 9, C-DSH-03) e vale também para os painéis prontos da R2. Os antigos C2 a C5 desta história são hoje WB-356 C9 e C10.
