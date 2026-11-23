@@ -938,3 +938,159 @@ Escopo: `git diff origin/main...b1e8dd4` (commits `779ee06`, `b0083a5`, `f27123f
 - **Continua bloqueando o G4 da R1:** CI verde no PR final (§15.7 item 2), agora com o job `e2e-web` como status obrigatório no `main` (DEC-135 item 4, configuração do fundador).
 - **Antes do G5/produção:** obs. 2 (com SEC-217), obs. 5, DT-013 (agora 5 actions), além das condições já listadas no §16.5, §17.5 e §18.5.
 - **Não validado:** telas `bulk-undo.tsx` e `price-table.tsx` no navegador; Playwright no CI real; envio real do e-mail ao lojista; carga de 200 itens com `FOR UPDATE` sob concorrência real; relógio entre réplicas para a janela de 10 min (1 réplica hoje). Não substitui pentest.
+
+## 20. R2 (desenho): contrato 0.5.0, ADR-019 e migrações 0064/0065 (2026-11-23, sobre `0a81cc1`)
+
+Escopo: `ADR-019-motor-de-cupons.md` (D1 a D16), as 37 operações `x-planned: v1.1 R2` de `openapi.yaml` (linhas 10024 a 10895 e as alterações de `applyCartCoupon`, `createOrder`, `CartCoupon`, `CouponUxEvent`), `drizzle/0064_r2_campaigns.sql`, `0065_r2_dashboards_catalog_interest.sql`, `drizzle/down/0064.sql`, `privacy-map.ts:73-81`, `app-grants.ts`, `r2-campaigns-schema.e2e-spec.ts`; comparado com §4.1, §4.3, §4.4, §6 (C-CUP, C-DSH, C-ANA), SEC-170 (`revisoes/onda-7-reverificacao.md:39`), SEC-194, SEC-197, DEC-088, DEC-103, DEC-119, DEC-137, DEC-138. **Não há motor**: o que segue é desenho; cada controle vira teste da R2.2/R2.3.
+
+### 20.1 Testes executados (PostgreSQL 16 e Redis locais)
+- `r2-campaigns-schema.e2e-spec.ts`: **23/23 verdes** (CHECKs de fonte, frete e orçamento; 20 conexões contra os últimos R$ 40,00 do total e do dia: 5 vencem; expirar x cancelar devolve 1 vez; diário e aceite append-only para qualquer papel; HMAC só hexadecimal; primeira compra única entre campanhas).
+- `app-grants.spec.ts` e `contract-r2.spec.ts`: **81/81 verdes** (11 tabelas append-only conferidas contra as migrações; F1, papéis, idempotência no contrato).
+
+### 20.2 Verificação dos pontos pedidos
+| # | Ponto | Situação no desenho | Referência |
+|---|---|---|---|
+| 1a | HMAC dos identificadores, CPF/endereço nunca em claro | OK no banco: CHECK `^[a-f0-9]{64}$` em `coupon_fraud_claims` e `coupon_identifier_sightings` (0064:161, :190), testado. Chave dedicada com anterior: ver 20.5 (2) | D6 |
+| 1b | Trava de primeira compra entre campanhas | OK no banco (índice único parcial, 0064:261, testado). **Mas o identificador de endereço e de aparelho ficou mais fraco que o v1.0: SEC-225**; alias de e-mail: SEC-226 | D4 (3), D6 |
+| 1c | Teto por campanha/dia/cliente-aparelho sem celular | OK: dia e total por UPDATE guardado + CHECK (0064:30, :139), usos (:140), cliente por reservas vivas sob a trava, aparelho por `campaign_use`. O aparelho vem do cliente (`X-Device-Id`, openapi:13): limite real é conta + orçamento (DEC-103 D-01 aceita) | D4, D6 |
+| 1d | Anti-enumeração | OK no contrato: "Cupom inválido" único para inexistente, segmentado, privado, outro público e loja sem aceite (openapi:6010; PRD C6); 10/h conta, 10/h aparelho, 30/h IP; código privado gerado com 8+ caracteres (CHECK 0064:280). Condições em 20.4 (Q9) | C-CUP-06 |
+| 2a | Estouro de orçamento por concorrência | OK: trava da campanha, UPDATE guardado, CHECK como 2ª camada, reserva na transação do pedido; provado no schema. Pontos cegos do invariante: SEC-229 | D2, D4 |
+| 2b | Expirar x cancelar, estorno | OK: transição condicional e `refunded <= confirmado` em CHECK (0064:213), testado. Pagamento tardio já é estornado (`payments.service.ts:477`); condição Q12 | D4 |
+| 2c | Replay de `Idempotency-Key` | OK: `createOrder` devolve o mesmo pedido, `coupon_reservations` único por pedido (0064:272), `dedupe_key` único (0064:251); erro de cupom não fica guardado (openapi:6368). Condição Q11 | D4 |
+| 2d | Esgotar orçamento sem pagar | **Lacuna: SEC-228** | D4, D6 |
+| 2e | Cupom da loja: lavagem e autocompra | Autocompra: C-CUP-13 (`COUPON_NOT_ALLOWED`). Lavagem: não há entrada de dinheiro externo; conluio loja + cliente em campanha com custo Webag tem ganho líquido <= 0 **se** a RN-09 (`desconto_webag <= application_fee`) valer em todo pedido (C-CUP-09). Fuga de comissão permanente: SEC-233 | D5, C-CUP-11 |
+| 3a | `/v1/admin`: `x-admin-permission` | OK: as 25 rotas admin declaram permissão; `coupons:activate` e `dashboards:read` existem (`permissions.ts:112`, `:114`). **Exceção: `updateCampaign` em `scheduled` com `coupons:write` contorna a ativação: SEC-224 (Alta)** | D3, D8 |
+| 3b | 2º fator `REAUTH_REQUIRED` 403 | OK em `activate`, `resume`, `end` quando há custo da Webag. Condição: a necessidade de reautenticar sai da fonte gravada no banco, nunca do corpo (Q8) | D8 |
+| 3c | "Ver como" bloqueado em escrita (DEC-119) | OK: nenhuma rota R2 tem `x-view-as` (a única ocorrência no trecho é o texto "NÃO vale aqui", openapi:10693); o guard nega tudo que não tem opt-in | C-ADM-02 |
+| 3d | IDOR entre lojas (convite, aceite, saída, cupom, código de barras, "de/por") | **Lacuna: SEC-227** (a amarração do id à loja da rota não está escrita, e o banco não a impõe) | D7, D11 |
+| 3e | IDOR entre clientes (vitrine da sacola) | OK: `listCartCouponOffers` usa a sacola e o endereço da conta (`CartAddressId` já é conferido); só cupons públicos. Resíduo: oráculo "este endereço já fez primeira compra" (observação 20.6-3) | C-CUP-06 |
+| 4a | Widget sem permissão não consultado | OK: `blocked: true` e zero consultas; `queryDashboardMetric` checa sensibilidade antes do cache (openapi:10498, :10524) | D9 |
+| 4b | Sensibilidade Geral/Operacional/Financeira | OK como `[HIPÓTESE]` (DEC-137); catálogo filtra por perfil lido do banco | D9 |
+| 4c | DoS por consulta pesada | OK no desenho (5 s, 30/min, 2 simultâneas, pool de 2, cache 5 min, só agregados). Condição: o pool precisa de `connectionTimeoutMillis` e 503 quando cheio (senão a requisição espera sem limite): Q19 | C-DSH-03 |
+| 4d | Baixa amostra (`n`) | Aceito para o admin na R2: as tabelas de fato não têm cliente (teste de colunas), e `n` pequeno não identifica pessoa para quem já pode abrir o pedido com auditoria. **Não** vale para o lojista (R5): lá a C-ANA-05 (supressão complementar) é obrigatória | C-DSH-04, C-ANA-05 |
+| 4e | "Suspeitos" sem "Revelar" | Confirmo (20.5 (1)) | D6 |
+| 5 | LGPD das tabelas novas | Parcial: `PRIVACY_MAP` cobre as 8 com FK para `users`; **faltam as 2 de HMAC: SEC-231**. Eventos do app sem conta e com faixa de R$ 10 (openapi:17553-17565); condição Q18 sobre `campaignId` | D12, D14 |
+| 6 | D-06: 11 append-only, `app-grants` | OK (teste verde). Faltam proteções em `product_price_history` e `coupon_reservations`: SEC-230 | D14 |
+| 7 | DEC-088 | OK: nenhum campo de `CampaignCreate`/`CampaignPatch` mexe em preço, frete ou taxa (`additionalProperties: false`); D5 (1) calcula as 3 parcelas sem o cupom com teste de propriedade; frete grátis = entrega cheia + desconto. Nada no desenho majora. Resíduo fora do DEC-088 (é a loja, não a plataforma): SEC-233 | D5 |
+
+### 20.3 Achados novos
+
+#### SEC-224 | Severidade: Alta (desenho, antes da implementação) | Status: Aberto | Dono: backend-dev (contrato); tech-lead revisa
+- **Onde:** `docs/arquitetura/api/openapi.yaml:10123-10127` (`updateCampaign`: `coupons:write`, super admin e **operação**, "Só em `draft` ou `scheduled`"; `CampaignPatch` aceita fonte, valor, alvo, orçamento); diverge de `ADR-019-motor-de-cupons.md:21` (D3: operação "edita rascunho"). A virada `scheduled -> active` pela varredura não reconfere os bloqueios da ativação (nada escrito em D3 nem no contrato).
+- **Problema:** ativar com custo da Webag exige super admin ou financeiro com 2º fator (C-CUP-08); agendar é ativar com data futura. Depois disso a operação, sem 2º fator, edita a campanha agendada e ela entra no ar sozinha com a regra nova.
+- **Cenário de ataque:** financeiro ativa "Primeira compra R$ 8, orçamento R$ 300" para amanhã. Uma conta de operação (insider ou sessão roubada, sem TOTP recente) troca valor para R$ 40, orçamento para R$ 30.000, alvo para a loja de um conhecido e fonte para `webag`. Às 00:00 a varredura ativa. O orçamento mensal global foi conferido só na ativação original. Dinheiro da Webag sai sem a segregação de funções que o C-CUP-08 promete.
+- **Correção recomendada:** (a) editar `scheduled` devolve a campanha a `draft` (zera `activated_by`/`activated_at`, `version + 1`) e exige nova ativação; ou só `coupons:activate` com reautenticação edita `scheduled`; (b) a varredura que vira `scheduled -> active` roda as MESMAS conferências de `activateCampaign` sob a trava (orçamento global do mês, flags J22/J27, loja com aceite), e se falhar deixa `scheduled` e abre alerta; (c) ADR D3 e contrato dizem a mesma coisa.
+- **Como verificar:** e2e: operação faz PATCH em campanha `scheduled` -> 200 com `state: draft` (ou 403); a varredura não ativa campanha que voltou a rascunho; com o orçamento global esgotado entre o agendamento e o início, a campanha não ativa e aparece alerta.
+
+#### SEC-225 | Severidade: Média | Status: Aberto (regressão de desenho do SEC-170) | Dono: backend-dev; PO ajusta WB-344 C3
+- **Onde:** `ADR-019-motor-de-cupons.md:24` (D6: `address` = CEP + número + **complemento**; `device` = `X-Device-Id` da requisição); `docs/produto/prd/v1-1-cupons.md:159` (WB-344 C3 conta o complemento); contra `apps/api/src/modules/cart/purchase-history.service.ts:58` (v1.0: compara TODOS os `device_id` das sessões das duas contas) e `:65-66` (v1.0: CEP + número, complemento ignorado; é a correção do SEC-170, `revisoes/onda-7-reverificacao.md:39`). A tabela `coupon_fraud_claims` nasce vazia: os pedidos pagos antes da R2 não têm claim.
+- **Problema:** se o motor trocar o `hasPaidOrder` pelas claims, três controles que fecharam o SEC-170 enfraquecem: complemento volta a diferenciar endereço, o aparelho passa a ser só o do cabeçalho daquela requisição, e quem já usou primeira compra no v1.0 não tem claim.
+- **Cenário de ataque:** mesma casa, 5 contas, complementos "casa 1", "casa 2", "fundos", "A", "B": 5 HMACs de endereço diferentes. O app modificado manda `X-Device-Id` novo a cada pedido, embora as 5 contas tenham logado do mesmo aparelho (o v1.0 pegaria pelas sessões). 5 primeiras compras com cupom.
+- **Correção recomendada:** claim `address` = HMAC(CEP + número normalizados), sem complemento (o complemento, se o PO quiser, só no avistamento de velocidade); claims `device` para todos os `device_id` das sessões da conta nos últimos 30 dias, mais o do cabeçalho; manter o `hasPaidOrder` como checagem adicional até 12 meses depois do deploy, OU semear claims dos pedidos pagos dos últimos 12 meses na R2.2 (endereço e documento do pedido; aparelho das sessões). Falso positivo em prédio: "Falar com o suporte" e liberação auditada (já previstos).
+- **Como verificar:** e2e: 2 contas, mesmo CEP + número, complementos diferentes -> a 2ª recebe `COUPON_NOT_APPLICABLE`; conta B logada no aparelho D e pedido com cabeçalho D' -> recusado; conta com primeira compra paga antes da R2 (sem claim) e outra conta no mesmo endereço -> recusado.
+
+#### SEC-226 | Severidade: Média | Status: Aberto | Dono: backend-dev; PO confirma
+- **Onde:** `ADR-019-motor-de-cupons.md:24` (`account` = HMAC do id da conta); módulo `identity` sem normalização de e-mail (`Grep` por `normalizeEmail`, `+` e domínio: nada encontrado); `orders.service.ts:338` (o CPF é o DIGITADO no app, não o devolvido pelo provedor, ao contrário do que diz o D6).
+- **Problema:** o HMAC do id não liga duas contas da mesma pessoa; o único custo de uma conta nova é confirmar um e-mail, e `nome+1@gmail.com` cai na mesma caixa. Retirada não tem endereço, aparelho vem do cliente e o CPF digitado é livre: na prática a primeira compra é contida só pelo orçamento.
+- **Cenário de ataque:** script cria 30 contas com alias, confirma na mesma caixa, pede retirada com cupom de primeira compra e CPF gerado. Com F2 = R$ 0, quem paga é a loja (campanha "Loja paga"), até o teto mensal dela.
+- **Correção recomendada:** identificador `account` = HMAC do e-mail normalizado (minúsculo; Gmail/Googlemail sem pontos e sem `+tag`; demais provedores sem `+tag`), além do id; avistamento de velocidade também por e-mail normalizado. Corrigir o D6: documento = CPF informado no pedido (fraco) até haver CPF do pagador devolvido pelo provedor `[HIPÓTESE: confirmar se o Mercado Pago devolve no Pix]`. Risco residual aceito pela DEC-103 D-01 (orçamento como controle principal) segue válido; o gatilho de OTP (> 20% suspeitos) continua.
+- **Como verificar:** e2e: conta `a.b+1@gmail.com` depois de `ab@gmail.com` com primeira compra -> `COUPON_NOT_APPLICABLE`.
+
+#### SEC-227 | Severidade: Média | Status: Aberto (desenho) | Dono: backend-dev
+- **Onde:** `openapi.yaml:10708-10714` (`acceptCampaignInvite`), `:10737-10743` (`declineCampaignInvite`), `:10850-10856` (`updateStoreCoupon`), `:10667-10673` (`getPromotionEligibility`, `productId` e `variantId`), `:10646-10652` (`lookupProductBarcode`, `inStore`); `0064_r2_campaigns.sql:224` (`campaign_acceptances.enrollment_id` sem FK composta com `store_id`).
+- **Problema:** o contrato diz "loja da rota e da membership", mas não diz que o `enrollmentId`/`couponId`/`productId` tem de ser DESSA loja; o banco aceita aceite com `store_id` de uma loja e `enrollment_id` de outra.
+- **Cenário de ataque:** membro com `coupons` da loja A chama `/v1/stores/A/campaign-invites/{convite da loja B}/accept` com teto de R$ 5.000: se o serviço buscar o convite só por id, a loja B passa a pagar 40% de cada desconto sem saber.
+- **Correção recomendada:** toda leitura e escrita por id nas rotas de loja com `WHERE id = :id AND store_id = :storeIdDaRota` (404 se não casar); índice único `(id, store_id)` em `campaign_store_enrollments` e FK composta `(enrollment_id, store_id)` em `campaign_acceptances`; cupom por `campaigns.owner_store_id`; produto e variação pela loja (helper único, como `getOwned*`).
+- **Como verificar:** e2e nas 5 rotas com id de outra loja: 404 e zero linhas gravadas; teste de schema: aceite com `store_id` diferente do convite -> 23503.
+
+#### SEC-228 | Severidade: Média | Status: Aberto | Dono: backend-dev; PO confirma os números
+- **Onde:** `ADR-019-motor-de-cupons.md:22` (D4: reserva na criação, devolvida só ao expirar ou cancelar) e `:24` (sinal só por 3 **cancelamentos** em 7 dias); `0064_r2_campaigns.sql:176` (enum de sinais sem pedido expirado).
+- **Problema:** pedido com cupom que nunca é pago prende orçamento do dia, do total e o teto mensal da loja até vencer, e expirar não conta como sinal.
+- **Cenário de ataque:** concorrente com 7 contas cria pedidos Pix com o cupom de R$ 8 e não paga; com orçamento de R$ 50 por dia, os clientes reais veem "Cupom esgotado hoje" durante toda a validade do Pix; repete o dia inteiro. Sem perda de dinheiro, mas campanha inútil e loja parceira prejudicada.
+- **Correção recomendada:** sinal `cancellations` passa a contar também `expired` com cupom (3 em 7 dias); no máximo 1 reserva `reserved` por HMAC de aparelho e de IP por campanha; alerta quando reservado > 50% do limite do dia com taxa de expiração alta; validade do Pix com cupom não maior que a do pedido sem cupom.
+- **Como verificar:** e2e: 3 pedidos com cupom expirados na mesma conta -> 4º sai sem cupom com `COUPON_NOT_APPLICABLE`; 2ª reserva viva do mesmo aparelho em outra conta -> recusada.
+
+#### SEC-229 | Severidade: Baixa | Status: Aberto | Dono: backend-dev
+- **Onde:** `0064_r2_campaigns.sql:320` e `:323` (`campaign_budget_violations()` parte dos contadores existentes com `LEFT JOIN`: entrada no diário para dia ou mês sem linha de contador não aparece); `:139` (`budget_total_cents` nulo aceita gasto da Webag ilimitado, ex. fonte `store`); `:47` (`funder = 'store'` sem exigir `store_id`).
+- **Problema:** a 2ª camada (banco) e o invariante não pegam três bugs plausíveis do motor: gasto Webag em campanha "Loja paga", reserva que pula a linha do dia, entrada de loja sem loja.
+- **Cenário:** erro no motor lança `funder = webag` numa campanha da loja: o CHECK aceita (total nulo) e o invariante fica vazio se os contadores andarem juntos; a conciliação diz "ok" com dinheiro da Webag saindo fora do orçamento.
+- **Correção recomendada:** `FULL JOIN` (ou `UNION` das chaves do diário) no invariante; CHECK `funding_source <> 'store' or (budget_reserved_cents = 0 and budget_spent_cents = 0)`; CHECK `funder <> 'store' or store_id is not null`; conferência reservas x diário (soma de `webag_cents` por estado).
+- **Como verificar:** teste de schema: entrada `reserve` sem linha no dia aparece em `campaign_budget_violations()`; UPDATE de `budget_reserved_cents` em campanha `store` -> 23514.
+
+#### SEC-230 | Severidade: Baixa | Status: Aberto | Dono: backend-dev (D-06)
+- **Onde:** `0065_r2_dashboards_catalog_interest.sql:29-43` e `:169` (`product_price_history` com UPDATE/DELETE livres para `webag_app` e `ON DELETE cascade` do produto); `0064_r2_campaigns.sql:193-215` (`coupon_reservations` apagável).
+- **Problema:** o histórico de preço é a PROVA do "de/por" (CDC art. 37, RN-C8) e a reserva liga o pedido ao desconto; nenhuma das duas tem a proteção de papel que a D-06 dá ao diário.
+- **Cenário:** bug ou insider com o papel da API reescreve `started_at` para "comprovar" 30 dias de preço de referência; apagar o produto apaga a prova.
+- **Correção recomendada:** gatilho que só aceita UPDATE de `ended_at` de nulo para valor em `product_price_history` (padrão `webag_allow_ip_truncation`/`APPEND_ONLY_COLUMN_UPDATES`); FK do produto `ON DELETE restrict`; `REVOKE DELETE, TRUNCATE` do `webag_app` nas duas tabelas, reafirmado no `app-grants`.
+- **Como verificar:** `UPDATE product_price_history SET started_at = ...` com o papel da API -> erro; `DELETE FROM coupon_reservations` -> 42501.
+
+#### SEC-231 | Severidade: Baixa | Status: Aberto | Dono: backend-dev; PO atualiza o registro LGPD
+- **Onde:** `apps/api/src/modules/privacy/privacy-map.ts:73-81` (sem `coupon_fraud_claims` nem `coupon_identifier_sightings`: não têm FK para `users`, então o teste SEC-167 não as cobra); §8 desta peça, linha "HMAC de documento, aparelho, endereço e telefone" (o telefone saiu, DEC-103 D-01).
+- **Problema:** HMAC com chave que a Webag tem é dado **pseudonimizado** (pessoal), e CPF e CEP + número têm espaço pequeno: com a chave vazada, revertem em segundos. As duas tabelas ficam fora do mapa, do expurgo testado e da resposta ao titular.
+- **Correção recomendada:** incluir as duas no `PRIVACY_MAP` (`retain`, legítimo interesse art. 7º IX com teste de balanceamento escrito `[HIPÓTESE; encarregado]`, 12 meses), expurgo por `created_at`/`last_seen_at` coberto no teste de 12 meses e 1 dia; o teste SEC-167 passa a cobrar também tabelas com coluna `hmac`; staging com chave diferente da produção; atualizar a linha do §8.
+- **Como verificar:** teste do mapa lista as duas; job apaga linha com 12 meses e 1 dia.
+
+#### SEC-232 | Severidade: Baixa | Status: Aberto | Dono: PO decide; backend-dev implementa
+- **Onde:** `openapi.yaml:10714` (aceite por "membro com permissão `coupons`"); `permissions.ts:124` (`coupons` atribuível a funcionário).
+- **Problema:** aceitar o custo de campanha compromete dinheiro da loja todo mês, e o teto é escolhido por quem aceita; o dono pode não saber.
+- **Cenário:** funcionário (ou ex-funcionário ainda não removido) aceita "Dividido 99%" com teto de R$ 5.000 por mês.
+- **Correção recomendada:** aviso imediato ao dono (painel e e-mail) em todo aceite, com "Sair" de um toque; teto acima do sugerido (R$ 150,00) ou parte da loja acima de 50% só pelo dono.
+- **Como verificar:** e2e: funcionário aceita -> e-mail ao dono na fila; funcionário com teto acima do sugerido -> 403.
+
+#### SEC-233 | Severidade: Baixa | Status: Aberto | Dono: PO decide; backend-dev implementa o alerta
+- **Onde:** `openapi.yaml:10804` (cupom da loja com teto de 30% e validade livre) e `:10394` (alerta só por concentração em 3 contas).
+- **Problema:** a loja pode subir os preços ~43% e manter um cupom público de 30% para todos: o cliente paga o mesmo, a comissão incide sobre a base reduzida (RN-10) e o "desconto" é falso para o consumidor (o mesmo efeito que o DEC-088 proíbe à plataforma).
+- **Correção recomendada:** alerta `store_coupon_share` quando o cupom próprio aparece em mais de 50% dos pedidos pagos da loja em 30 dias, cruzado com `product_price_history` (alta acima de 20% nos 14 dias antes de criar o cupom); validade máxima do cupom da loja (ex.: 30 dias) `[PO]`.
+- **Como verificar:** seed com a situação -> alerta aberto.
+
+### 20.4 Condições para o QA da R2.2 (motor) e da R2.3 (painéis)
+Além de C-CUP-01 a 13, C-DSH-01 a 05 e C-ANA-04 a 06 (§6), com e2e do backend-dev e conferência do QA no G4:
+| ID | Teste | Liga a |
+|---|---|---|
+| Q1 | Operação edita campanha `scheduled` -> volta a `draft` ou 403; varredura `scheduled -> active` reconfere orçamento global e flags | SEC-224 |
+| Q2 | Endereço sem complemento, aparelho das sessões, pedido pago antes da R2 bloqueia | SEC-225 |
+| Q3 | Alias de e-mail cai no mesmo identificador | SEC-226 |
+| Q4 | IDOR nas 5 rotas de loja com id de outra loja: 404 e nada gravado | SEC-227 |
+| Q5 | Expirados contam como sinal; 1 reserva viva por aparelho/IP por campanha | SEC-228 |
+| Q6 | Invariante acusa diário sem contador; campanha `store` não aceita gasto Webag | SEC-229 |
+| Q7 | As 11 rotas `/v1/stores/{storeId}/...` da R2 com `X-View-As`: 403 `VIEW_AS_READ_ONLY` (extensão do VA-01..24) | DEC-119 |
+| Q8 | `REAUTH_REQUIRED` em ativar, retomar e encerrar com custo Webag; a exigência vem da fonte gravada, nunca do corpo; campanha "Loja paga" sem reautenticação | C-CUP-08 |
+| Q9 | Mesma resposta (status, corpo e cabeçalhos) para inexistente, privado, segmentado, de outro público e privado de outra loja; `COUPON_OTHER_STORE` e `COUPON_FIRST_PURCHASE_ONLY` só para código público; contador de tentativas incrementado ANTES da busca e para toda tentativa; chave Redis por HMAC (IP e aparelho nunca em claro); código gerado com `crypto.randomInt`, alfabeto sem ambíguos | C-CUP-06 |
+| Q10 | Boot de produção falha sem `COUPON_FRAUD_HMAC_KEY`, com menos de 32 bytes, igual a `AUTH_HMAC_KEY`, à chave da coleta ou à `_PREVIOUS`; claim gravada com a chave anterior bloqueia pedido calculado com a atual; 2 pedidos simultâneos durante a rotação: só 1 passa | 20.5 (2) |
+| Q11 | Replay da `Idempotency-Key` com cupom: 1 reserva, 1 conjunto de entradas; corpo diferente 409; resposta gravada na mesma transação do efeito (lição SEC-208) | D4 |
+| Q12 | Pix pago depois de expirado: reserva fica `returned`, estorno automático, invariante vazio; aprovação e expiração em paralelo: transição da reserva na mesma transação da do pedido | C-CUP-03 |
+| Q13 | 2 estornos parciais em paralelo: `dedupe_key` por estorno (não por pedido), soma <= confirmado | C-CUP-03 |
+| Q14 | 2 ativações em paralelo não passam do orçamento mensal global (trava única do orçamento global na ativação) | D8, F2 |
+| Q15 | Varredura de log (pino, Sentry) nos caminhos de cupom: nenhum CPF, CEP + número, `X-Device-Id`, IP ou HMAC | C-CUP-05 |
+| Q16 | No deploy da R2.2, nenhum cupom legado `first_purchase_only` ativo, ou o caminho legado também toma as travas por HMAC e grava claim (senão legado e campanha correm em paralelo sem trava comum) | D13 |
+| Q17 | Estorno total só libera a primeira compra se o pedido não foi entregue (cancelamento antes da saída); estorno depois da entrega (troca, "não recebi") não libera (DEC-138 (5), ajuste recomendado ao PO) | D6 |
+| Q18 | A coleta descarta `campaignId` de campanha não pública em `CouponUxEvent`; evento do servidor `coupon_applied` sem `user_id` e com valor em faixa | SEC-194 |
+| Q19 | Pool do painel cheio: 503 em até 2 s (`connectionTimeoutMillis`), nunca espera sem fim; widget `blocked` com espião no pool: 0 consultas; o job de agregação NÃO usa esse pool | C-DSH-03 |
+
+### 20.5 Respostas às dúvidas do ADR dirigidas ao Security
+1. **"Suspeitos" sem "Revelar" (pendência Security 1): confirmo.** O dado sai só pela ficha do pedido (`getAdminOrder`, mascarada e auditada com dedupe de 10 min), pedido a pedido; a lista não traz `userId`, HMAC nem agrupamento por conta. Suporte não tem `coupons:read`. A recusa automática do cupom tem revisão humana ("Falar com o suporte" + `releaseCouponSuspect` auditado), o que atende ao espírito do art. 20 da LGPD `[validar com o jurídico]`. Sinal de abuso interno: alerta se um mesmo admin liberar mais de 10 sinais em 7 dias (recomendação, sem SEC).
+2. **Chave HMAC com a anterior (pendência Security 2): aceito, com condições.** (a) Chave dedicada aleatória de 32+ bytes, só no cofre de produção, diferente de `AUTH_HMAC_KEY`, da chave da coleta e da de staging (staging com chave própria, para cópia de banco não cruzar com produção); (b) entrada com separação de domínio (`coupon:<kind>:<valor normalizado>`); (c) a escrita usa SÓ a chave atual; a leitura procura `hmac IN (atual, anterior)`; o `pg_advisory_xact_lock` é tomado sobre o HMAC da chave ATUAL (todos os escritores convergem nele), porque o índice único não vê a mesma pessoa em duas versões de chave; (d) rotação só por suspeita de vazamento, e a anterior sai depois de 12 meses (= retenção); (e) HMAC da conta nos avistamentos em vez do `user_id`: aceito, sabendo que é pseudônimo (a Webag recalcula), não anônimo: entra no mapa (SEC-231); (f) chaves de Redis por HMAC do IP e do aparelho: aceito, TTL de até 1 h; (g) `payer_document_hash` com leitura dupla: aceito; rotacionar a `AUTH_HMAC_KEY` antes de migrar quebraria a busca dos hashes antigos: registrar no runbook. O vazamento da chave é o risco que sobra (CPF e CEP + número revertem rápido): proteja-a como o segredo do Mercado Pago.
+3. **Pool de leitura no mesmo papel (pendência Security 3): aceito para a R2, não para a R3.** Na R2 não há SQL livre (registro fechado, valores parametrizados, lint contra `sql.raw`, fuzz com zero consultas), então o `webag_app` com `default_transaction_read_only=on` e `statement_timeout` na conexão basta. Atenção: `read_only` e `statement_timeout` **não são fronteira de segurança** (qualquer sessão os desliga com `SET`); são proteção contra erro e carga. Condições: opções na conexão (`-c statement_timeout=5000 -c default_transaction_read_only=on -c idle_in_transaction_session_timeout=10000 -c lock_timeout=1000`), `BEGIN READ ONLY` explícito, Q19. O papel `webag_dashboard` (DT-102) passa a ser **obrigatório antes do construtor (R3) e antes de qualquer reuso pelo lojista (C-DSH-07)**.
+
+### 20.6 Observações (sem SEC)
+1. `inviteCampaignStores` pela operação em campanha `active` amplia as lojas, mas o gasto Webag continua preso ao orçamento aprovado: aceitável.
+2. `reference_barcodes` "alimentado por produto moderado": um lojista pode envenenar o nome de um EAN popular para todas as lojas. Na R2.3, alimentar só pelo admin ou com 2+ lojas concordando.
+3. Oráculo de endereço: trocar o endereço da sacola e ver se a oferta de primeira compra some revela que alguém naquele CEP + número já comprou. Inerente ao antifraude por endereço; mitigar avaliando endereço e documento só na criação do pedido, não na vitrine (`listCartCouponOffers` olha só a conta).
+4. Dashboards por loja de MEI expõem a renda de pessoa física: a sensibilidade "operacional/financeira" já restringe; citar na linha "Painéis" do §8 quando o J24 olhar.
+5. O job de agregação (R2.3) lê `orders` por `updated_at`: conferir índice e `statement_timeout` próprio, fora do pool do painel.
+
+### 20.7 SEC abertos: a R2 piora algum?
+| SEC | Piora? | Por quê |
+|---|---|---|
+| SEC-200 (CGNAT) | **Sim, pouco** | Campanhas aumentam o tráfego de `coupon-apply`, que segue com 30/h **só por IP**. Com os limites por conta e aparelho da R2, o de IP deve virar teto anti-inundação (ex.: 300/h, chave HMAC) |
+| SEC-205 (cache com réplicas) | Não | Pausa refletida "em até 1 min" na vitrine é cosmética: o pedido reconfere sob a trava; cache do painel é só Redis; 1 réplica |
+| SEC-211 (trocas no admin) | Não | R2 não toca trocas |
+| SEC-216 (fotos no bucket público) | Não | R2 não cria imagem (referência de EAN sem foto) |
+| SEC-217 (`audit_log` sem prazo) | **Sim, pouco** | `store.coupon.*` e `campaign.*` gravam IP e User-Agent do lojista e `reason` livre; aplicar o IP truncado já recomendado |
+
+### 20.8 Parecer
+- **Liberado para construir COM CONDIÇÕES.** O núcleo de dinheiro (reserva sob trava, CHECKs, diário append-only, invariante, F1/DEC-088) está bem desenhado e provado no schema.
+- **Antes de implementar `updateCampaign` e a varredura de ativação:** corrigir SEC-224 no contrato e no ADR (Alta; bloqueia o G4 da R2.2 se chegar ao código).
+- **Na R2.2, antes do G4:** SEC-225, SEC-226, SEC-227, SEC-228 (Médias) e Q1 a Q17. SEC-229 a SEC-233 (Baixas) podem ir na mesma onda ou com dono.
+- **Antes de ligar campanha de primeira compra em produção:** SEC-225 e SEC-226 corrigidos, mesmo com F2 = R$ 0 (a loja paga).
+- **Não validado:** motor, rotas e app (não existem); comportamento do Mercado Pago com o CPF do pagador no Pix; carga real (k6 da R2.2); cópia do banco em staging. Revisão de desenho não substitui pentest.
