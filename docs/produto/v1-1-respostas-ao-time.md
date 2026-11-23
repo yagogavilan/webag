@@ -152,3 +152,65 @@ Perguntas exatas ao advogado: `decisoes.md` J22, J23 e J27 (não reescrevo). **R
 | Nenhum campo, regra ou rotina majora preço, entrega ou taxa por cupom | Conferido em RN-C1 a RN-C11 e nas 10 histórias de cupom: **nenhum**. Guardas: RN-C1 (taxa de serviço só global), WB-341 C9 (o corpo aceita só `code`) e **WB-347 C10** (propriedade de 10 mil carrinhos, no CI). Risco residual: lojista subir o preço de lista antes de criar cupom próprio (WB-346); WB-348 impede o selo de "de/por" sem 30 dias e a trilha de preço (WB-348 C4) permite fiscalizar |
 | Divergência entre PRD e spec de tela | 4 correções do designer (acima); o PRD prevalece |
 | Dependência que pode travar | WB-362 depende de WB-361/363 (R1.4, primeira da fila de corte): se a R1.4 sair da R1, entra no início da R2 e a WB-362 vai por último |
+
+---
+
+# Fechamento da DoR da R3 (PO, 2026-11-23)
+
+Escopo: WB-358, 380, 381, 382, 390, 391 (a e b), 396, 397. Status por história e ponto de corte: `backlog.md` §10.9. Regras: PRDs de despacho (RN-D13 a RN-D15) e de rastreio (RN-R3, RN-R11, RN-R12, matriz N1 a N20). **Proposta do PO; o CEO valida** (registrar em `decisoes.md` como DEC-142 em diante; eu não edito aquele arquivo).
+
+## I.1 Pendências de produto que travavam o backend: fechadas
+| # | Pendência | Decisão | Porquê | Onde |
+|---|---|---|---|---|
+| 1 | Quem despacha | **Operação e Super admin** (RN-13); Suporte vê sem botões; Financeiro lê. Na R3 ela envia por **WhatsApp manual** (`wa.me`) e **registra no painel** o que o motoboy responde (fonte `admin`) | Sem app, a operação é o único ator com acesso; WhatsApp automático custa (DEC-003) | RN-D13 |
+| 2 | 1 ou 2 motoboys por rota | **1 lote = 1 motoboy**; 2 motoboys = 2 lotes em sequência (<= 90 s cada); oferta **tudo ou nada**. Fecha a DE-3 do designer | DEC-111; dividir lote exige rateio de custo e prazo; gatilho de volta: 3 motoboys, 15 entregas por hora ou > 90 s por lote | WB-381 C11 a C13; WB-391 C18 |
+| 3 | Motoboy não aceita | Lote volta a PRONTA na **mesma posição da fila**; motivo obrigatório (Sem moto, Longe, Outro); sem penalidade nem contagem exibida (J8) | Recusa livre é mitigação do vínculo; reiniciar a fila puniria o cliente | RN-D14; WB-391 C17 |
+| 4 | Motoboy não responde | **3 min** (mesmo no WhatsApp) e volta à fila com alerta; a operação sobe o parâmetro para 5 se as expirações forem frequentes (`courier_offer_expired`, `[HIPÓTESE]`) | Uma regra, testada; o ajuste é por parâmetro, sem deploy | RN-D14; WB-391 C4 |
+| 5 | Motoboy aceita e some | Alerta aos **20 min** do aceite (`motoboy_a_caminho_alerta_min`, `[HIPÓTESE]`, só R3: sem GPS não há "ETA da loja"); a operação liga e **reatribui antes da saída**; depois da saída: "Marcar problema" (NAO_ENTREGUE ou DEVOLVIDA, RN-18) | O PRD pedia "ETA da loja + 10 min", impossível sem posição | RN-D14; WB-391 C20, C21 |
+| 6 | Janela do rastreio | Da **saída confirmada ao fim da entrega**; teto de **180 min** da saída (era 24 h); na R3 não há posição, só linha do tempo | 24 h de posição de trabalhador por um pedido esquecido é desproporcional (RN-D7, J26); 180 = teto de 2 h (DEC-053) + 15 min + folga `[HIPÓTESE]` | RN-R3 (R4) |
+| 7 | Privacidade do motoboy ao cliente | **Só o primeiro nome, só depois da saída confirmada, nunca no push**; nunca sobrenome, foto, placa, telefone, trilha, velocidade ou valor; contato por "Falar com a Webag"; avalia-se loja e pedido, nunca o motoboy | DEC-098, DEC-112; **muda a WB-235 C3 da v1.0** (mostra o nome ao atribuir): QA ajusta o teste | RN-R12 |
+| 8 | O que a loja vê | Primeiro nome do motoboy desde "a caminho"; a faixa de saída; "Saída registrada"; **nunca** telefone, posição, ETA, pedidos de outras lojas do lote | SEC-198: a loja não pode seguir o motoboy | RN-R11 |
+| 9 | Canais por evento | Matriz **N1 a N20** com canal R3 e R4, título e corpo (<= 60 e 120). **Só 3 pushes ao cliente** (saiu, chegando, entregue) | Push demais é silenciado; DEC-112 | Rastreio, "Matriz de canais e textos" |
+| 10 | Push "saiu" sem mapa | Na R3 o texto é "Chegada prevista até HH:MM" (fim da faixa aceita); "Acompanhe o motoboy no mapa" só com `rastreio_ao_vivo` ligada | Prometer mapa que não existe é publicidade enganosa `[jurídico]` e torna o golpe do SEC-196 mais crível | WB-396 C2 |
+| 11 | Contradição WB-396 C8 x matriz | Nome do motoboy proibido no push **ao cliente**; a **loja** recebe o primeiro nome (painel e Web Push) | A loja precisa saber quem chega; já o vê no painel | WB-396 C8 |
+| 12 | R3 sem GPS: "Desfazer" e "automática" | Desfazer vale 2 min **sem** a condição de 150 m, com aviso à operação; **automática não existe** (flag `saida_automatica` desligada; R4) | A condição de 150 m e o "Peguei" exigem app | WB-390 C4, C7; WB-391 C22 |
+| 13 | Caminho da loja na R3 | Botão "Saiu com o motoboy" **desde "a caminho"** é o caminho principal; a operação marcar a chegada é opcional (só aciona faixa, som e lembrete) | Evita a operação como intermediária em cada saída | WB-390 C10 |
+| 14 | Rota como sugestão (J8) | Texto "Sugestão de ordem"; **sem horário por parada, valor nem faixa** na mensagem ao motoboy | O horário por parada é o tipo de controle que pesa no vínculo | RN-D15; WB-382 C7 |
+| 15 | Operação com o painel fechado | **Não é avisada** (e-mail e Web Push do admin são fase 2, DEC-074d); no piloto fica com o painel aberto; gatilho para Web Push do admin: 1 alerta perdido | Custo zero; o risco é operacional e medível | Matriz, regra 4 |
+| 16 | SEC-194 nas notificações | Eventos só com IDs opacos, sem `endpoint` nem token; texto de consentimento sem "anônimo"; token e `endpoint` no inventário LGPD antes de ligar a flag | O token de dispositivo é dado pessoal | WB-396 C16; WB-397 C9, C11 |
+| 17 | Parâmetros novos (RN-02, editáveis com auditoria) | `courier_accept_timeout_min` (3), `motoboy_a_caminho_alerta_min` (20), `saida_desfazer_min` (2), `tracking_max_min` (180, R4) | Sem número no código | WB-391 C11 |
+
+## I.2 Perguntas ao Security (respondem antes do G4 da R3)
+1. Primeiro nome do motoboy no Web Push da **loja** (aparece na tela bloqueada do celular do balcão): aceito?
+2. Saída pela loja desde "a caminho", sem chegada, e "Desfazer" sem GPS na R3 com aviso à operação: o controle contra "a loja marca saída sem entregar a sacola" e "desfaz depois de o motoboy sair" basta?
+3. A loja entrega a sacola a quem diz o número do pedido; sem documento nem "código de coleta" (RN-R11). Risco Médio ou Baixo? PO: gatilho é o 1º caso.
+4. A operação registra etapas em nome do motoboy sem pedir motivo (só recuo de hora e reatribuição exigem): suficiente?
+5. Limite de 5 inscrições de Web Push por membro e a regra de apagar em 404/410.
+6. A matriz de transições (R3.2) deve cobrir 391a e 391b. A SEC-193 (código de entrega, 5 tentativas e checagem fora da trava) passa a **Alta** na R4; recomendo ao PM e ao tech-lead **antecipá-la à R3.2**, porque mexe no mesmo arquivo da máquina de estados e o limite de 3 tentativas muda comportamento da v1.0 (o quando é do PM).
+
+## I.3 Correções que o designer precisa fazer (o PRD prevalece até lá; não toquei em `docs/design`)
+1. `v1-1-admin-despacho.md`: (a) cartão do motoboy "Em turno · a 1,9 km da 1ª loja" e "Disponível · sem localização" vira **"Disponível" ou "Em corrida"** (RN-D12; a R3 não tem GPS); (b) tirar o alerta "a 10 min do limite" da §1.1 (RN-18, resposta nº 4 da seção A); (c) na R3, "Enviar rota" é **WhatsApp**: botões "Carlos aceitou" e "Carlos recusou" (3 chips de motivo), "Chegou à loja" e o texto de cancelamento (N18); push só na R4; (d) DE-3 e perguntas 1 a 5 da §9 estão respondidas.
+2. `v1-1-loja-confirma-saida.md`: decisão 6 e §2, "Ainda estou separando" silencia **3 min** (não 2); "Carlos vai buscar o pedido #1042" na linha do pedido (N4) com o botão desde "a caminho" como caminho principal; "Desfazer" sem condição de 150 m na R3; mensagens de erro "Sem conexão. A saída não foi registrada" e "Este pedido mudou. Atualize a tela."; diálogo do Web Push com o texto da WB-397 C9.
+3. `v1-1-notificacoes.md` §2: trocar os textos pela matriz do PRD (N7 com as duas variantes; "Pedido entregue" / "Entregue às 15:54."; sem "Obrigado por comprar").
+
+## I.4 Para o fundador (só o que depende dele; ~2 h, quase tudo dentro das janelas A, B e C já pedidas)
+| # | Decisão ou ação | Recomendação do PO | Se não decidir |
+|---|---|---|---|
+| **F4** | Cotar 3 a 5 motoboys (valor por corrida nas 4 faixas, desconto de lote), já pedido na seção F. **Acrescentar 4 perguntas na mesma conversa:** tem Android ou iPhone? aceita receber a rota como sugestão por WhatsApp e recusar corrida? aceita mandar a localização pelo WhatsApp no piloto (semana 0, DEC-097)? tem plano de dados? | Cadastrar o custo cotado mais alto (conservador); as respostas alimentam F10 e o gatilho do app (R4) sem custo extra | Seed provisório; a R3 não é afetada, a R4 decide aparelho às cegas |
+| **J8 (e J26)** | **J8 vale para qualquer motoboy real**, inclusive o despacho da R3 e o piloto da v1.0 (DEC-003 e DEC-039: ninguém é contratado ou pago antes do parecer). J26 (GPS) só para a R4. Mandar o J8 com 2 acréscimos: "rota sugerida por WhatsApp, com ordem e sem horário por parada" e "perda de mercadoria" (próxima linha) | Construção e testes **não esperam**; o **piloto com motoboy real** espera. Entra no lote C do plano (~1 h, assíncrono) | Piloto sem motoboy real ou risco aceito por escrito (regra 6) |
+| **F-R3-2** | **Quem arca com a mercadoria que o motoboy não entrega nem devolve** (some, roubo, acidente). Nenhum documento define | `[HIPÓTESE; jurídico]` No piloto: a Webag reembolsa o cliente na íntegra (RN-08) e repassa o valor à loja (a logística é da Webag, DEC-036), e cobra do motoboy fora do sistema. **Limitar a exposição:** teto de valor de mercadoria por rota nas 2 primeiras semanas, no número que ele aceita perder (não sugiro valor: é dinheiro dele). Perguntar ao motoboy e ao advogado sobre seguro | A 1ª ocorrência vira decisão no improviso, com dinheiro de terceiro |
+| **F-R3-4** | Quem é a **operação** no piloto e em que horário | O fundador (ou 1 pessoa dele) com o painel de despacho **aberto** em `logistica_horario`; o piloto conta quantos alertas foram perdidos | Alertas sem ninguém olhando; a meta de 90 s não se mede |
+| **SEC-196** | Ligar a "segurança avançada de push" no painel do Expo e gerar o `EXPO_ACCESS_TOKEN` (~10 min); guardar em cofre ou `.env`, nunca no repositório | Fazer antes do G4 da R3. **Custo: não verificado; confira no painel, e se houver cobrança não ligue e me avise** (regra 6) | O G4 da R3 não passa: o aviso "saiu" vira vetor de golpe |
+| **Android real** | ~1,5 h, junto da Janela B: (a) Web Push do lojista com o painel fechado, no Chrome do Android; (b) abrir os links de Maps e Waze da rota no celular do motoboy (e num iPhone, se houver); (c) a faixa "Saiu com o motoboy" ao sol, com som, em celular de entrada; (d) a operação monta um lote de 3 pelo celular | Aparelho de entrada (o do perfil do lojista), não o seu | "RC com ressalva: emulador" (R-34); não bloqueia construir |
+| **F12** | **Nada a decidir agora**: a confirmação automática da saída fica desligada na R3 (precisa de GPS) | Decidir na R4, com o % de saídas confirmadas pela loja no piloto | n/a |
+
+**Ao CEO (validações):** (1) registrar as decisões I.1 como DEC-142 em diante; (2) acrescentar `loja_confirma_saida` à C-GEN-01 (nasce desligada; é a flag da mudança da RN-07); (3) aceitar a divisão 391a, 391b (R3) e 391c (R4); (4) aceitar o teto de 180 min do rastreio (troca o de 24 h) e a mudança da WB-235 C3 (nome só depois da saída); (5) **avisar o fundador de que mapa ao vivo e "motoboy confirma entregue" são R4**, e que a R4 ficou por último (DEC-104); (6) pedir ao designer as 3 correções (I.3); (7) a ordem de corte da R3 está no `backlog.md` §10.9.
+
+## I.5 Checagem final da R3
+| Verificação | Resultado |
+|---|---|
+| Cada história R3 tem Gherkin com caminho feliz, limite, erro, vazio, permissão e concorrência, com valores concretos | Sim, após os acréscimos: WB-380 C6, C7; 381 C12 a C14; 382 C7, C8; 390 C13 a C16; 391 C15 a C23; 396 C13 a C16; 397 C9 a C12; 358 C11 a C13 |
+| Número sem fonte | Os novos estão marcados `[HIPÓTESE]`: 20 min do alerta de "aceitou e não chega", 180 min do teto, 5 inscrições de Web Push, 3 min no WhatsApp; nenhum é dado de mercado |
+| Algum critério depende de app ou GPS na R3? | Foram movidos para a R4: WB-390 C8, WB-391c, WB-396 C3 e C4, "Peguei" (reatribuir usa a saída registrada); a tabela "Escopo por release" do PRD de rastreio lista cada um |
+| Divergência entre PRD e spec | 3 correções do designer (I.3); o PRD prevalece |
+| Ainda falta | Poker dos devs (PM), contrato R3 (backend, onda R3.1), ADR do mapa e spike L5 (tech-lead), SEC-196 (Security, backend e fundador), DT-102 (tech-lead) |
