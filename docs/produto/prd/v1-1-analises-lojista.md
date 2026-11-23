@@ -131,12 +131,14 @@ Como Webag, quero registrar a jornada da sessão sem ligá-la à conta do client
 - **C8** (C-ANA-01) Dado a captura de rede do app, então a requisição de eventos não leva `Authorization`, cookie nem `X-Device-Id`; a rota não passa pelo guard de autenticação nem pelo log com `userId`; o nginx não grava IP nem user-agent dessa rota; a varredura dos logs da API e do nginx e das tabelas de pedido e usuário não acha `session_id` nem IP da rota (teste do QA).
 - **C9** (C-ANA-03) Dado 61 requisições por minuto da mesma sessão ou do mesmo IP (chave = HMAC do IP no Redis, validade de até 120 s), então a 61ª recebe 429; a 31ª sessão nova por hora do mesmo IP é descartada e contada (parâmetro).
 - **C10** Dado rede 3G instável, então o app mantém a fila e envia sem travar a tela.
+- **C11** (DEC-138, review R2.1; entra na R1.4) Dado o toque em "Finalizar" que abre o checkout, então `checkout_started` é enviado com `store_id`, sem conta, sem valor e sem endereço (mesmas regras de privacidade dos demais); abrir o checkout de novo na mesma sessão em 30 s não duplica. Sem ele o funil da WB-362b não tem a etapa "início do checkout".
 
 ### WB-362 Admin: análise de acessos — Should — dep: WB-361, WB-363, WB-356
+**Dividida em 2026-11-23 (DEC-138): WB-362a (C1, C4 a C7) fica na R2; WB-362b (C2, C3: "só perfil" e funil) sai da R2 e volta com a R1.4**, porque depende do evento `checkout_started` (WB-361 C11) e da coluna `profile_only_sessions` (WB-363 C10), que só existem quando a R1.4 for construída. Sem a R1.4 nenhuma das duas mostra dado real: WB-362a é construída e testada com seed e fica atrás de `coleta_eventos` (J24). Quando a R1.4 existir, WB-362b entra com a flag e o contrato (`getAdminAnalyticsFunnel`, `x-planned: v1.1 R1.4`).
 Como fundador, quero ver o que o cliente abre, para decidir destaque, banner e apoio a lojas.
-- **C1** Dado o período de 7 dias, então vejo as 10 lojas com mais visitas e os 10 produtos com mais aberturas, com variação sobre o período anterior.
-- **C2** Dado a loja, então mostra "só perfil" (visita sem abrir produto) versus "abriu produto".
-- **C3** Dado o funil geral e por cidade: visita, produto, sacola, checkout, pedido pago, com a conversão de cada etapa separada (não só a final).
+- **C1** (362a) Dado o período de 7 dias, então vejo as 10 lojas com mais visitas e os 10 produtos com mais aberturas, com variação sobre o período anterior.
+- **C2** (362b, R1.4) Dado a loja, então mostra "só perfil" (visita sem abrir produto) versus "abriu produto".
+- **C3** (362b, R1.4) Dado o funil geral e por cidade: visita, produto, sacola, checkout, pedido pago, com a conversão de cada etapa separada (não só a final).
 - **C4** Dado a quebra por origem, então célula com menos de 5 sessões segue a RN-A2 (agrupada em "Outras", "menos de 5" e totais "cerca de" quando houver supressão; WB-363 C6 e C7); a regra vale também para o admin nas quebras por loja.
 - **C5** Dado o filtro de cidade, então todos os números respeitam.
 - **C6** Dado o perfil suporte, então não acessa (dado de negócio, RN-13).
@@ -153,6 +155,7 @@ Como Webag, quero agregar e apagar o bruto, para entregar só dado agregado (an�
 - **C7** (C-ANA-05 b) Dado resposta com qualquer célula suprimida, então nenhum total da resposta é exato (arredondado ao múltiplo de 5, "cerca de"); total menos as partes publicadas não revela a célula suprimida (teste); vendas e pedidos do banco seguem exatos.
 - **C8** (C-ANA-05 d, e) Dado o horário de pico, então só com 7 dias ou mais e sem cruzar com produto ou origem; a etapa "pedido" nunca é quebrada por hora nem por produto com menos de 5.
 - **C9** Dado o job de agregação, então grava por dia e cidade os pedidos pagos do app com e sem `session_id` (base da cobertura, RN-A10), sem `session_id` no agregado.
+- **C10** (DEC-138, entra na R1.4) Dado o agregado diário por loja, então traz `profile_only_sessions` (sessões que visitaram a loja e não abriram produto, RN-A5) com a mesma supressão de menos de 5 (C3, C6, C7); reexecutar o dia não duplica.
 
 ### WB-364 Lojista: painel Análises (visitas, funil e origem) — Should — dep: WB-363, WB-366
 Como lojista, quero ver visitas e conversão da minha loja, para ajustar vitrine e preço.

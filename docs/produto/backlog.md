@@ -567,7 +567,7 @@ Esforço total `[HIPÓTESE]`: ~39 pessoa-semana + horas do fundador (aparelho re
 |---|---|---|---|---|
 | **R0 (em paralelo, sem código)** | Pareceres J22 a J27; cotação de 3 a 5 motoboys; 5 entrevistas (disposição a pagar pelas Análises, EAN, como usam cupom nos apps); decisões F1 a F17 (`pesquisa` §11); spikes L5, L6, L9 | Evita construir o que o jurídico ou o mercado barram; **J22 vale também para o v1.0 (G5)** | Fundador, advogado | Tabela de decisões respondida |
 | **R1 Oferta e controle** | Cadastro rápido: 370, 371, 372, 379, depois 374, 375, 376, 377. Admin: 350, 351, 352, 353, 355 (e 354). Coleta anônima de acessos **em staging**: 360, 361, 363, 369 (liga em produção só após J24) | Ativa lojas (a oferta é o gargalo); o admin cadastra pelo lojista; os dados começam a acumular | R0 (J24 para ligar a coleta); DoR dos itens | Teste de usabilidade com mediana <= 60 s; lojas com 1º produto em 24 h >= 80% |
-| **R2 Crescimento** | Cupons: 340, 341, 342, 343, 344, 345, 347, 349 (depois 346, 348). Admin: 356, 357 (painéis prontos), 362 (acessos), 373 (EAN base própria). 367 (porta falsa) | Alavanca de aquisição com custo limitado; o fundador enxerga o negócio | F1 a F4 e J22, J23; R1 (coleta e permissões) | Nenhuma campanha estoura orçamento; 0 desconto sem adesão; relatório confere com o ledger |
+| **R2 Crescimento** | Cupons: 340, 341, 342, 343, 344, 345, 347, 349 (depois 346, 348). Admin: 356, 357 (painéis prontos), 362a (acessos; o funil 362b sai da R2 e volta com a R1.4, DEC-138), 373 (EAN base própria). 367 (porta falsa) | Alavanca de aquisição com custo limitado; o fundador enxerga o negócio | F1 a F4 e J22, J23; R1 (coleta e permissões) | Nenhuma campanha estoura orçamento; 0 desconto sem adesão; relatório confere com o ledger |
 | **R3 Entrega assistida** | 381, 382 (rota e link), 380 (mapa), 390 e 391 (OK da loja e estados, com a operação marcando pelo motoboy via WhatsApp), 396 (parte loja e admin), 397 (Web Push do lojista), 358 e 359 (construtor) | Mais entregas por hora, loja sabe o que fazer, **a custo zero** (heurística, link, Protomaps) | Spike L5 (mapa próprio); F11, F12 | Operação monta lote em <= 90 s; OK da loja com mediana <= 2 min |
 | **R4 App do motoboy e rastreio** | 383, 384, 385, 386, 387, 389 e 388; 392, 393, 394, 395, 399, 398, 396 (parte cliente) | Rastreio ao vivo, `deliveredAt` exato, menos trabalho manual | **J8 e J26 (bloqueiam)**, F10, F16; R3; aparelho real | >= 90% das corridas fechadas pelo app; bateria <= 12% por hora |
 | **R5 Análises pagas e IA** | 364, 365, 366, 368; 378 (interface e fake) | Receita nova e valor ao lojista | RN-A8 (8 semanas de dado, 5 lojas com 100 visitas), F5, F6; porta falsa com interesse | >= 3 lojas aceitam pagar após o teste |
@@ -612,7 +612,8 @@ Formato: `WB-### | história | persona | método e nota | MoSCoW | release | dep
 |---|---|---|---|---|---|---|---|---|
 | WB-360 | Aviso, controle e opt-out de medição no app | Cliente | piso (LGPD) | Must | R1 | WB-211; J24 | Proposta | `pesquisa` §3 |
 | WB-361 | Coleta de eventos de navegação sem identificar o cliente | Webag | piso | Must | R1 | WB-360; J24; F7 | Proposta | DEC-073 |
-| WB-362 | Admin: análise de acessos (lojas, produtos, perfil x produto, funil) | Fundador | RICE-acessos 0,4 | Should | R2 | WB-361, WB-363, WB-356 | Proposta | Fundador |
+| WB-362a | Admin: análise de acessos (10 lojas e 10 produtos, origem, cidade; PRD C1, C4 a C7) | Fundador | RICE-acessos 0,4 | Should | R2 (com seed; real só com `coleta_eventos`) | WB-361, WB-363, WB-356 | Proposta | Fundador |
+| WB-362b | Admin: "só perfil" e funil (PRD C2, C3) | Fundador | RICE-acessos 0,4 | Should | **R1.4** (sai da R2, DEC-138) | WB-361 C11 (`checkout_started`), WB-363 C10 (`profile_only_sessions`) | Proposta | Fundador; review R2.1 S2 |
 | WB-363 | Agregação, mínimo de 5 e retenção de 90 dias | Webag | piso | Must | R1 | WB-361 | Proposta | LGPD |
 | WB-364 | Lojista: painel Análises (visitas, funil, origem) | Lojista | RICE-módulo 1,0 | Should | R5 | WB-363, WB-366 | Proposta | Fundador |
 | WB-365 | Lojista: produto visto x vendido e horário de pico | Lojista | RICE-módulo | Should | R5 | WB-364 | Proposta | Fundador |
@@ -687,7 +688,7 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | **Front do cadastro rápido: PRONTO (DoR fechada pelo PO, 2026-11-22, DEC-128)** | R1.2: WB-370, 371, 372, 374, 375, 379. R1.3: WB-376 (parser 376a já existe) e 377. Fora da R1: WB-373 (R2), WB-378 (R5) | Estimado (16,0 UT front, DEC-126); contrato no OpenAPI (a rota só é usada depois que o backend tira o `x-planned`, e `quickPublish` só depois dos SEC-213/214/215/218). **Não bloqueiam o início:** o designer corrige teto 100 e estado sem rede (lista em `prd/v1-1-cadastro-rapido.md`, "Respostas ao parser") antes da revisão da tela; os critérios novos já valem. Aceite da meta de 60 s depende do teste em aparelho real (fundador, T1) |
 | **Pronta, R1, produção só com condição** | WB-353 (produção só com motivo "solicitado pelo lojista" até o **J27**) | J27 (jurídico) |
 | **Pronta, R1 em staging; liga em produção só com o J24** | WB-360, 361, 363, 369 | **J24** (jurídico e Security); política de privacidade, Data Safety e App Privacy antes de ligar (C-GEN-03) |
-| **Pronta para sprint (PO), R2** (**fechamento em §10.8, 2026-11-22**) | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362, 367, 373 | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
+| **Pronta para sprint (PO), R2** (**fechamento em §10.8, 2026-11-22; revisão pós-pareceres em §10.8.1, 2026-11-23**) | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362a, 367, 373 (WB-362b fora da R2: volta com a R1.4) | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
 | **Pronta, R2, liga só com parecer** | WB-343 (**J27**: cláusula de adesão); WB-347 (frete grátis só com o **J22**); WB-348 (**J23**: "de/por" de 30 dias) | Jurídico |
 | **Pronta para sprint (PO), R3** | WB-358, 381, 382, 390, 391, 396, 397 | **SEC-196** corrigido antes do G4 da R3 (Security e backend); teste de Web Push em aparelho real (WB-397) |
 | **Pronta (PO), falta ADR** | WB-380 (mapa) | ADR do mapa e spike L5 (tech-lead) |
@@ -723,8 +724,27 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | 349 | **Pronta** | Nada | Pausa com reconferência sob trava |
 | 356 | **Pronta** (C3 com 3 classes de sensibilidade) | Nada | Inclui a proteção de consulta que era da WB-359 |
 | 357 | **Pronta** (C7 a C9 novos: conteúdo dos 5 painéis) | Nada | Should; depende da 356 |
-| 362 | **Pronta** (C4 alinhado à RN-A2) | `coleta_eventos` (J24) | Depende de WB-361/363 (R1.4); estado vazio coberto (C7) |
+| 362 | **Dividida (2026-11-23, DEC-138):** 362a pronta na R2; 362b fora da R2 | `coleta_eventos` (J24) | Ver §10.8.1 |
 | 367 | **Pronta** (C5 a C7: texto, dono, critério de matar HIP-A1) | Nada (não coleta dado pessoal) | 5 entrevistas do fundador alimentam a mesma hipótese |
 | 373 | **Pronta**; leitor no Safari é spike do mobile-dev | `ean_base_externa` só com F9 | Should; base própria nasce vazia (L4); primeiro da fila de corte da R2 (plano §8) |
 
 **Para o fundador (resumo):** F2 e F4 (recomendação em `respostas` §F), e J22, J23 e J27 só para ligar. **Para o CEO:** (1) aceitar a divisão da flag `campanhas_cupom` em 3 parâmetros (`campanha_frete_gratis`, `campanha_parte_da_loja`, `selo_de_por`); (2) validar a classificação de sensibilidade das métricas (PRD admin); (3) aceitar a tabela "Mensagens ao cliente" como fonte única; (4) pedir ao designer as 4 correções de spec.
+
+### 10.8.1 DoR da R2 após os pareceres do tech-lead e do security (PO, 2026-11-23)
+Fonte: `docs/arquitetura/reviews/r2-1-contrato-2026-11-23.md` e `docs/seguranca/threat-model-v1-1.md` §20. As correções de produto estão no PRD `v1-1-cupons.md` (cabeçalho lista o que mudou). **Estimativa dos devs:** o tech-lead deu 18,5 a 22 UT, recomendando planejar 22 a 27 UT (M ~ 25) `[HIPÓTESE]`; WB-340 e WB-347 não tinham linha própria na conta. **Contrato OpenAPI da R2: entregue (0.5.0), aprovado com ressalvas.** Falta, portanto, só o poker do PM e as 4 correções do designer.
+
+| WB | DoR (PO) após 2026-11-23 | O que mudou | Pendência de quem |
+|---|---|---|---|
+| 340 | **Pronta** (14 critérios) | C8: 2º fator = 403 `REAUTH_REQUIRED`; C13 e C14 novos: campanha agendada editada volta a rascunho e a virada reconfere (SEC-224, Alta) | backend-dev: SEC-224 no contrato e no ADR D3 antes do motor |
+| 341 | **Pronta** | C11: custo previsto vem de `DeliveryFeeTier.expectedCostCents` (S8) | nada |
+| 342 | **Pronta** | C6 e C8: cupom próprio usa o teto mensal como limite; "esgotado no momento" quando o orçamento está só reservado (SEC-228) | designer: texto novo na tela do cliente |
+| 343 | **Pronta**; produção J27 | C9 e C10: id da loja da rota (SEC-227); aceite do funcionário limitado, dono avisado (SEC-232, RN-C13) | nada |
+| 344 | **Pronta** (19 critérios) | C3 sem complemento (SEC-225); C15 a C19 novos (aparelho das sessões e pedido pré-R2, e-mail normalizado, CPF informado, Q17, pedido não pago) | **Dividir no poker (PM):** 344a identificadores e travas (C1 a C5, C10, C11, C14 a C19); 344b painel "Suspeitos" e alertas (C6 a C9, C12, C13) |
+| 346 | **Pronta** (Should) | C1: `maxUses` opcional, teto mensal obrigatório; C9 e C10: alerta de cupom como fuga e validade máxima de 30 dias (SEC-233) | jurídico J23 sobre "desconto falso" |
+| 349 | **Pronta** | C5: 409 e o cliente confirma o total novo; nunca "pedido sem cupom" automático | designer: tela de confirmação do novo total |
+| 362a | **Pronta** (Should) | Só C1, C4 a C7 na R2 (seed) | `coleta_eventos` (J24) |
+| 362b | **Fora da R2; volta com a R1.4** | C2 e C3 | R1.4 inclui WB-361 C11 e WB-363 C10 (o tech-lead pediu: barato agora, caro depois) |
+
+**Ajuste de DoR da R2 (decisão do PO):** a WB-362 vira 362a (R2) e 362b (R1.4), e o esforço do funil (~0,5 UT segundo o tech-lead) sai da conta da R2. Se a R1.4 não for construída antes da R2, a WB-362a também só roda com seed: aceitável, mas diga ao fundador que o painel "Acessos" fica sem dado real até a R1.4 e o J24.
+
+**Condições de G4 da R2.2 que viram aceite do PO (Q1 a Q19 do security):** Q1 (SEC-224), Q2 (SEC-225), Q3 (SEC-226), Q5 (SEC-228), Q17 (estorno total) estão agora nos critérios acima; QA confere no G4.
