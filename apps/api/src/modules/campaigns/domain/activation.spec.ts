@@ -37,7 +37,7 @@ describe('conferências de ativação (WB-340 C1 a C11)', () => {
   });
 
   it('C5: "Webag paga" acima da margem prevista em alguma faixa só o super admin ativa (a retirada tem margem 0)', () => {
-    const v = checkActivation(facts({ value: 800 }), ctx());
+    const v = checkActivation(facts({ value: 1_100 }), ctx());
     expect(v.aboveMargin).toBe(true);
     expect(v.requiresSuperAdmin).toBe(true);
     expect(v.blockers.map((b) => b.code)).toContain('ABOVE_MARGIN_SUPER_ADMIN_ONLY');
@@ -51,10 +51,10 @@ describe('conferências de ativação (WB-340 C1 a C11)', () => {
   });
 
   it('a simulação cobre a retirada e cada faixa, nunca devolve desconto negativo e marca prejuízo em texto (remaining < 0)', () => {
-    const sim = simulateBands(facts({ value: 800 }), ctx());
+    const sim = simulateBands(facts({ value: 1_100 }), ctx());
     expect(sim.rows.map((r) => r.band.id)).toEqual(['pickup', 'tier-1', 'tier-2']);
     expect(sim.rows.every((r) => r.discountWebagCents >= 0 && r.discountStoreCents >= 0)).toBe(true);
-    expect(sim.rows[2]!.remainingCents).toBeLessThan(0); // faixa 2: margem 900 + comissão - 1.100 de motoboy
+    expect(sim.rows[2]!.remainingCents).toBeLessThan(0); // faixa 2: comissão 1.200 + entrega 900 - motoboy 1.100 = margem 1.000, desconto 1.100
   });
 
   it('pior caso: percentual com teto = o teto; fixo = o valor; frete = a maior entrega; Loja paga = 0', () => {
