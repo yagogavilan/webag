@@ -23,12 +23,12 @@ Esforço em UT (O / M / P / PERT). Premissas: P1 contrato e migrações = 15% do
 |---|---|---|---|---|
 | **W0** Base limpa (antes de tudo) | bugs, revisão diferencial, DoR | 6 / 9 / 14 | 9,3 | Disco (I-05); autorizar cortes (D-A a D-C) |
 | **R1** Cadastro rápido, admin de lojas, coleta em staging | 18: 350 a 355, 360, 361, 363, 369, 370 a 372, 374 a 377, 379 | **REESTIMADA 2026-11-22: ~40 a 44 UT total** (era 24 / 31 / 42); backend 16,5 a 19 (§10) | ~42 `[HIPÓTESE]` (era 31,7) | Fundador testa cadastro com cronômetro no próprio celular; 5 pessoas do perfil para a meta de 60 s; J27 (edição de preço pelo admin) e J24 (coleta) só para ligar |
-| **R2** Cupons, painéis prontos, acessos | 16: 340 a 349, 356, 357, 362, 367, 373 | 28 / 36 / 50 | 37,0 | F2 (orçamento R$ 0), F4 (custo previsto do motoboy por faixa); J22, J23, J27 para ligar; 5 entrevistas de lojistas (porta falsa) |
+| **R2** Cupons, painéis prontos, acessos | 16: 340 a 349, 356, 357, 362, 367, 373 | 28 / 36 / 50 (plano) | 37,0 plano; **REESTIMADA 2026-11-23: ~52,3 restantes + ~4,5 da R2.1 = ~56,8** (§12) | F2 (orçamento R$ 0), F4 (custo previsto do motoboy por faixa); J22, J23, J27 para ligar; 5 entrevistas de lojistas (porta falsa) |
 | **R3** Rota, OK da loja, notificações, construtor | 9: 380 a 382, 390, 391, 396, 397, 358, 359 | 18 / 24 / 34 | 24,7 | Spike do extrato Protomaps (L5); Web Push só valida em aparelho real; F12 sem parecer: `saida_automatica` off |
 | **R4** App do motoboy e rastreio | 13: 383 a 389, 392 a 395, 398, 399 | 30 / 40 / 58 | 41,3 | **Aparelho Android real** (GPS em 2º plano, bateria); J8 e J26 para ligar; SEC-193 e SEC-198 antes |
 | **R5** Análises pagas e IA | 5: 364, 365, 366, 368, 378 | 8 / 12 / 18 | 12,3 | Preço e teste do módulo (F5/F6); 8 semanas de dado real (não existe local); J24, J25 |
 | **Final** Revisão geral, bugs e relatório visual | todas as telas | 8 / 12 / 18 | 12,3 | Aparelho real do fundador para "visto em aparelho: sim/não" |
-| **Total** | 61 histórias | 122 / 164 / 234 (R1 já reestimada em §10) | **168,3 original; ~177 a 181 com a R1 nova** | Em janelas de calendário: PERT / 2 ≈ **84** `[HIPÓTESE]` |
+| **Total** | 61 histórias | 122 / 164 / 234 (R1 já reestimada em §10) | **168,3 original; ~177 a 181 com a R1 nova; ~196 a 200 com a R2 nova (§12.4)** | Em janelas de calendário: PERT / 2 ≈ **84** `[HIPÓTESE]` |
 
 Conta de realismo: 168 UT com ~2 UT por janela são ~84 janelas de 5 h. É grande. O fundador pediu TUDO (DEC-102) e tudo cabe só se o limite de uso não for o gargalo; a ordem de corte já aprovada (DEC-100: R5, construtor, R4, 346/348/354/365, 380; piso nunca) é o que sai primeiro. Recomendação de cortes extras em §8.
 
@@ -216,7 +216,7 @@ Troca de ordem sugerida: **R5 pode ser feita antes da R4** (barata, 12 UT, depen
 
 ## 9. Buffer, calibração e decisões pedidas
 
-Buffer (fora das estimativas, no fim, com nome): **25 UT** (15% de 168) `[HIPÓTESE]`; só para imprevisto, nunca para escopo novo. Acrescento +10% por release com dependência externa na saída (R2, R4).
+Buffer (fora das estimativas, no fim, com nome; **2026-11-23: recomendo 30 UT, §12.4**): **25 UT** (15% de 168) `[HIPÓTESE]`; só para imprevisto, nunca para escopo novo. Acrescento +10% por release com dependência externa na saída (R2, R4).
 
 | # | Decisão | Dono | Recomendação |
 |---|---|---|---|
@@ -271,24 +271,130 @@ Soma 1 a 5: ~4,1 UT. Fecha só metade da lacuna: a outra metade é aceitar a R1 
 ### 10.5 Gates de segurança da R1 (G4 local)
 SEC-206 (Alta, Ver como: desenho fechado, código pendente), SEC-207 (Média, máscara de cliente), SEC-208 (Média, idempotência na mesma transação da D18), SEC-209 (Média, `timeline` e "estrito" aninhado; devolvida ao backend-dev, bloqueia o **merge** da WB-352). Para fechar: VA-01..26, AO-01..05, BK-01..08, DB-01..05 verdes no CI com Docker, `x-view-as` no redact do pino e do Sentry, revisão diferencial da WB-352, D18 e D19 (TM §15.7). SEC-194 segue aberta até J24 e não bloqueia o G4 em staging.
 
-## 11. Re-baseline curto (2026-11-22, após DEC-133): o que resta e a carga do fundador
+## 11. Re-baseline (2026-11-23, após DEC-140): o que resta, caminho crítico e carga do fundador
 
-R1.1 e R1.2 (back-end e web do cadastro rápido) estão **construídas e em QA final**; merge só depois do reteste 2 (BUG-042 e CI verde). Estado, bugs e condições de deploy: `board.md` (v1.1). UT realizadas **não medidas** pelo PM até hoje (indisponível); o backend-dev informa as UT gastas na R1.1 e na R1.2 para checar os gatilhos de 7,5 e 9 UT da §10.3 e recalibrar. Escopo que entrou depois da planning (SEC-213/214/215/218, `limitPct`, GET de configuração do admin, SEC-221, C15 da WB-352, `adjustVariantStock`): ~+0,5 a 1,0 UT, absorvido na linha de base da R1 (40 a 44); **se a R1.1+R1.2 passou de 9,4 UT, algo da ordem de corte sai da R1.3** (CEO decide). Total e buffer (25 UT) intactos `[HIPÓTESE]`.
+**Estado:** R1.1 a R1.3 estão na `main` (PR 2 `b480b0c`, PR 3 `f74f258`; CI verde nos jobs `checks` e `e2e-web`; DT-095 fechada). R1.4 **adiada** (DEC-138), levando a WB-362b. R2.1 (contrato 0.5.0, ADR-019, migrações 0064/0065) **revisada** (DEC-139). R2.2 **em construção**: backend-dev na Fase A (correções) e depois na Fase B (motor); mobile-dev só começa admin de campanhas e sacola depois da Fase A. UT medidas: R1.1+R1.2 ~9,9 (faixa 8,4 a 11,4); R1.3 e R2.1 **indisponível** (só estimativa). Estado e condições: `board.md` (v1.1). Estimativa da R2: §12.
 
-Horas do fundador são `[HIPÓTESE]` mínimas (ele não confirmou disponibilidade); o gargalo é a agenda, não o agente.
+**Cor:** AMARELO na construção; VERMELHO no caminho de deploy/G5 (gatilho do re-baseline anterior disparou: R1.0 nunca executada com a R1.3 já mergeada; disco em 72 MB livres).
 
-| Etapa | Falta (UT, PERT `[HIPÓTESE]`) | Depende de | Carga do fundador | Ordem de corte / observação |
+### 11.1 Caminho crítico (backend serial, 1 slot; UT do §12)
+
+| Passo | UT | Depende de | Observação |
+|---|---|---|---|
+| 1. Fase A (B1, B2, R1 a R13, SEC-224 a 233; migração 0066) | 1,53 | nada (em andamento) | Árvore com 8 arquivos sem commit (R-53). ADR-019 só vira "Aceita" aqui |
+| 2. Motor: WB-340, 341, 342, 349 | 8,76 | passo 1; BUG-049 corrigido antes de tocar `closeOrder`, webhook e estorno | B1: ordem global de travas e e2e de deadlock; integração com orders, payments e finance é o maior risco (TL) |
+| 3. WB-344a (identificadores e travas) e 347 (composição ao cliente) | 3,13 | passo 2; SEC-225/226 | `payer_document_hash` com leitura dupla; sem campo que majore preço (DEC-088) |
+| 4. k6 do `createOrder` e testes de deadlock | 0,62 | passo 3 | Gate: p95 do `createOrder` com 20 a 50 usuários na MESMA campanha (R5 do TL) |
+| 5. R2.3 backend: 343, 345, 356, 357, 344b, 346, 348, 362a, 367, 373 | 13,22 | passo 2 (motor) e contrato dos painéis | Painéis (356/357, 6,1) são o maior bloco |
+| 6. R2.4: QA 3,6 + TL e Security 4,1; PO aceita | 7,7 | passo 5; mobile entregue | G4 local; 3 execuções do e2e |
+
+Backend: 27,3 UT em série, ~27 janelas a ~1 UT por janela `[HIPÓTESE]`, mais a cauda de revisão e QA. **Folga do backend: zero.** Mobile (17,3 UT) corre em paralelo atrás do contrato estável: admin de campanhas (3,6) depois da Fase A; sacola (3,1) depois do 341/347; painéis (3,3) depois do 356/357, que fecha a cauda. Se o backend entrega o 341/347 cedo, a sacola começa sem esperar o fim do passo 3. Dependências que só o fundador resolve **não travam a construção** (F2 e F4 têm default; J22/J23/J27 só ligam flags); travam o RC (aparelho) e o deploy.
+
+### 11.2 Carga do fundador por rodada (horas `[HIPÓTESE]` mínimas; ele não confirmou disponibilidade)
+
+| Etapa | Falta (UT, PERT) | Depende de | Carga do fundador | Corte / observação |
 |---|---|---|---|---|
-| **R1 fecho do QA** (agora) | ~0,5 (reteste 2, merge) | CI verde (R-49), BUG-042 | ~0,3 h: conferir a aba Actions no HEAD final; decidir SEC-200 (aceitar ou corrigir) | Merge não exige o fundador (docs/código; sem deploy) |
-| **R1.0** com Docker | 0,3 | D-16, disco (I-05) | 1 a 2 h: sessão na máquina com Docker (ou liberar disco) | Sem ela, D-06 e PG18 ficam "não provados"; bloqueia deploy, não o merge |
-| **Teste de aparelho e 60 s** (R1.2) | n/a (agentes) | C-07, D-14 | **~4 a 5 h**: roteiro §12.11 (~1,5 h) + 5 pessoas do perfil cronometradas (~3 h, incluindo recrutar). Única parte da R1 que depende de gente de fora | Sem isso a meta de 60 s e HIP-Q2 seguem `[HIPÓTESE]` |
-| **R1.3** | ~6,5 a 7 (inclui DT-095 1,1 e itens que entraram) | merge da R1.1/R1.2; D18 | ~0,5 h: decisões pontuais | Cortes 1 a 4 da §10.3; planilha e "juntar" já cortados (DEC-132) |
-| **R1.4** coleta (staging) | ~2,8 | R1.3 | ~0 (só staging, flags `false`) | Primeira da fila de corte; J24 só para ligar |
-| **R1.5** fecho da R1 | ~1,5 a 2 | SEC-206/208 "Corrigido", CI verde | ~1,5 h: RC local (`pnpm iphone`, Docker Desktop) | G4 local; G5 fora |
-| **R2** cupons e painéis | ~37 | contrato R2; F2 (R$ 0 por padrão), F4 | ~6 h: F2/F4 e J22/J23/J27 ao advogado (~1 h); 5 entrevistas da porta falsa (~3 h); RC (~1,5 h) | Cortes DEC-100; 373 e 346/348 primeiro |
-| **R3** rota, OK da loja, notificações | ~24,7 | ADR mapa (spike L5), SEC-196 | ~2 h: aprovar spike (~0,3 h), Web Push em aparelho (~0,5 h), RC (~1 h) | Construtor 358/359 e 380 antes; 397 só com aparelho |
-| **R5** análises e IA `fake` | ~12,3 | R1.4 (coleta em seed), R2 | ~1,5 h: F5/F6 (preço do módulo, ~0,5 h), RC (~1 h) | Fecha "pronta, desligada e testada com seed"; antes da R4 (D-B) |
-| **R4** app do motoboy | ~41,3 | R3 (391/390), SEC-193 e SEC-198, ADR courier | ~4 h: Android real e APK (~2 a 3 h), RC; J8/J26 só para ligar | Sem Android real: "RC com ressalva: emulador" (R-34); candidata a sair |
-| **Onda final** | ~12,3 | HEAD congelado | ~2,5 h: aparelho real e leitura do relatório visual | "Visto em aparelho: sim/não" só o fundador muda |
+| **R1.0** com Docker | 0,5 (era 0,3; soma 0064/0065 up/down e e2e de schema da R2) | D-16, disco (I-05) | 1 a 2 h: sessão em máquina com Docker | Sem ela D-06, PG 18 e as migrações 0058 a 0065 seguem "não provadas"; bloqueia deploy, não a construção |
+| **Aparelho + 60 s** (R1.2/R1.3) | n/a | C-07, D-14 | **4 a 5 h:** roteiro §12.11 (~1,5 h) + roteiro de celular do §9 do relatório da R1.3 (~0,5 h) + 5 pessoas do perfil cronometradas (~3 h, com recrutamento) | Sem isso a meta de 60 s e HIP-Q2 seguem `[HIPÓTESE]` |
+| **R2.2** (Fase A e B) | 14,0 backend + 3,6 mobile | Fase A; BUG-049 | ~1 h: F2 e F4 (sem resposta: R$ 0 e custo provisório), decidir SEC-200 | Nada da Webag ativa em produção sem F2 > R$ 0 |
+| **R2.3** | 13,2 backend + 13,7 mobile | R2.2-B | **~4 a 4,5 h:** 5 entrevistas da porta falsa (WB-367) e 3 lojistas para validar os números de SEC-232/233 (R$ 150 por mês, 50%, 30 dias, 50% dos pedidos), **com as mesmas pessoas do recrutamento dos 60 s quando possível** | Cortes: 373, 348, 346 (§12.5) |
+| **J22, J23, J27** ao advogado | n/a | R-32 | ~1 h, assíncrono, em lote; só para ligar flags | Antes do RC da R2 |
+| **R2.4** G4 local (+ R1.5 unificada) | 7,7 | R2.3 | ~1,5 h: um só RC local (`pnpm iphone`, Docker Desktop) para R1 e R2 | Proposta: unir R1.5 e R2.4 (economiza ~1,5 h do fundador e ~1,5 UT; risco: defeito da R1 aparece tarde, mitigado por regressão do QA da R1 antes) |
+| **R1.4 + 362b** | ~3,5 (2,8 + ~0,7 `[HIPÓTESE]`) | R2 | ~0 (só staging, flags `false`) | Adiada; tem de rodar antes da R5 e do painel de funil. Renumerar a migração 0065 |
+| **R5** | 12,3 | R1.4, R2 | ~1,5 h: F5/F6 e RC | "Pronta, desligada e testada com seed" |
+| **R3** | 24,7 | ADR mapa, SEC-196, **DT-102** | ~2 h | Construtor 358/359 e 380 antes |
+| **R4** | 41,3 | R3, SEC-193/198, ADR courier | ~4 h: Android real | Candidata a sair |
+| **Onda final** | 12,3 | HEAD congelado | ~2,5 h | "Visto em aparelho" só o fundador muda |
 
-Soma de horas do fundador (mínimo, sem imprevisto): ~25 a 27 h em ~9 janelas de agenda; a mais pesada e mais cedo é a de **aparelho + 60 s + Docker (~6 a 7 h em 2 janelas)**, que precisa ser pedida já. Caminho crítico: reteste 2 -> merge -> (R1.0 e teste de aparelho em paralelo) -> R1.3 -> R1.5 -> R2. Folga da R1: nenhuma no piso; a R1.4 é a folga (corta inteira). R2 em diante não mudou.
+Soma de horas do fundador (mínimo): ~26 a 29 h em ~9 janelas (R2 passou de ~6 h para ~8 h; a unificação do RC devolve 1,5 h). Caminho crítico até o RC da R2: Fase A -> motor -> 344a/347 -> R2.3 -> QA/G4 local. Fora dele, e pedidas já: disco, Docker (R1.0) e aparelho + 60 s.
+
+### 11.3 Janelas pedidas ao fundador (agrupadas; pedido em 2026-11-23)
+
+| Janela | Conteúdo | Duração | Prazo sugerido `[HIPÓTESE]` |
+|---|---|---|---|
+| **A (agora)** | Liberar disco (72 MB livres de 252 GB; commit e `pnpm` falham); marcar `e2e-web` e `checks` como obrigatórios no `main`; F2 (R$ 0 se calar), F4, aceitar ou corrigir SEC-200 | ~30 min | Resposta até 2026-11-27 |
+| **B (sessão única, 2 blocos)** | Bloco 1: Docker (R1.0: base e2e 3x, `db-roles`, migrar sem superusuário, `compose config`, restauração, PG 18, 0064/0065 up/down). Bloco 2: aparelho real + 60 s + 5 entrevistas + 3 lojistas dos números de SEC-232/233 | 6 a 7 h | Executar até 2026-12-02, antes do pico de mobile da R2.3 |
+| **C (assíncrona)** | J22, J23, J27 ao advogado, em lote | ~1 h do fundador | Até 2026-12-06, antes do RC da R2 |
+
+## 12. Estimativa da R2 pós-revisão (2026-11-23; DEC-137 a DEC-140)
+
+Fontes: `arquitetura/reviews/r2-1-contrato-2026-11-23.md` (Estimativa (8)), `ADR-019` (Estimativa de esforço restante), `produto/backlog.md` §10.8.1, `seguranca/threat-model-v1-1.md` §20, `estimativas-v1-1-r1-front.md` (âncora do mobile). UT do §1, `[HIPÓTESE]`, não calibrada. PERT = (O + 4M + P) / 6.
+
+### 12.1 Como foi o poker (limites)
+- **Backend:** há dois votos independentes: backend-dev 18,5 a 22 (ADR-019, antes da revisão) e tech-lead 22 a 27 (M ~25). A diferença (+4 a +5 UT) vem de premissas escritas pelo TL: WB-340 e WB-347 sem linha própria (+2,5 a 3), painéis 6 a 7 e não 4,5 a 5,5 (+1,5), WB-344 (+0,5 a 1), deadlock e k6 (+0,5), funil sai (-0,5). Não fiz média: adotei as premissas do TL linha a linha; sem a Fase A e o k6, meu PERT é 25,1, igual à mediana do TL. O backend-dev confirma ou contesta cada linha na planning; diferença de 50% ou mais numa linha: reestimar com premissa.
+- **Mobile:** **não há voto independente do mobile-dev para a R2** (só para a R1). Os três pontos são do PM, ancorados nas linhas da R1 (WB-350 e 351: 1,03; WB-352: 2,07; BASE: 0,52). O mobile-dev confirma antes do G3 da R2.3; até lá `[HIPÓTESE]` (R-46).
+- **QA e revisões:** PM, por analogia com a R1.3 (QA 2 h 23; TL e Security em paralelo, 11 min de relógio).
+
+### 12.2 Backend (UT)
+
+| Item | O | M | P | PERT | Premissa |
+|---|---|---|---|---|---|
+| Fase A (B1, B2, R1 a R13, SEC-224 a 233; 0066) | 1,0 | 1,5 | 2,2 | 1,53 | Só correção de desenho, contrato e migração; sem o motor |
+| WB-340 campanhas (18 rotas, simulação, 15 blockers, 2º fator, auditoria) | 1,5 | 2,0 | 2,8 | 2,05 | Sem linha própria no ADR; 403 `REAUTH_REQUIRED` |
+| WB-341 aplicar cupom (função pura D5, "Faltam R$ X", R10 a R12) | 2,0 | 2,5 | 3,5 | 2,58 | Tetos recalculados dentro da trava (R11) |
+| WB-342 reserva atômica e orçamento (B1, integração em `closeOrder`, webhook e estorno) | 2,5 | 3,2 | 4,5 | 3,30 | P: o ciclo de travas obriga a reescrever passos da criação; BUG-049 esconde regressão |
+| WB-349 pausar, encerrar, duplicar, alertas | 0,6 | 0,8 | 1,2 | 0,83 | Reconferência sob trava; 409 e não "pedido sem cupom" |
+| **WB-344a** identificadores e travas (HMAC com rotação, SEC-225/226/228, `payer_document_hash` com leitura dupla, expurgo) | 1,6 | 2,0 | 3,0 | 2,10 | Divisão da DEC-140 (5): C1 a C5, C10, C11, C14 a C19 |
+| **WB-344b** painel "Suspeitos" e alertas | 0,6 | 0,8 | 1,2 | 0,83 | C6 a C9, C12, C13; sem "Revelar" |
+| WB-343 adesão da loja (SEC-227, SEC-232) | 0,8 | 1,0 | 1,5 | 1,05 | Convite, aceite, saída; teto e aviso ao dono |
+| WB-346 cupom próprio da loja (R6, R8, SEC-233) | 0,8 | 1,1 | 1,6 | 1,13 | Should; `maxUses` opcional, CHECK relaxado só para `owner = store` |
+| WB-345 relatório e conciliação (B2b: vive em `dashboards`) | 1,3 | 1,7 | 2,4 | 1,75 | Confere com o ledger sem lançamento próprio |
+| WB-347 composição ao cliente (linhas, vitrine com "Faltam") | 0,7 | 1,0 | 1,5 | 1,03 | Sem linha própria no ADR; teste de "nenhum campo majora preço" |
+| WB-348 selo "de/por" | 0,7 | 1,0 | 1,4 | 1,02 | Should; DT-103: sem passado nos primeiros 30 dias |
+| WB-356 catálogo de métricas, consulta e pipeline (26 métricas com oráculo no seed) | 2,5 | 3,2 | 4,2 | 3,25 | TL: 6 a 7 UT para 356+357 |
+| WB-357 5 painéis prontos | 2,0 | 2,8 | 3,8 | 2,83 | Should; depende da 356 |
+| **WB-362a** acessos (só seed) | 0,2 | 0,3 | 0,5 | 0,32 | 362b fica com a R1.4 |
+| WB-367 porta falsa | 0,2 | 0,3 | 0,5 | 0,32 | Não coleta dado pessoal |
+| WB-373 código de barras (S4) | 0,5 | 0,7 | 1,0 | 0,72 | Should; base própria nasce vazia |
+| k6 do `createOrder` e testes de deadlock (DT-100, B1, R5) | 0,4 | 0,6 | 0,9 | 0,62 | Gate por `createOrder`, não por aplicar cupom |
+| **Backend total** | **19,9** | **26,5** | **37,7** | **27,3** | ±3,0 |
+
+### 12.3 Mobile, QA e revisões (UT)
+
+| Item | O | M | P | PERT | Premissa |
+|---|---|---|---|---|---|
+| BASE (fake-api, wrappers, regenerar `shared`) | 0,3 | 0,5 | 0,8 | 0,52 | Igual à R1 |
+| Admin de campanhas (340, 349, alertas; web) | 2,2 | 3,0 | 4,2 | 3,07 | Criar com simulação, 15 blockers, pausar, encerrar, duplicar; 4 estados |
+| Relatório da campanha (345; web) | 0,7 | 1,0 | 1,5 | 1,03 | CSV e "conferido" |
+| Sacola e checkout do cliente (341, 347, 349 C5; app) | 2,0 | 3,0 | 4,5 | 3,08 | Tabela única "Mensagens ao cliente" (DEC-137); 9 respostas; 409 pede confirmar o novo total |
+| Selo "de/por" (348; app e lojista) | 0,5 | 0,8 | 1,2 | 0,82 | Should |
+| Adesão do lojista (343; web) | 1,0 | 1,4 | 2,0 | 1,43 | Convite, aceite, saída; aviso do funcionário |
+| Cupom próprio do lojista (346; web) | 0,8 | 1,2 | 1,8 | 1,23 | Should; teto mensal obrigatório |
+| "Suspeitos" do admin (344b; web) | 0,5 | 0,8 | 1,2 | 0,82 | Ficha do pedido mascarada |
+| Painéis (356/357; web) | 2,2 | 3,2 | 4,8 | 3,30 | 5 painéis, filtros, baixa amostra, `blocked`; 26 métricas |
+| Acessos (362a) | 0,2 | 0,3 | 0,5 | 0,32 | Só seed |
+| Porta falsa (367) | 0,3 | 0,4 | 0,7 | 0,43 | Texto e dono definidos no PRD |
+| Código de barras (373; web e app) | 0,8 | 1,2 | 2,0 | 1,27 | P inclui o spike do leitor no Safari (L4) |
+| **Mobile total** | **11,5** | **16,8** | **25,2** | **17,3** | ±2,3; sem aparelho real |
+| QA (concorrência, oráculo das 26 métricas, regressão G4, exploratório, reteste) | 2,5 | 3,5 | 5,0 | 3,58 | 3 execuções do e2e |
+| TL + Security (revisão de código das 2 ondas, C-CUP, C-DSH) | 3,0 | 4,0 | 5,5 | 4,08 | Tudo "a fazer", pós-código |
+
+### 12.4 Total, buffer e efeito no total do projeto
+
+| Linha | O | M | P | PERT |
+|---|---|---|---|---|
+| **R2 restante** (backend + mobile + QA + revisões) | 36,9 | 50,8 | 73,4 | **52,3** (±6,1) |
+| R2.1 já gasta (~3 do ADR + ~1,5 de revisão `[HIPÓTESE]`) | | | | ~4,5 |
+| **R2 inteira** | | | | **~56,8** (plano: 37,0; **+19,8, +54%**) |
+| Total do projeto | | | | ~198 (faixa 196 a 200); era ~178 com a R1 nova e 168,3 no início |
+
+Por que: o plano de 37 UT deu ao mobile 45% (16,6; a conta nova dá 17,3, bate) e pouco ao backend (~11 `[HIPÓTESE]`, sem linha para WB-340, WB-347 e a integração em `closeOrder`); quase todo o delta está no backend (27,3 mais ~3 já gastas). É o mesmo padrão da R1 (backend 9 a 10 no plano contra 16,5 a 19).
+
+**Buffer** (no fim, com nome, só para imprevisto): o de 25 UT (15% de 168) passa a 12,6% do novo total, abaixo da regra de 15%. Recomendo **30 UT (15% de ~198)**, mais 10% da R2 (5,2) e 10% da R4 (4,1) pelo §9: **~39 UT nomeados**. O delta de +19,8 **não** é pago pelo buffer: sobe a linha de base, como na R1 (§10.1). Prazo-alvo da R2 = 52,3 + 15% (7,8) = ~60 UT restantes.
+
+### 12.5 Ordem de corte da R2 e o efeito da R1.4 adiada
+
+Piso (não corta): WB-340, 341, 342, 344a, 347, 349, 345, 356, 343. WB-362a e 367 ficam: são baratas (0,3 + 0,3 backend) e validam hipótese.
+
+| # | Corte (DEC-100) | Economia (backend + mobile) | Custo do corte |
+|---|---|---|---|
+| 1 | WB-373 código de barras | 0,72 + 1,27 = **2,0** | Sem EAN; o L4 já dizia que moda e calçado raramente têm código |
+| 2 | WB-348 selo "de/por" | 1,02 + 0,82 = **1,8** | Sem selo; J23 não existe e o histórico de preço só comprova 30 dias depois (DT-103), então o valor inicial é baixo |
+| 3 | WB-346 cupom próprio da loja | 1,13 + 1,23 = **2,4** | Só campanha da Webag e "Loja paga" pelo admin; tira R-56 do RC |
+| 4 | WB-357 reduzida de 5 para 2 painéis | ~**2,0** `[HIPÓTESE]` | Menos painéis prontos; a 356 (consulta e catálogo) fica |
+| **1 a 3** | | **6,2** | R2 firme em 46,1 UT (PERT), com buffer de 15%: ~53 |
+| **1 a 4** | | **~8,2** | R2 firme em ~44 UT |
+
+**R1.4 adiada:** a ordem de corte da R1 (plano §10.3) já gastou o corte nº 5 (R1.4, ~2,8 UT). A R1.4 e a WB-362b (~0,7 UT) formam um bloco de ~3,5 UT que **sai da R2 sem ser cortado**: tem de rodar antes da R5 (que depende da coleta) e do painel de funil. Se for cortada de vez, a R5 fica só com seed (já era "pronta, desligada e testada com seed") e o painel "Acessos" fica sem dado real até a coleta. Não está nos 52,3.
+
+**Gatilhos (PM, relato ao CEO no mesmo dia):** Fase A acima de 2,2 UT; fim da Fase B (motor, 344a e 347: 12,5 UT) acima de **15,6** (1,25x) = cortes 1 a 3 na hora; acima de **18,8** (1,5x) = corte 4 e revisão do piso; qualquer `40P01` no e2e = R-52; BUG-049 sem correção ao iniciar a Fase B = a Fase B não toca em estorno.
