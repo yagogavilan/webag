@@ -29,6 +29,12 @@ export class PaidPurchaseHistory extends PurchaseHistoryPort {
     return hmacHex(this.config.get('AUTH_HMAC_KEY', { infer: true }), `payer-document:${digits(document)}`);
   }
 
+  /** Público "reativação" (WB-340): dias desde o último pedido ENTREGUE da conta; `null` se nunca recebeu. */
+  async daysSinceLastDelivery(userId: string): Promise<number | null> {
+    const result = await this.db.execute<{ days: number | null }>(sql`select floor(extract(epoch from (now() - max(delivered_at))) / 86400)::int as days from orders where user_id = ${userId}::uuid and delivered_at is not null`);
+    return result.rows[0]?.days ?? null;
+  }
+
   async hasPaidOrder(userId: string, hints: PurchaseHints = {}): Promise<boolean> {
     const address = hints.address;
     const cep = digits(address?.cep);

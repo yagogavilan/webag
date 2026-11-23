@@ -10029,7 +10029,6 @@ paths:
     get:
       tags: [admin-campaigns]
       operationId: listCampaigns
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Listar campanhas com barra de orçamento (WB-340, WB-342 C4, WB-349)
@@ -10052,7 +10051,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: createCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Criar campanha em rascunho com fonte de custo (WB-340 C2, C3, C6, C7)
@@ -10080,7 +10078,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: simulateCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: "Simular \"quanto isso custa por pedido\" por faixa de entrega (WB-340 C1, C2; WB-341 C11)"
@@ -10107,7 +10104,6 @@ paths:
     get:
       tags: [admin-campaigns]
       operationId: getCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Detalhe da campanha, orçamento e o que falta para ativar (WB-340 C4, C10)
@@ -10124,7 +10120,6 @@ paths:
     patch:
       tags: [admin-campaigns]
       operationId: updateCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Editar rascunho ou campanha agendada (WB-340 C7)
@@ -10154,7 +10149,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: activateCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:activate'
       x-admin-profiles: [super_admin, finance]
       summary: Ativar campanha (WB-340 C4, C5, C6, C8, C9, C10, C11)
@@ -10188,7 +10182,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: pauseCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Pausar na hora (WB-349 C1, C5)
@@ -10217,7 +10210,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: resumeCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:activate'
       x-admin-profiles: [super_admin, finance]
       summary: Retomar campanha pausada
@@ -10246,7 +10238,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: endCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:activate'
       x-admin-profiles: [super_admin, finance]
       summary: Encerrar campanha, sem reabrir (WB-349 C2, WB-340 C6)
@@ -10274,7 +10265,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: duplicateCampaign
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Duplicar como rascunho (WB-349 C6)
@@ -10393,11 +10383,10 @@ paths:
     get:
       tags: [admin-campaigns]
       operationId: listCampaignAlerts
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Alertas de campanha no topo da lista (WB-342 C4, WB-349 C3 e C4, WB-344 C7, WB-346 C8)
-      description: "Tipos: `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado."
+      description: "Tipos: `activation_blocked` (campanha agendada cuja hora chegou, mas as conferências da ativação falharam: orçamento global, flags ou aceite da loja; SEC-224), `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado."
       parameters:
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
@@ -10413,7 +10402,6 @@ paths:
     get:
       tags: [admin-campaigns]
       operationId: getCampaignBudget
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Orçamento mensal global de cupons da Webag (WB-340 C9, C10, C11; DEC-102 F2)
@@ -10430,7 +10418,6 @@ paths:
     get:
       tags: [admin-campaigns]
       operationId: listCouponSuspects
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:read'
       x-admin-profiles: [super_admin, operations, finance]
       summary: Suspeitos de uso indevido de cupom (WB-344 C6, C12)
@@ -10453,7 +10440,6 @@ paths:
     post:
       tags: [admin-campaigns]
       operationId: releaseCouponSuspect
-      x-planned: v1.1 R2
       x-admin-permission: 'coupons:write'
       x-admin-profiles: [super_admin, operations]
       summary: Liberar cliente bloqueado por engano (WB-344 C9)
@@ -17329,7 +17315,7 @@ components:
       required: [id, kind, campaignId, campaignName, severity, createdAt, detail]
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [budget_80, budget_100, no_use_30d, suspect_over_20pct, store_concentration_30pct, store_coupon_concentration, report_unreconciled] }
+        kind: { type: string, enum: [budget_80, budget_100, no_use_30d, suspect_over_20pct, store_concentration_30pct, store_coupon_concentration, report_unreconciled, activation_blocked] }
         campaignId: { type: string, format: uuid }
         campaignName: { type: string }
         severity: { type: string, enum: [info, warning, critical] }

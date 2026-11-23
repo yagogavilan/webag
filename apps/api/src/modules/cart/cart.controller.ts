@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { CurrentPrincipal, type Principal } from '../../platform/auth/decorators.js';
+import { Ctx, CurrentPrincipal, type Principal, type RequestContext } from '../../platform/auth/decorators.js';
+import { errors } from '../../platform/http/app-error.js';
 import { ZodPipe } from '../../platform/http/zod.pipe.js';
 import { RateLimit } from '../../platform/ratelimit/rate-limit.guard.js';
 import { uuidParam } from '../stores/index.js';
@@ -8,7 +9,9 @@ import { CartService } from './cart.service.js';
 
 const contextQuery = z.strictObject({ mode: z.enum(['delivery', 'pickup']).default('delivery'), addressId: z.uuid().optional() });
 const setItemSchema = z.strictObject({ quantity: z.number().int().min(1).max(999), replaceStore: z.boolean().optional() });
-const couponSchema = z.strictObject({ code: z.string().trim().min(1).max(30) });
+// R7 / C-CUP-01: o corpo só aceita `code` (letras, números e hífen, até 32). Campo a mais (`discountCents`, fonte, `campaignId`) é 422 `FIELD_NOT_EDITABLE`, nunca validação 400:
+// o cliente jamais envia dinheiro, e o total é sempre o do servidor. O normalizador maiúsculo acontece no serviço.
+const couponSchema = z.looseObject({ code: z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9-]+$/) });
 const mergeSchema = z.strictObject({
   items: z
     .array(z.strictObject({ variantId: z.uuid(), quantity: z.number().int().min(1).max(999) }))
@@ -52,8 +55,10 @@ export class CartController {
   /** Código de cupom adivinhado por tentativa e erro: limite curto por IP além do teto global. */
   @RateLimit({ name: 'coupon-apply', limit: 30, windowSeconds: 3600 })
   @Put('coupon')
-  applyCoupon(@CurrentPrincipal() principal: Principal, @Body(new ZodPipe(couponSchema)) body: z.infer<typeof couponSchema>, @Query(new ZodPipe(contextQuery)) q: z.infer<typeof contextQuery>) {
-    return this.cart.applyCoupon(principal, body.code, q);
+  applyCoupon(@CurrentPrincipal() principal: Principal, @Ctx() ctx: RequestContext, @Body(new ZodPipe(couponSchema)) body: z.infer<typeof couponSchema>, @Query(new ZodPipe(contextQuery)) q: z.infer<typeof contextQuery>) {
+    const extra = Object.keys(body).filter((key) => key !== 'code');
+    if (extra.length > 0) throw errors.unprocessable('FIELD_NOT_EDITABLE', 'Campo não editável', { errors: extra.map((field) => ({ field, message: 'Este campo não pode ser enviado: o desconto é sempre calculado pelo servidor.' })) });
+    return this.cart.applyCoupon(principal, body.code, q, ctx);
   }
 
   @RateLimit(WRITE)

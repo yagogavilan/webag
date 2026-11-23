@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import type { Principal } from '../../platform/auth/decorators.js';
+import type { Principal, RequestContext } from '../../platform/auth/decorators.js';
 import { DRIZZLE, type Db, type DbOrTx } from '../../platform/database/database.module.js';
 import { errors } from '../../platform/http/app-error.js';
 import { AddressesService } from '../addresses/index.js';
@@ -14,7 +14,8 @@ import { mediaAssets } from '../media/db/schema.js';
 import { stores, storeSettings } from '../stores/db/schema.js';
 import { ExposureLimitService, hoursToday, isOpen, nextOpening, StoreSettingsService, type OpeningInput } from '../stores/index.js';
 import { cartItems, carts } from './db/schema.js';
-import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // TODO(R2.2): sai quando a avaliação do cupom for a porta `campaigns/index.ts` (DT-108)
+import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // DT-108: o cupom LEGADO (sem campanha) ainda é lido aqui; o de campanha passa pela porta `campaigns/index.ts`
+import { CouponEvaluationService, FraudService, type EvaluationResult } from '../campaigns/index.js';
 import { rejectCoupon, type CouponRejection } from './domain/coupon.js';
 import { serviceFeeCents, summarize } from './domain/pricing.js';
 import { computeEta, DeliveryFeesService, presentEta, type DeliveryFeeSnapshot, type EtaEstimate, type EtaView } from '../logistics/index.js';
@@ -41,6 +42,8 @@ export abstract class PurchaseHistoryPort {
   abstract hasPaidOrder(userId: string, hints?: PurchaseHints): Promise<boolean>;
   /** HMAC do CPF (só dígitos) para guardar no pedido; o CPF em si não é guardado. */
   abstract documentHash(document: string): string;
+  /** v1.1 R2 (público "reativação"): dias desde o último pedido ENTREGUE da conta; `null` se nunca recebeu. */
+  abstract daysSinceLastDelivery(userId: string): Promise<number | null>;
 }
 
 export type CartMode = 'delivery' | 'pickup';
@@ -82,6 +85,8 @@ export class CartService {
     private readonly commissions: CommissionService,
     private readonly exposure: ExposureLimitService,
     private readonly fees: DeliveryFeesService,
+    private readonly campaignEval: CouponEvaluationService,
+    private readonly fraud: FraudService,
   ) {}
 
   // ------------------------------------------------------------------ leitura
@@ -260,7 +265,7 @@ export class CartService {
 
     // ---- cupom (reavaliado a cada leitura: tirar item pode derrubar o pedido mínimo do cupom)
     const couponId = couponOverride === undefined ? cart.couponId : couponOverride;
-    let couponView: { code: string; kind: string; scope: string; applied: boolean; rejection: CouponRejection | null } | null = null;
+    let couponView: { code: string; kind: string; scope: string; applied: boolean; rejection: CouponRejection | null; shortfall?: EvaluationResult['shortfall'] } | null = null;
     let appliedCoupon: typeof coupons.$inferSelect | null = null;
     if (couponId) {
       const [coupon] = await this.db.select().from(coupons).where(eq(coupons.id, couponId));
@@ -278,16 +283,51 @@ export class CartService {
     const rates = await this.commissions.resolveForItems(store.id, priced.map((i) => categoryOf.get(i.productId) ?? null), now);
     const commissionCapCents = computeOrderFinance({ items: priced.map((i, index) => ({ subtotalCents: i.lineTotal.amount, pctBp: rates[index]!.pctBp })), storeCouponCents: 0, platformDiscountCents: 0, deliveryFeeCents: 0, serviceFeeCents: 0 }).commissionCents;
     const serviceFee = serviceFeeCents(String(await this.params.get('taxa_servico_tipo')), await this.params.getNumber('taxa_servico_valor'), subtotal);
-    const result = summarize({
+    const minTotalCents = await this.params.getNumber('cupom_total_minimo_cents');
+    // v1.1 R2 (ADR-019 D5): cupom de CAMPANHA tem o desconto COMPOSTO no servidor (loja + Webag, tetos, autofinanciado tudo ou nada) pela função pura de `campaigns`. Subtotal, entrega e
+    // taxa de serviço saem IGUAIS com e sem cupom (RN-C1, DEC-088); o cliente nunca envia desconto, fonte nem campanha.
+    let campaignPlan: EvaluationResult['plan'] = null;
+    if (appliedCoupon?.campaignId && couponView) {
+      const feeType = String(await this.params.get('taxa_servico_tipo'));
+      const feeValue = await this.params.getNumber('taxa_servico_valor');
+      const lines = priced.map((i, index) => ({ subtotalCents: i.lineTotal.amount, pctBp: rates[index]!.pctBp }));
+      const evaluation = await this.campaignEval.evaluate({
+        campaignId: appliedCoupon.campaignId,
+        visibility: appliedCoupon.visibility,
+        userId,
+        email: principal.email,
+        store: { id: store.id, cityId: store.addressCityId ?? null, categoryId: store.mainCategoryId ?? null },
+        address: deliveryAddress ? { cep: deliveryAddress.cep, number: deliveryAddress.number } : null,
+        order: {
+          subtotalCents: subtotal,
+          deliveryFeeCents: deliveryFee,
+          serviceFeeOf: (s) => serviceFeeCents(feeType, feeValue, s),
+          commissionOf: (_s, storeCents) => computeOrderFinance({ items: lines, storeCouponCents: storeCents, platformDiscountCents: 0, deliveryFeeCents: 0, serviceFeeCents: 0 }).commissionCents,
+          courierCostCents: ctx.mode === 'delivery' ? (deliverySnapshot?.expectedCostCents ?? 0) : 0,
+          minTotalCents,
+        },
+        daysSinceLastDelivery: () => this.purchases.daysSinceLastDelivery(userId),
+      });
+      if (evaluation.rejection) {
+        couponView = { ...couponView, applied: false, rejection: evaluation.rejection, ...(evaluation.shortfall ? { shortfall: evaluation.shortfall } : {}) };
+        appliedCoupon = null;
+      } else {
+        campaignPlan = evaluation.plan;
+      }
+    }
+    const baseResult = summarize({
       subtotalCents: subtotal,
       deliveryFeeCents: deliveryFee,
       serviceFeeCents: serviceFee,
-      coupon: appliedCoupon ? { kind: appliedCoupon.kind, scope: appliedCoupon.scope, value: appliedCoupon.value, percentCapCents: appliedCoupon.percentCapCents } : null,
+      coupon: appliedCoupon && !campaignPlan ? { kind: appliedCoupon.kind, scope: appliedCoupon.scope, value: appliedCoupon.value, percentCapCents: appliedCoupon.percentCapCents } : null,
       commissionPct: await this.params.getNumber('comissao_padrao_pct'),
       // Teto do desconto da plataforma = `application_fee` antes do desconto: comissão + entrega + serviço (RN-09).
       commissionCapCents: commissionCapCents + deliveryFee + serviceFee,
-      minTotalCents: await this.params.getNumber('cupom_total_minimo_cents'),
+      minTotalCents,
     });
+    const result = campaignPlan
+      ? { ...baseResult, discountCents: campaignPlan.storeCents + campaignPlan.webagCents, couponFaceCents: campaignPlan.grossCents, totalCents: campaignPlan.totalCents, minimumTotalApplied: campaignPlan.minimumTotalApplied, platformDiscountCapped: campaignPlan.webagCutCents > 0 }
+      : baseResult;
 
     // ---- loja aberta e mínimo (bloqueiam só o pagamento, DEC-022)
     const opening = await this.openingOf(store.id, settings, now);
@@ -339,6 +379,8 @@ export class CartService {
       deliverySnapshot,
       eta: etaEstimate,
       coupon: appliedCoupon,
+      /** v1.1 R2: a conta do desconto da campanha (loja e Webag), nula para cupom legado; o pedido congela e RESERVA o orçamento com ela. */
+      campaign: campaignPlan,
       result,
       blockers,
       priced: priced.map((i, index) => ({ variantId: i.variantId, productId: i.productId, categoryId: categoryOf.get(i.productId) ?? null, name: i.name, attributes: i.attributes, image: i.image.urls, quantity: i.quantity, unitPriceCents: i.unitPrice.amount, commissionPctBp: rates[index]!.pctBp })),
@@ -489,14 +531,19 @@ export class CartService {
   }
 
   /** Aplica (ou troca, WB-022 C3) o cupom. Recusa com 422 e o `code` do motivo; a sacola não muda. */
-  async applyCoupon(principal: Principal, rawCode: string, ctx: CartContext) {
+  async applyCoupon(principal: Principal, rawCode: string, ctx: CartContext, request?: RequestContext) {
     const code = rawCode.trim().toUpperCase();
-    const [coupon] = await this.db.select().from(coupons).where(sql`upper(${coupons.code}) = ${code}`);
+    // C-CUP-06: a tentativa é CONTADA antes da busca (código inexistente também conta); acima do teto: 429 `COUPON_RATE_LIMITED`.
+    await this.fraud.countAttempt({ userId: principal.userId, ip: request?.ip ?? null, deviceId: request?.deviceId ?? null });
+    // R7: o maior código que existe tem 20 caracteres; acima disso responde "inválido" SEM consultar o banco.
+    const [coupon] = code.length > 20 ? [] : await this.db.select().from(coupons).where(sql`upper(${coupons.code}) = ${code}`);
     const [cart] = await this.db.select().from(carts).where(eq(carts.userId, principal.userId));
     if (!cart?.storeId) throw errors.unprocessable('CART_EMPTY', 'Sacola vazia', { detail: 'Adicione itens antes de aplicar um cupom.' });
     if (!coupon) throw errors.unprocessable('COUPON_NOT_FOUND', 'Cupom inválido', { detail: 'Esse cupom não existe. Confira o código.' });
     const view = await this.build(principal, ctx, [], coupon.id);
-    if (view.coupon && !view.coupon.applied && view.coupon.rejection) throw errors.unprocessable(view.coupon.rejection, 'Cupom não aplicado', { detail: COUPON_MESSAGES[view.coupon.rejection](coupon) });
+    if (view.coupon && !view.coupon.applied && view.coupon.rejection) {
+      throw errors.unprocessable(view.coupon.rejection, 'Cupom não aplicado', { detail: COUPON_MESSAGES[view.coupon.rejection](coupon, view.coupon.shortfall ?? null), ...(view.coupon.shortfall ? { extensions: { shortfall: view.coupon.shortfall } } : {}) });
+    }
     await this.db.transaction(async (tx) => {
       const locked = await this.lock(tx, principal.userId);
       await this.touch(tx, locked.id, { couponId: coupon.id });
@@ -571,15 +618,21 @@ export class CartService {
   }
 }
 
-const COUPON_MESSAGES: Record<CouponRejection, (coupon: typeof coupons.$inferSelect) => string> = {
-  COUPON_NOT_FOUND: () => 'Esse cupom não existe. Confira o código.',
+const reais = (cents: number): string => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
+const COUPON_MESSAGES: Record<CouponRejection, (coupon: typeof coupons.$inferSelect, shortfall: { missingCents: number } | null) => string> = {
+  // Tabela "Mensagens ao cliente" do PRD (fonte única, DEC-137): o código inexistente, privado, segmentado ou de outro público tem o MESMO texto (C-CUP-06).
+  COUPON_NOT_FOUND: () => 'Cupom inválido.',
   COUPON_NOT_STARTED: () => 'Esse cupom ainda não começou.',
   COUPON_EXPIRED: (c) => `Esse cupom venceu em ${c.endsAt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', timeZone: 'America/Sao_Paulo' })}.`,
   COUPON_EXHAUSTED: () => 'Esse cupom acabou.',
-  COUPON_ALREADY_USED: () => 'Esse cupom já foi usado.',
-  COUPON_MIN_ORDER: (c) => `Esse cupom vale a partir de R$ ${(c.minOrderCents / 100).toFixed(2).replace('.', ',')}.`,
+  COUPON_ALREADY_USED: () => 'Você já usou este cupom.',
+  COUPON_MIN_ORDER: (c) => `Esse cupom vale a partir de ${reais(c.minOrderCents)}.`,
   COUPON_OTHER_STORE: () => 'Esse cupom é de outra loja.',
-  COUPON_FIRST_PURCHASE_ONLY: () => 'Esse cupom vale só na primeira compra.',
+  COUPON_FIRST_PURCHASE_ONLY: () => 'Cupom válido só na primeira compra.',
   COUPON_EMAIL_UNVERIFIED: () => 'Confirme seu e-mail para usar este cupom.',
   COUPON_NOT_ALLOWED: (coupon) => (coupon.kind === 'free_shipping' ? 'Cupom de entrega grátis só vale em pedido de entrega.' : 'Você não pode usar esse cupom nessa loja.'),
+  COUPON_EXHAUSTED_TODAY: () => 'Cupom esgotado hoje.',
+  COUPON_NOT_APPLICABLE: () => 'Não foi possível aplicar este cupom a este pedido.',
+  COUPON_UNAVAILABLE: () => 'Cupom não disponível para este pedido.',
+  COUPON_SHORTFALL: (_c, shortfall) => (shortfall ? `Faltam ${reais(shortfall.missingCents)} para usar este cupom.` : 'Cupom não disponível para este pedido.'),
 };

@@ -1,4 +1,4 @@
-import { DEV_AUTH_HMAC_KEY, DEV_CODE_HMAC_KEY, DEV_JWT_ACCESS_SECRET, DEV_MFA_ENC_KEY, DEV_RECOVERY_HMAC_KEY, validateEnv } from './env.js';
+import { DEV_AUTH_HMAC_KEY, DEV_CODE_HMAC_KEY, DEV_COUPON_FRAUD_HMAC_KEY, DEV_JWT_ACCESS_SECRET, DEV_MFA_ENC_KEY, DEV_RECOVERY_HMAC_KEY, validateEnv } from './env.js';
 
 const base = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
@@ -61,6 +61,7 @@ describe('validateEnv', () => {
       CODE_HMAC_KEY: 'code-hmac-very-long-random-production-key-1111111111',
       RECOVERY_HMAC_KEY: 'recovery-hmac-very-long-random-production-key-2222222',
       MFA_ENC_KEY: 'yet-another-very-long-random-production-mfa-key-1234567890',
+      COUPON_FRAUD_HMAC_KEY: 'coupon-fraud-hmac-very-long-random-production-key-77777777',
       TRUST_PROXY: '1',
       API_PUBLIC_URL: 'https://api.webag.com.br',
       WEB_PUBLIC_URL: 'https://webag.com.br',
@@ -101,6 +102,10 @@ describe('validateEnv', () => {
       ['MFA_ENC_KEY de desenvolvimento', { MFA_ENC_KEY: DEV_MFA_ENC_KEY }, /MFA_ENC_KEY/],
       ['CODE_HMAC_KEY de desenvolvimento', { CODE_HMAC_KEY: DEV_CODE_HMAC_KEY }, /CODE_HMAC_KEY/],
       ['RECOVERY_HMAC_KEY de desenvolvimento', { RECOVERY_HMAC_KEY: DEV_RECOVERY_HMAC_KEY }, /RECOVERY_HMAC_KEY/],
+      ['COUPON_FRAUD_HMAC_KEY de desenvolvimento (Q10)', { COUPON_FRAUD_HMAC_KEY: DEV_COUPON_FRAUD_HMAC_KEY }, /COUPON_FRAUD_HMAC_KEY/],
+      ['COUPON_FRAUD_HMAC_KEY igual à AUTH_HMAC_KEY (Q10)', { COUPON_FRAUD_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210' }, /COUPON_FRAUD_HMAC_KEY/],
+      ['COUPON_FRAUD_HMAC_KEY curta (Q10)', { COUPON_FRAUD_HMAC_KEY: 'curta' }, /COUPON_FRAUD_HMAC_KEY/],
+      ['COUPON_FRAUD_HMAC_KEY_PREVIOUS igual à atual (Q10)', { COUPON_FRAUD_HMAC_KEY_PREVIOUS: 'coupon-fraud-hmac-very-long-random-production-key-77777777' }, /COUPON_FRAUD_HMAC_KEY_PREVIOUS/],
       ['CODE_HMAC_KEY igual à AUTH_HMAC_KEY', { CODE_HMAC_KEY: 'another-very-long-random-production-hmac-key-9876543210' }, /CODE_HMAC_KEY/],
       ['API_PUBLIC_URL sem https (SEC-172)', { API_PUBLIC_URL: 'http://api.webag.com.br' }, /API_PUBLIC_URL/],
       ['WEB_PUBLIC_URL localhost (SEC-172)', { WEB_PUBLIC_URL: 'https://localhost:3001' }, /WEB_PUBLIC_URL/],

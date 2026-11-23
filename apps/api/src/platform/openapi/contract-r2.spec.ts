@@ -23,8 +23,11 @@ interface Op {
 const all: Op[] = Object.entries(contract.paths as Json).flatMap(([path, item]) =>
   METHODS.filter((m) => item[m]).map((m) => ({ key: `${m.toUpperCase()} ${path}`, path, method: m, op: item[m] as Json })),
 );
-/** Operações da R2 já IMPLEMENTADAS (a marca `x-planned` saiu). Vazio na R2.1: só contrato, ADR e migrações. */
-const R2_IMPLEMENTED = new Set<string>();
+/** Operações da R2 já IMPLEMENTADAS (a marca `x-planned` saiu): as 14 da R2.2 (WB-340, 342, 344, 349). As demais (adesão da loja, relatório, painéis, de/por, código de barras) são da R2.3. */
+const R2_IMPLEMENTED = new Set<string>([
+  'listCampaigns', 'createCampaign', 'simulateCampaign', 'getCampaign', 'updateCampaign', 'activateCampaign', 'pauseCampaign', 'resumeCampaign', 'endCampaign', 'duplicateCampaign',
+  'listCampaignAlerts', 'getCampaignBudget', 'listCouponSuspects', 'releaseCouponSuspect',
+]);
 /** S2 (review R2.1, DEC-138): o funil depende da R1.4 (coleta), sai da R2 (`x-planned: v1.1 R1.4`), mas segue valendo as regras de segurança e de papel deste arquivo. */
 const R1_4_DEPENDENT = new Set(['getAdminAnalyticsFunnel']);
 const r2 = all.filter((o) => o.op['x-planned'] === 'v1.1 R2' || R2_IMPLEMENTED.has(o.op.operationId as string) || R1_4_DEPENDENT.has(o.op.operationId as string));

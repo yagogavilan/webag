@@ -10,7 +10,7 @@ import { presentAddress } from '../addresses/index.js';
 import { AuditService, FeatureFlagsService, MaintenanceService, ParametersService } from '../admin/index.js';
 import { CartService } from '../cart/index.js';
 import { carts, cartItems } from '../cart/db/schema.js';
-import { couponRedemptions, coupons } from '../campaigns/db/schema.js'; // TODO(R2.2): sai quando `campaigns/index.ts` for a porta de reserva (DT-108)
+import { couponRedemptions, coupons, FraudService, ReservationService, type FraudIdentifier } from '../campaigns/index.js'; // DT-108: `coupons` e `coupon_redemptions` do cupom LEGADO ainda são lidos aqui; o de campanha reserva pela porta
 import { InventoryService } from '../catalog/index.js';
 import { ExposureLimitService } from '../stores/index.js';
 import { couriers, DeliveriesService, type Delivery, type DeliveryActor, type DeliveryListener, type DeliveryStatus } from '../logistics/index.js';
@@ -141,6 +141,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     private readonly exposure: ExposureLimitService,
     private readonly deliveries: DeliveriesService,
     private readonly audit: AuditService,
+    private readonly reservations: ReservationService,
+    private readonly fraud: FraudService,
     readonly bus: OrderEventBus,
   ) {}
 
@@ -162,7 +164,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
   // =================================================================== criação
 
   /** `created` distingue 201 (novo) de 200 (repetição com a mesma `Idempotency-Key` e o mesmo corpo). */
-  async create(principal: Principal, input: CreateOrderInput, idempotencyKey: string): Promise<{ created: boolean; orderId: string }> {
+  async create(principal: Principal, input: CreateOrderInput, idempotencyKey: string, request?: RequestContext): Promise<{ created: boolean; orderId: string }> {
     let created = false;
     // A-03: `acceptedEtaToAt` anda com o relógio a cada refetch da sacola no app (a faixa é recalculada); fora da impressão digital da chave, a repetição do
     // MESMO pedido (3G, toque duplo) devolve o pedido já criado em vez de 409 IDEMPOTENCY_KEY_REUSED. A conferência ETA_CHANGED roda só na criação.
@@ -174,7 +176,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       fingerprint,
       async () => {
         created = true;
-        return { orderId: await this.createOnce(principal, input) };
+        return { orderId: await this.createOnce(principal, input, request) };
       },
       // I1: só `PAYMENT_DECLINED` (pedido já aberto e encerrado) é definitivo; loja fechada, estoque, 429 e cupom reavaliam na repetição.
       { reusedStatus: 409, keepError: (e) => e.code === 'PAYMENT_DECLINED' },
@@ -182,7 +184,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     return { created, orderId: result.orderId };
   }
 
-  private async createOnce(principal: Principal, input: CreateOrderInput): Promise<string> {
+  private async createOnce(principal: Principal, input: CreateOrderInput, request?: RequestContext): Promise<string> {
     await this.maintenance.assertNewOrdersAllowed(); // WB-121: modo manutenção recusa pedido NOVO (a repetição de um pedido já criado volta pela idempotência, antes daqui)
     if (input.mode === 'delivery' && !input.addressId) throw errors.unprocessable('ADDRESS_REQUIRED', 'Escolha o endereço de entrega');
     if (input.paymentMethod === 'card' && !input.card) throw errors.validation([{ field: 'card', message: 'Informe o cartão.' }]);
@@ -220,7 +222,12 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
 
     const pixMinutes = await this.params.getNumber('pix_expiracao_min');
     const paymentExpiresAt = new Date(Date.now() + (input.paymentMethod === 'pix' ? pixMinutes : CARD_PAYMENT_WINDOW_MIN) * 60_000);
-    const order = await this.insertOrder(principal, input, quote, finance, paymentExpiresAt);
+    // v1.1 R2 (SEC-225/226): identificadores do antifraude em HMAC (conta e e-mail normalizado, TODOS os aparelhos das sessões, CEP + número sem complemento, documento informado).
+    // Calculados FORA da transação (leitura das sessões); só os HMACs entram na transação.
+    const identifiers = quote.campaign
+      ? this.fraud.identifiersOf({ userId: principal.userId, email: principal.email, deviceIds: await this.fraud.deviceIdsOf(principal.userId, request?.deviceId ?? null), address: input.mode === 'delivery' && quote.address ? { cep: quote.address.cep, number: quote.address.number } : null, payerDocument: input.payerDocument ?? null })
+      : [];
+    const order = await this.insertOrder(principal, input, quote, finance, paymentExpiresAt, identifiers);
 
     // ---- pagamento no provedor (fora da transação)
     let attempt: PaymentAttempt;
@@ -310,7 +317,11 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     let storeCoupon = 0;
     let platform = 0;
     const delivery = result.deliveryFeeCents;
-    if (coupon) {
+    if (quote.campaign) {
+      // R10: a conta da campanha (loja e Webag) vem da função pura de `campaigns`; `coupon_reservations` grava exatamente estes dois números.
+      storeCoupon = quote.campaign.storeCents;
+      platform = quote.campaign.webagCents;
+    } else if (coupon) {
       // DEC-036a: o frete é da Webag; cupom de frete grátis (e todo cupom da plataforma) é custo dela e sai da `application_fee`.
       if (coupon.scope === 'platform' || coupon.kind === 'free_shipping') platform = result.discountCents;
       else storeCoupon = result.discountCents;
@@ -324,11 +335,13 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     });
   }
 
-  private async insertOrder(principal: Principal, input: CreateOrderInput, quote: NonNullable<Awaited<ReturnType<CartService['quote']>>['quote']>, finance: OrderFinance, paymentExpiresAt: Date): Promise<OrderRow> {
+  private async insertOrder(principal: Principal, input: CreateOrderInput, quote: NonNullable<Awaited<ReturnType<CartService['quote']>>['quote']>, finance: OrderFinance, paymentExpiresAt: Date, identifiers: FraudIdentifier[]): Promise<OrderRow> {
     const lines = quote.priced.map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.db.transaction(async (tx) => {
+          // R5 (DT-100): a trava da campanha serializa os pedidos dela; 3 s de espera no máximo, depois 503 `SERVICE_BUSY` (nada reservado, nada cobrado).
+          if (quote.campaign) await tx.execute(sql`set local lock_timeout = '3s'`);
           await this.assertAccountLimits(tx, principal, input.paymentMethod);
           const [cart] = await tx.select().from(carts).where(eq(carts.id, quote.cartId)).for('update');
           if (!cart || cart.revision !== input.cartRevision) throw errors.conflict('CART_CHANGED', 'Sua sacola mudou', 'Confira os valores antes de pagar.');
@@ -337,7 +350,15 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           await tx.update(carts).set({ revision: sql`${carts.revision} + 1`, updatedAt: new Date() }).where(eq(carts.id, quote.cartId));
           const pickupDigits = input.mode === 'pickup' ? await this.params.getNumber('codigo_retirada_digitos') : 4;
           const payerDocumentHash = input.payerDocument ? this.cart.payerDocumentHash(input.payerDocument) : null;
-          if (quote.coupon) {
+          if (quote.coupon && quote.campaign) {
+            // B1: passo 3 da ordem global de travas (ANTES do estoque): advisory por HMAC da chave atual, em ordem fixa, só na primeira compra. A campanha trava DEPOIS do estoque e do pedido.
+            await this.reservations.prepare(tx, { firstPurchase: quote.coupon.firstPurchaseOnly, identifiers });
+            if (quote.coupon.firstPurchaseOnly) {
+              // SEC-225: pedidos pagos ANTES da R2 não têm claim; a conferência do v1.0 (conta, telefone, aparelho, endereço, documento) continua como checagem ADICIONAL por 12 meses (DT-109).
+              const taken = await this.cart.hasTakenFirstPurchase(principal.userId, { address: input.mode === 'delivery' && quote.address ? { cep: quote.address.cep, number: quote.address.number, complement: quote.address.complement } : null, documentHash: payerDocumentHash });
+              if (taken) throw errors.unprocessable('COUPON_FIRST_PURCHASE_ONLY', 'Cupom só para a primeira compra', { detail: 'Este cupom é só para a primeira compra.' });
+            }
+          } else if (quote.coupon) {
             await this.claimCoupon(tx, quote.coupon.id, principal.userId, quote.coupon.maxUses, quote.coupon.perCustomerLimit);
             // SEC-170: sob a trava do cupom (pedidos simultâneos se enfileiram), reconfere a primeira compra já com o documento do
             // pagador e vendo os pedidos não pagos das outras contas. O uso fica reservado a partir deste pedido (resgate abaixo).
@@ -420,11 +441,29 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
           );
           await tx.insert(orderEvents).values({ orderId: row.id, fromStatus: null, toStatus: 'awaiting_payment', actor: 'customer', actorUserId: principal.userId });
           if (quote.coupon) await tx.insert(couponRedemptions).values({ couponId: quote.coupon.id, userId: principal.userId, orderId: row.id, discountCents: quote.result.discountCents });
+          if (quote.coupon && quote.campaign) {
+            // Passos 5 a 8 da ordem global: campanha, adesão, dia e mês, reserva e diário, na MESMA transação do pedido (C-CUP-02). Falhou: nada fica reservado.
+            await tx.update(orders).set({ campaignId: quote.campaign.campaignId, couponSnapshot: { funding: quote.campaign.funding, grossCents: quote.campaign.grossCents, storeCents: quote.campaign.storeCents, webagCents: quote.campaign.webagCents, webagCutCents: quote.campaign.webagCutCents, marginCents: quote.campaign.marginCents, applicationFeeCents: quote.campaign.applicationFeeCents, minimumTotalApplied: quote.campaign.minimumTotalApplied } }).where(eq(orders.id, row.id));
+            await this.reservations.reserve(tx, {
+              orderId: row.id,
+              userId: principal.userId,
+              campaignId: quote.campaign.campaignId,
+              store: { id: store.id, cityId: store.addressCityId ?? null, categoryId: store.mainCategoryId ?? null },
+              webagCents: finance.platformDiscountCents,
+              storeCents: finance.storeCouponCents,
+              quoted: { kind: quote.coupon.kind, value: quote.coupon.value, percentCapCents: quote.coupon.percentCapCents, minOrderCents: quote.coupon.minOrderCents, subtotalCents: finance.subtotalCents },
+              identifiers,
+              expectedTotalCents: input.expectedTotalCents,
+              totalCents: finance.totalCents,
+            });
+          }
           return row;
         });
       } catch (error) {
         // Colisão do código curto (raríssima): tenta outro número.
         if (isUniqueViolation(error, 'orders_number_uq')) continue;
+        const code = (error as { code?: string; cause?: { code?: string } }).code ?? (error as { cause?: { code?: string } }).cause?.code;
+        if (code === '55P03' || code === '40P01') throw new AppError(503, 'SERVICE_BUSY', 'Muita gente usando este cupom', { detail: 'Não cobramos nada. Tente de novo em instantes.', retryAfterSeconds: 2 });
         throw error;
       }
     }
@@ -481,6 +520,8 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (sold.length > 0) await this.inventory.restock(tx, sold);
     await tx.update(orderItems).set({ stockState: 'released' }).where(and(eq(orderItems.orderId, order.id), inArray(orderItems.stockState, ['reserved', 'sold'])));
     await tx.update(couponRedemptions).set({ releasedAt: new Date() }).where(and(eq(couponRedemptions.orderId, order.id), isNull(couponRedemptions.releasedAt)));
+    // B1: a reserva da campanha volta DEPOIS do estoque (passo 5 da ordem global), na mesma transação, uma única vez; pedido já pago segue pelo estorno (`syncReservationRefund`).
+    await this.reservations.release(tx, order.id, to === 'expired' ? 'expired' : 'cancelled');
 
     let refund: PendingRefund | null = null;
     if (opts.refund !== false && !order.disputedAt && refundDueOnCancel(order.status) && order.paymentAttemptId) {
@@ -637,6 +678,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     const items = await tx.select().from(orderItems).where(and(eq(orderItems.orderId, order.id), eq(orderItems.stockState, 'reserved')));
     await this.inventory.commitSale(tx, items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })));
     await tx.update(orderItems).set({ stockState: 'sold' }).where(and(eq(orderItems.orderId, order.id), eq(orderItems.stockState, 'reserved')));
+    await this.reservations.confirm(tx, order.id); // B1: confirmação da reserva DEPOIS de `commitSale` (estoque, depois campanha)
     const timeout = await this.params.getNumber('loja_aceite_timeout_min');
     const now = new Date();
     await tx
@@ -688,6 +730,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
       await this.audit.record(tx, { ip: null, userAgent: null, requestId: null, deviceId: null, principal: null }, { action: 'order.disputed', targetType: 'order', targetId: order.id, actorId: null, actorRole: 'system', after: { attemptId: attempt.id, amountCents: attempt.amountCents } });
     }
     await this.ledger.recordChargeback(tx, { orderId: order.id, reason: 'chargeback' });
+    await this.syncReservationRefund(tx, order.id);
   }
 
   /** I3: a tarifa do provedor só apareceu depois da aprovação: lança uma vez (`fee:<pedido>`). */
@@ -703,6 +746,14 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!UUID_RE.test(attempt.externalReference)) return;
     if (!(await this.ledger.hasSale(attempt.externalReference, tx))) return; // estorno de PIX tardio: nunca houve venda lançada
     await this.ledger.recordRefund(tx, { orderId: attempt.externalReference, refundCents: refund.amountCents, refundKey: refund.idempotencyKey, reason: refund.reason });
+    await this.syncReservationRefund(tx, attempt.externalReference);
+  }
+
+  /** R10: o estorno cumulativo do razão (mesma fórmula arredondada do `refundLines`) é o que a reserva da campanha devolve; o primeiro estorno total só libera a primeira compra de pedido NÃO entregue (Q17). */
+  private async syncReservationRefund(tx: Tx, orderId: string): Promise<void> {
+    const [order] = await tx.select({ totalCents: orders.totalCents, deliveredAt: orders.deliveredAt }).from(orders).where(eq(orders.id, orderId));
+    if (!order) return;
+    await this.reservations.syncRefund(tx, orderId, { afterRefundedCents: await this.ledger.refundedCents(tx, orderId), totalCents: order.totalCents, delivered: order.deliveredAt !== null });
   }
 
   /**
@@ -937,6 +988,7 @@ export class OrdersService implements OnModuleInit, OnApplicationBootstrap, OnAp
     if (!UUID_RE.test(attempt.externalReference)) return;
     if (!(await this.ledger.hasSale(attempt.externalReference, tx))) return;
     await this.ledger.recordCoverage(tx, { orderId: attempt.externalReference, coverageCents: coverage.amountCents, coverageKey: coverage.idempotencyKey, reason: coverage.reason });
+    await this.syncReservationRefund(tx, attempt.externalReference);
   }
 
   // =================================================================== varreduras

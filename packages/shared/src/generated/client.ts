@@ -9768,6 +9768,7 @@ export const CampaignAlertKind = {
   store_concentration_30pct: 'store_concentration_30pct',
   store_coupon_concentration: 'store_coupon_concentration',
   report_unreconciled: 'report_unreconciled',
+  activation_blocked: 'activation_blocked',
 } as const;
 
 export type CampaignAlertSeverity = typeof CampaignAlertSeverity[keyof typeof CampaignAlertSeverity];
@@ -36379,7 +36380,7 @@ export const getListCampaignAlertsUrl = (params?: ListCampaignAlertsParams,) => 
 }
 
 /**
- * Tipos: `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado.
+ * Tipos: `activation_blocked` (campanha agendada cuja hora chegou, mas as conferências da ativação falharam: orçamento global, flags ou aceite da loja; SEC-224), `budget_80` e `budget_100` (total ou do dia), `no_use_30d` (ativa há mais de 30 dias sem uso), `suspect_over_20pct` (mais de 20% dos usos suspeitos nos 7 dias: sugere pausar), `store_concentration_30pct` (uma loja com mais de 30% dos usos de campanha da Webag), `store_coupon_concentration` (3 contas ou menos com mais de 50% dos usos de cupom de loja em 7 dias, evasão de comissão), `report_unreconciled`. Os mesmos alertas entram na caixa `GET /v1/admin/alerts` (catálogo ganha os tipos). Sem dado pessoal. Só os abertos; paginado.
  * @summary Alertas de campanha no topo da lista (WB-342 C4, WB-349 C3 e C4, WB-344 C7, WB-346 C8)
  */
 export const listCampaignAlerts = async (params?: ListCampaignAlertsParams, options?: Parameters<typeof apiFetch>[1]): Promise<listCampaignAlertsResponse> => {

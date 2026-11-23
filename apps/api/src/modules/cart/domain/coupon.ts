@@ -11,7 +11,12 @@ export type CouponRejection =
   | 'COUPON_OTHER_STORE'
   | 'COUPON_FIRST_PURCHASE_ONLY'
   | 'COUPON_EMAIL_UNVERIFIED'
-  | 'COUPON_NOT_ALLOWED';
+  | 'COUPON_NOT_ALLOWED'
+  /** v1.1 R2 (campanhas): a mensagem neutra do antifraude, o esgotado do dia, a margem insuficiente e o "Faltam R$ X". */
+  | 'COUPON_EXHAUSTED_TODAY'
+  | 'COUPON_NOT_APPLICABLE'
+  | 'COUPON_UNAVAILABLE'
+  | 'COUPON_SHORTFALL';
 
 export interface CouponFacts {
   kind: CouponKind;

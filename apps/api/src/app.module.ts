@@ -15,6 +15,7 @@ import { MediaModule } from './modules/media/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
 import { StoresModule } from './modules/stores/index.js';
 import { AddressesModule } from './modules/addresses/index.js';
+import { CampaignsModule } from './modules/campaigns/index.js';
 import { CartModule } from './modules/cart/index.js';
 import { devOrderModulesFor, OrdersModule } from './modules/orders/index.js';
 import { ExchangesModule } from './modules/exchanges/index.js';
@@ -111,6 +112,7 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
     CatalogModule,
     AddressesModule,
     DiscoveryModule,
+    CampaignsModule,
     CartModule,
     OrdersModule,
     ExchangesModule,

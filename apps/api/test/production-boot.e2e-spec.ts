@@ -39,6 +39,7 @@ describe('Boot em produção (SEC-036, SEC-080)', () => {
     CODE_HMAC_KEY: 'code-hmac-very-long-random-production-key-1111111111',
     RECOVERY_HMAC_KEY: 'recovery-hmac-very-long-random-production-key-2222222',
     MFA_ENC_KEY: 'yet-another-very-long-random-production-mfa-key-1234567890',
+    COUPON_FRAUD_HMAC_KEY: 'coupon-fraud-hmac-very-long-random-production-key-77777777',
     TRUST_PROXY: '1',
     API_PUBLIC_URL: 'https://api.webag.com.br',
     WEB_PUBLIC_URL: 'https://webag.com.br',

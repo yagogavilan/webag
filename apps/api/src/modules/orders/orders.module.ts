@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminModule } from '../admin/index.js';
+import { CampaignsModule } from '../campaigns/index.js';
 import { CartModule } from '../cart/index.js';
 import { CatalogModule } from '../catalog/index.js';
 import { FinanceModule } from '../finance/index.js';
@@ -21,7 +22,7 @@ import { LateDeliveryService } from './late-delivery.service.js';
 import { OrdersService } from './orders.service.js';
 
 @Module({
-  imports: [AdminModule, IdentityModule, CartModule, CatalogModule, FinanceModule, IdempotencyModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
+  imports: [AdminModule, IdentityModule, CampaignsModule, CartModule, CatalogModule, FinanceModule, IdempotencyModule, LogisticsModule, MediaModule, PaymentsModule, StoresModule],
   controllers: [OrdersController, CardIntentController, StoreOrdersController, AdminOrdersController],
   providers: [OrdersService, LateDeliveryService, StoreOrdersService, StoreIndicatorsService, OrderEventBus, CardIntentService, AdminOrdersReadService],
   exports: [OrdersService, LateDeliveryService, StoreOrdersService, StoreIndicatorsService, OrderEventBus],

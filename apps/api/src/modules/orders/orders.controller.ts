@@ -65,12 +65,13 @@ export class OrdersController {
   @Post()
   async create(
     @CurrentPrincipal() principal: Principal,
+    @Ctx() ctx: RequestContext,
     @Body(new ZodPipe(createSchema)) body: z.infer<typeof createSchema>,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
     const key = parseIdempotencyKey(idempotencyKey, true)!;
-    const { created, orderId } = await this.orders.create(principal, body, key);
+    const { created, orderId } = await this.orders.create(principal, body, key, ctx);
     res.status(created ? 201 : 200);
     return this.orders.getForCustomer(principal.userId, orderId);
   }

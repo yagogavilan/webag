@@ -9,6 +9,8 @@ export const DEV_CODE_HMAC_KEY = 'dev-only-insecure-code-hmac-key-0123456789abcd
 export const DEV_RECOVERY_HMAC_KEY = 'dev-only-insecure-recovery-hmac-key-0123456789abcdef-change-me';
 /** 32 bytes em base64 (só desenvolvimento): cifra dos tokens OAuth do provedor (SEC-046). */
 export const DEV_PAYMENT_TOKEN_ENC_KEY = Buffer.alloc(32, 9).toString('base64');
+/** v1.1 R2 (ADR-019 D6): chave do HMAC do antifraude de cupom. Só desenvolvimento; em produção o boot recusa. */
+export const DEV_COUPON_FRAUD_HMAC_KEY = 'dev-only-insecure-coupon-fraud-hmac-key-0123456789abcdef';
 export const DEV_MFA_ENC_KEY = 'dev-only-insecure-mfa-key-0123456789abcdef-change-me';
 
 const csv = z
@@ -107,6 +109,12 @@ export const envSchema = z
     CODE_HMAC_KEY: z.string().min(32).default(DEV_CODE_HMAC_KEY),
     /** HMAC dos códigos de recuperação do TOTP (SEC-092). */
     RECOVERY_HMAC_KEY: z.string().min(32).default(DEV_RECOVERY_HMAC_KEY),
+    /**
+     * v1.1 R2 (ADR-019 D6, WB-344, Q10): HMAC-SHA256 dos identificadores do antifraude de cupom (conta, aparelho, endereço, documento). Dedicada (diferente de todas as outras e de
+     * staging), 32 ou mais bytes. `_PREVIOUS` é opcional e só existe durante a rotação: a escrita usa a atual, a leitura confere as duas (12 meses).
+     */
+    COUPON_FRAUD_HMAC_KEY: z.string().min(32).default(DEV_COUPON_FRAUD_HMAC_KEY),
+    COUPON_FRAUD_HMAC_KEY_PREVIOUS: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(32).optional()),
     /** Chave própria da cifra do segredo TOTP (AES-256-GCM, SEC-090). Separada da AUTH_HMAC_KEY e guardada fora do banco e dos backups dele. */
     MFA_ENC_KEY: z.string().min(32).default(DEV_MFA_ENC_KEY),
     REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
@@ -197,6 +205,8 @@ export const envSchema = z
       fail('AUTH_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
     if (env.CODE_HMAC_KEY === DEV_CODE_HMAC_KEY) fail('CODE_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
     if (env.RECOVERY_HMAC_KEY === DEV_RECOVERY_HMAC_KEY) fail('RECOVERY_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.COUPON_FRAUD_HMAC_KEY === DEV_COUPON_FRAUD_HMAC_KEY) fail('COUPON_FRAUD_HMAC_KEY', 'valor de desenvolvimento não é aceito em produção');
+    if (env.COUPON_FRAUD_HMAC_KEY_PREVIOUS !== undefined && env.COUPON_FRAUD_HMAC_KEY_PREVIOUS === env.COUPON_FRAUD_HMAC_KEY) fail('COUPON_FRAUD_HMAC_KEY_PREVIOUS', 'precisa ser diferente da chave atual (rotação)');
     if (env.MFA_ENC_KEY === DEV_MFA_ENC_KEY)
       fail('MFA_ENC_KEY', 'valor de desenvolvimento não é aceito em produção');
     // Um vazamento não pode servir para outra finalidade (SEC-090, review I10): todas as chaves são distintas.
@@ -206,6 +216,7 @@ export const envSchema = z
       ['CODE_HMAC_KEY', env.CODE_HMAC_KEY],
       ['RECOVERY_HMAC_KEY', env.RECOVERY_HMAC_KEY],
       ['MFA_ENC_KEY', env.MFA_ENC_KEY],
+      ['COUPON_FRAUD_HMAC_KEY', env.COUPON_FRAUD_HMAC_KEY],
     ];
     for (const [i, [name, value]] of keys.entries()) {
       const other = keys.slice(0, i).find(([, v]) => v === value);

@@ -210,6 +210,8 @@ services:
       CODE_HMAC_KEY: ${CODE_HMAC_KEY:?defina CODE_HMAC_KEY no .env}
       RECOVERY_HMAC_KEY: ${RECOVERY_HMAC_KEY:?defina RECOVERY_HMAC_KEY no .env}
       MFA_ENC_KEY: ${MFA_ENC_KEY:?defina MFA_ENC_KEY no .env}
+      COUPON_FRAUD_HMAC_KEY: ${COUPON_FRAUD_HMAC_KEY:?defina COUPON_FRAUD_HMAC_KEY no .env}
+      COUPON_FRAUD_HMAC_KEY_PREVIOUS: ${COUPON_FRAUD_HMAC_KEY_PREVIOUS:-}
       PAYMENT_TOKEN_ENC_KEY: ${PAYMENT_TOKEN_ENC_KEY:?defina PAYMENT_TOKEN_ENC_KEY no .env}
       # APP_ENV=staging (DT-038): único modo que aceita pagamento fake, credencial TEST- e geocodificador fake.
       APP_ENV: ${APP_ENV:-production}

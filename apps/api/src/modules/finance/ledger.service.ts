@@ -167,7 +167,7 @@ export class LedgerService {
   }
 
   /** Devolvido ao cliente, por estorno do provedor, cobertura da Webag OU chargeback (base das partes proporcionais). */
-  private async refundedCents(tx: DbOrTx, orderId: string): Promise<number> {
+  async refundedCents(tx: DbOrTx, orderId: string): Promise<number> {
     const [row] = await tx
       .select({ total: sql<string>`coalesce(sum(case when ${ledgerEntries.account} in ('provider_clearing', 'webag_coverage_cash') and ${ledgerEntries.direction} = 'credit' then ${ledgerEntries.amountCents} else 0 end), 0)` })
       .from(ledgerEntries)
