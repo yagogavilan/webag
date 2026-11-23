@@ -690,15 +690,15 @@ A North Star candidata (pedidos entregues na faixa por semana, por cidade; `metr
 | **Pronta, R1 em staging; liga em produção só com o J24** | WB-360, 361, 363, 369 | **J24** (jurídico e Security); política de privacidade, Data Safety e App Privacy antes de ligar (C-GEN-03) |
 | **Pronta para sprint (PO), R2** (**fechamento em §10.8, 2026-11-22; revisão pós-pareceres em §10.8.1, 2026-11-23**) | WB-340, 341, 342, 344, 345, 346, 349, 356, 357, 362a, 367, 373 (WB-362b fora da R2: volta com a R1.4) | Flag `campanhas_cupom` desligada. Custo Webag só com orçamento mensal > R$ 0 (**F2, fundador**); custo previsto do motoboy como parâmetro (seed provisório até o **F4**, fundador cotar); leitor de código no Safari (mobile-dev, spike) |
 | **Pronta, R2, liga só com parecer** | WB-343 (**J27**: cláusula de adesão); WB-347 (frete grátis só com o **J22**); WB-348 (**J23**: "de/por" de 30 dias) | Jurídico |
-| **Pronta para sprint (PO), R3** | WB-358, 381, 382, 390, 391, 396, 397 | **SEC-196** corrigido antes do G4 da R3 (Security e backend); teste de Web Push em aparelho real (WB-397) |
-| **Pronta (PO), falta ADR** | WB-380 (mapa) | ADR do mapa e spike L5 (tech-lead) |
+| **Pronta para sprint (PO), R3** (**fechamento em §10.9, 2026-11-23**) | WB-358, 381, 382, 390, **391a e 391b** (391c é R4), 396 (parte R3), 397 | **SEC-196** corrigido antes do G4 da R3 (Security, backend e fundador no painel do Expo); **DT-102** antes do 358; teste de Web Push em aparelho real (WB-397, só para ligar); flag `loja_confirma_saida` nasce desligada |
+| **Pronta (PO), falta ADR** | WB-380 (mapa; na R3 sem pino de motoboy) | ADR do mapa e spike L5 (tech-lead) |
 | **Pronta (PO), R5; lançamento condicionado** | WB-364, 365, 366, 378 | RN-A8 (8 semanas de dado e 5 lojas com 100 visitas), **F5** (preço) e HIP-A1 para lançar; WB-378 real só com **F8** e **J25**; construir e testar com seed é livre |
-| **Pronta (PO), R4; bloqueada** | WB-383, 384, 385, 386 (dividir em 386a e 386b, abaixo), 387, 388, 389, 392, 393, 394, 395, 398, 399 | **SEC-193 e SEC-198** (corrigir antes do G4; Security/backend); ADR do app separado e do ADR de mapa (tech-lead); **J8 e J26** para ligar (jurídico); aparelho Android real e plano de dados (fundador); teste em campo com 3 motoboys (fundador) |
+| **Pronta (PO), R4; bloqueada** | WB-383, 384, 385, 386 (dividir em 386a e 386b, abaixo), 387, 388 (sem o C2, que passou à 391b na R3), 389, **391c**, 392, 393, 394, 395, 398, 399 | **SEC-193 e SEC-198** (corrigir antes do G4; Security/backend); ADR do app separado e do ADR de mapa (tech-lead); **J8 e J26** para ligar (jurídico); aparelho Android real e plano de dados (fundador); teste em campo com 3 motoboys (fundador) |
 | **Cortada (DEC-104)** | WB-359 (só o export de widget; a **proteção das consultas passou para a WB-356 C9 a C11**, não é cortada), WB-368 | Gatilhos de volta nos PRDs |
 
 **Cadastro rápido, critérios revistos em 2026-11-22 (DEC-128):** teto de 100 rascunhos (WB-371 C2); sem fila offline na R1 (WB-370 C8, WB-371 C8, WB-376 C15, WB-377 C1); `quickPublish` de uma chamada, com idempotência, foto em processamento e resposta perdida (WB-370 C3, C6, C14 a C17; WB-374 C7); medição e histórico sem `session_id` (WB-379 C1, DEC-122); leitor do texto colado (WB-376 C10 a C15). Detalhe nos critérios do PRD, não repetido aqui.
 
-**Divisões e alertas de tamanho (INVEST "Pequena"):** WB-386 vira **386a** (coleta: C1 a C4, C8, C9, C11 a C13) e **386b** (entrega: C5 a C7, C10, C14, C15). WB-391 (14 critérios) e WB-353 (11) são grandes: o PM confirma no poker e, se estourar, divide por ator (391: estados e timeouts x hora do aparelho e prova). WB-344 (13) e WB-356 (11) idem.
+**Divisões e alertas de tamanho (INVEST "Pequena"):** WB-386 vira **386a** (coleta: C1 a C4, C8, C9, C11 a C13) e **386b** (entrega: C5 a C7, C10, C14, C15). WB-391 (agora 23 critérios) **foi dividida em 391a, 391b (R3) e 391c (R4)** em 2026-11-23 (§10.9); WB-353 (11) é grande: o PM confirma no poker. WB-344 (13) e WB-356 (11) idem.
 
 **Dependências fora do time que travam produção (não a construção):** jurídico **J8, J22, J23, J24, J25, J26, J27**; fundador **F2** (orçamento de cupons), **F5** (preço do módulo), **F8** (IA real), **F10/F16** (APK e parecer do motoboy), aparelho do motoboy, abrir o protótipo no celular (CEO/fundador), entrevistas de HIP-A1 e teste de HIP-Q1.
 
@@ -748,3 +748,44 @@ Fonte: `docs/arquitetura/reviews/r2-1-contrato-2026-11-23.md` e `docs/seguranca/
 **Ajuste de DoR da R2 (decisão do PO):** a WB-362 vira 362a (R2) e 362b (R1.4), e o esforço do funil (~0,5 UT segundo o tech-lead) sai da conta da R2. Se a R1.4 não for construída antes da R2, a WB-362a também só roda com seed: aceitável, mas diga ao fundador que o painel "Acessos" fica sem dado real até a R1.4 e o J24.
 
 **Condições de G4 da R2.2 que viram aceite do PO (Q1 a Q19 do security):** Q1 (SEC-224), Q2 (SEC-225), Q3 (SEC-226), Q5 (SEC-228), Q17 (estorno total) estão agora nos critérios acima; QA confere no G4.
+
+### 10.9 DoR da R3: fechamento (PO, 2026-11-23)
+Escopo: WB-358, 380, 381, 382, 390, 391, 396, 397 (WB-359 segue **cortada**, DEC-104). Regras nos PRDs `v1-1-despacho-e-app-motoboy.md` (RN-D13 a RN-D15) e `v1-1-rastreio-e-notificacoes.md` (escopo R3 x R4, matriz de canais, RN-R11, RN-R12); decisões e lista do fundador em `v1-1-respostas-ao-time.md` seção I. Tudo é **proposta do PO; o CEO valida e o fundador decide o que é dele** (custo e preço nunca são do PO).
+
+**O que a R3 entrega x o que o fundador pediu.** A R3 **não tem app nem GPS** (eles são da R4, atrás de J8 e J26). O fluxo do fundador fecha assim:
+| Passo do pedido do fundador | R3 | R4 |
+|---|---|---|
+| Cliente pede, loja aceita, loja marca pronto | existente (v1.0) | idem |
+| Operação despacha 1 lote para 1 motoboy (2 motoboys = 2 lotes) | sim, WB-381, com envio por WhatsApp manual | push |
+| Motoboy aceita ou recusa | a operação registra a resposta dele (WB-391b) | o motoboy, no app |
+| **Loja confirma "saiu"** | **sim** (WB-390; botão desde "a caminho"; desfazer 2 min) | automática opcional (F12) |
+| **Cliente recebe aviso de saída** | **sim**, push "saiu para entrega", sem promessa de mapa | idem, com mapa |
+| **Cliente acompanha a rota no mapa** | **não** (só "Saiu às 15:42" e "Chegada prevista até 16:10") | sim (WB-392) |
+| **Motoboy confirma "entregue"** | **não**: a operação marca, com o código do cliente | sim, no app, com código |
+| **Rastreio para ao entregar** | não há rastreio a parar | sim (WB-399, 410 em 10 s) |
+Recomendação ao CEO: dizer isso ao fundador antes de ele esperar mapa na R3. O mapa e o "motoboy confirma" dependem de aparelho Android real, de J8 e J26 e da SEC-193/198.
+
+**Checagem de DoR por história** (formato e INVEST; Gherkin com erro, vazio, limite, permissão e concorrência; regra explícita; spec de tela; contrato; threat model; dependência externa; estimativa):
+| WB | Status DoR (PO) | O que mudou no PRD | Falta (dono) |
+|---|---|---|---|
+| **381** Gerar rota | **Pronta** (Must; 14 critérios) | C12 a C14: botões "aceitou/recusou", 2º lote, perfil sem botão | Contrato (backend, R3.1); spec: designer troca "Enviar rota" por WhatsApp na R3 |
+| **382** Rota por link | **Pronta** (Must; 8 critérios) | C7 (texto "Sugestão de ordem", sem horário nem valor, J8) e C8 (limite do `wa.me`, texto de cancelamento) | L6 (mobile-dev: limite de paradas e iPhone) não bloqueia: C8 tem "Copiar mensagem" |
+| **380** Mapa da fila | **Pronta com condição** (Should; 7 critérios) | C1 dividido: R3 sem pino de motoboy; C6 e C7 novos | **ADR do mapa e spike L5** (tech-lead); sem eles não entra na onda |
+| **390** Loja confirma "saiu" | **Pronta** (Must; 16 critérios, C8 é R4) | C4 sem GPS na R3; C7, C10 e C11 ajustados; C13 a C16 novos (concorrência, sem rede, estado errado, permissão) | Contrato; flag `loja_confirma_saida` (CEO inclui na C-GEN-01); spec: "Ainda estou separando" = 3 min |
+| **391** Estados e prazos | **Dividida:** **391a** (estados, matriz, chegada e saída) e **391b** (oferta, recusa, reatribuir) **prontas, R3**; **391c** (hora do aparelho, automática) R4 | C4 reescrito; C15 a C23 novos; 3 parâmetros novos | **Matriz de transições** (Security, R3.2); poker (PM). 391 era 14 critérios, agora 23: a divisão cumpre o INVEST |
+| **396** Notificações | **Pronta** (Must; R3 = C1, C2, C5 a C16; C3 e C4 são R4) | Matriz N1 a N20 com texto e canal; C2 sem promessa de mapa; C8 corrigido (nome do motoboy só à loja); C13 a C16 novos | **SEC-196** corrigido antes do G4 da R3 (Security, backend e **fundador**: painel do Expo) |
+| **397** Web Push do lojista | **Pronta** (Should; 12 critérios) | C9 a C12: consentimento (SEC-194), limpeza, limites, permissão | Teste em **aparelho real** (fundador) só para **ligar**; C-NOT-05 no CI; inventário LGPD (C-GEN-03) |
+| **358** Construtor | **Pronta** (Should; 13 critérios) | C11 a C13 novos (vazio, consulta lenta, permissão); fatia mínima marcada | **DT-102** (papel de banco) e WB-356 (R2); flag `painel_construtor` |
+| 359 Exportar widget | **Cortada** (DEC-104), sem mudança | n/a | gatilho: fundador pedir CSV para o contador |
+**Falta para toda história R3:** (a) poker dos devs (PM coleta; o plano tem 24,7 UT PERT para a R3 com o 359 e sem estes critérios novos: **a conta sobe** e o PM reestima), (b) contrato OpenAPI, "a definir pelo backend-dev na onda R3.1" (aceito pela DoR), (c) 3 correções do designer (seção I.3 de `respostas`). Nenhuma pendência de produto restante.
+
+**Ponto de corte da R3 (se estourar; o PM sinaliza, o CEO decide).**
+| Ordem | Sai | O que continua | Custo da saída | Gatilho de volta |
+|---|---|---|---|---|
+| 0 | WB-359 (já cortada, DEC-104) | painéis prontos | nenhum novo | fundador pedir CSV |
+| 1 | WB-358 C4, C5 e C10 (agrupar em "Outros", "Enviar cópia") | construtor mínimo | pequeno | fundador sentir falta |
+| 2 | **WB-358 inteira** (RICE 0,3, o menor) | os 5 painéis prontos da R2 | o fundador pediu "modelar visuais" e a DEC-104 a manteve: **decisão dele**, com este custo à vista | fundador pedir |
+| 3 | **WB-380** (mapa) | lista, rota por heurística e links (C2, C3); é a regra "o mapa não é obrigatório" | na R3 o mapa não mostra motoboy; perde só a conferência visual do lote; **depende do ADR e do L5, ainda abertos** (risco de prazo) | operação passar de 90 s por lote ou errar a ordem em > 1 de 10 lotes `[HIPÓTESE]` |
+| 4 | **WB-397** (Web Push) | painel com som e vibração, e-mail de pedido novo (até 60 s) e fallback da operação | lojista com o painel fechado só vê "motoboy chegou" quando a operação liga; piora o "OK da loja" | motoboy esperar > 5 min na loja 2 vezes ou 2 pedidos novos perdidos |
+| nunca | 381, 382, 390, 391a, 391b, 396 e SEC-196 | | quebram o pedido do fundador (loja confirma, cliente avisado) | |
+Observação: a DEC-100 põe o 380 **por último** na ordem de corte do projeto (depois da R4); aqui a pergunta é outra (dentro da R3) e o 380 sai antes do 397 porque o 397 sustenta o aviso que o fundador pediu e a DEC-104 o manteve de propósito. O CEO pode inverter.
