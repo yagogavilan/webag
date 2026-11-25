@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR" data-ready="0">
+<head>
+<meta charset="utf-8">
+<title>Webag para clientes (v3)</title>
+<meta name="viewport" content="width=1920">
+<meta name="marketing-slides" content="5">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="v3.css">
+<!--
+  APRESENTAÇÃO DO CLIENTE, v3. Fonte: docs/marketing/roteiro-apresentacoes-v3.md (§4). 5 slides, 16:9 (1920x1080), que é o que o pipeline gera hoje.
+  Canal: PDF por WhatsApp ou Instagram, lido no celular em 30 s. Por isso: texto mínimo 56 px (inclusive rodapé), no máximo 3 blocos de texto por slide.
+  O formato 4:5 em pé (1080x1350) do roteiro está em aberto [confirmar]: exige mudar SLIDE e @page em scripts/marketing-render.mjs e reorganizar os 5 quadros.
+
+  J8 (DEC-039): C2 "Agora ela entrega." e C4 "Acompanhe ... até a sua porta" dependem do parecer. Nenhuma frase aqui diz "motoboy do Webag",
+  então a flag entregaWebag NÃO muda este deck. Plano B do roteiro §3 (se o parecer vier negativo): C2 = "Agora ela está no seu celular." com apoio
+  "Veja os produtos e os tamanhos que tem."; C4 = "Acompanhe o pedido." com a captura A3 (Em separação) no lugar da A4, sem "porta".
+  Contato: config.json (instagram). O @webag é PROVISÓRIO (IF1/V9): trocar no config antes de enviar. Sem WhatsApp neste deck.
+
+  CAPTURAS: src/capturas-v3/<ID>.png (A1, A2, A4). Se faltar, aparece "Captura X pendente" na tela e o render para com erro de imagem.
+  Recalibre no style do .cap: --s (zoom), --cx e --cy (canto do recorte em px CSS da captura 390x844). UI da captura >= 24 px na peça (s >= 2).
+  Valores abaixo são o primeiro palpite, sem ver as capturas. O que não for neutro fica fora do recorte; nunca tarja.
+-->
+</head>
+<body>
+
+<!-- C1. Gancho. Sem tela. Só tipografia (foto de fachada só com autorização escrita do dono, IF6). É fato do dia a dia, não do Webag. -->
+<section class="slide noite" id="c1">
+  <div class="tb" style="left:120px;top:150px;width:1680px">
+    <h2 style="--ts:140px"><span class="ln">Aquela loja</span><span class="ln">que você adora.</span><span class="ln lima-t" style="font-size:240px;margin-top:10px">Não entrega.</span></h2>
+    <p class="ap2">Só dá pra comprar indo lá.</p>
+  </div>
+  <div class="foot c abs" style="left:120px"><img src="assets/webag-logo-branca.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
+</section>
+
+<!-- C2. Virada [J8]. Tela A1 (loja no app), grande, sangrando por cima e por baixo. Foto de produto real (sem degradê de placeholder).
+     O adesivo "Em breve" faz o papel do rodapé neste slide. -->
+<section class="slide roxo" id="c2">
+  <div class="clip">
+    <div class="cap mob" data-cap="A1" style="left:1000px;top:-40px;width:800px;height:1160px;--s:2.05;--cx:0;--cy:0"><div class="shot"><img alt="App do Webag: página de uma loja com os produtos"></div></div>
+  </div>
+  <span class="tag c" style="left:120px;top:80px">Em breve</span>
+  <div class="tb" style="left:120px;top:200px;width:820px">
+    <h2 style="--ts:170px"><span class="ln">Agora</span><span class="ln">ela</span><span class="ln"><span class="mark">entrega.</span></span></h2>
+    <p class="ap2">Está no app. Você escolhe e pede de onde estiver.</p>
+  </div>
+  <div class="foot c abs" style="left:120px"><img src="assets/webag-logo-branca.svg" alt="Webag"></div>
+</section>
+
+<!-- C3. Prova: o tamanho. Tela A2 (produto com tamanhos; 36 e 44 esgotados, 38 selecionado). Não depende de J8.
+     Confirmar na captura: que o app marca o tamanho sem estoque (variantSoldOut). Só vale para produto com variação. -->
+<section class="slide" id="c3">
+  <div class="tb" style="left:120px;top:120px;width:820px">
+    <h2 style="--ts:112px"><span class="ln">Tem no <span class="mark">38</span>?</span><span class="ln">Você vê antes</span><span class="ln">de pedir.</span></h2>
+    <p class="ap2">Tamanho esgotado aparece marcado. Sem esperar resposta no WhatsApp.</p>
+  </div>
+  <div class="cap mob" data-cap="A2" style="left:980px;top:60px;width:820px;height:940px;--s:2.1;--cx:0;--cy:120"><div class="shot"><img alt="App do Webag: produto com a escolha de tamanho, tamanhos esgotados marcados"></div></div>
+  <div class="foot c abs" style="left:120px"><img src="assets/webag-logo.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
+</section>
+
+<!-- C4. Acompanhar [J8]. Tela A4 (etapa "A caminho"), sem horário, sem código de entrega, sem nome ou foto de motoboy.
+     "Aviso a cada etapa" (WB-191) FICA FORA até o mobile-dev confirmar a notificação. Sem mapa nem previsão. -->
+<section class="slide lima" id="c4">
+  <div class="clip">
+    <div class="cap mob" data-cap="A4" style="left:940px;top:80px;width:860px;height:1100px;--s:2.2;--cx:0;--cy:80"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"></div></div>
+  </div>
+  <div class="tb" style="left:120px;top:100px;width:760px">
+    <h2 style="--ts:110px"><span class="ln">Acompanhe</span><span class="ln">o pedido</span><span class="ln">até a sua</span><span class="ln">porta.</span></h2>
+    <p class="ap2">Pedido recebido, confirmado, em separação, a caminho, entregue.</p>
+    <p class="ap2">Dúvida? Fale com a loja.</p>
+  </div>
+  <div class="foot c abs" style="left:120px"><img src="assets/webag-logo.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
+</section>
+
+<!-- C5. Ação. Uma só: seguir o Instagram (@ provisório, IF1/V9; link tocável no PDF). Sem WhatsApp. "Francisco Morato e região" só aqui [confirmar].
+     Variante de teste "Qual loja você quer ver aqui? Mande o nome." NÃO incluída (hipótese; só com o fundador de acordo e um canal para receber). -->
+<section class="slide noite" id="c5">
+  <div class="tb" style="left:120px;top:100px;width:1680px">
+    <h2 style="--ts:200px"><span class="ln">Saiba quando</span><span class="ln">abre.</span></h2>
+    <p class="cta" style="margin-top:60px">Siga <a class="mark" data-href="ig" href="#"><span data-cfg="instagram">@webag</span></a> no Instagram.</p>
+    <p class="ap2">Tem uma loja? Mostre isto ao dono.</p>
+  </div>
+  <div class="foot c abs" style="left:120px"><img src="assets/webag-logo-branca.svg" alt="Webag"><i></i><b class="em">Em breve · Francisco Morato e região</b></div>
+</section>
+
+<script>window.V3 = { capBase: "capturas-v3/", capExt: ".png" };</script>
+<script src="v3.js"></script>
+</body>
+</html>

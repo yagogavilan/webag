@@ -4,6 +4,22 @@ Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 
 **v2.1 (2026-11-22, aplica a avaliação da estrategista): ver "V2.4" no fim desta seção. Onde a tabela V2.1/V2.2 abaixo fala de slides do cliente, a numeração é a da v2 (s4 = "Ela está no app", s5 = acompanhamento, s6 e s7 cortados, s8 = contato; hoje s3, s4 e s5).**
 `[HIPÓTESE]` = não validado. As seções "v1" mais abaixo estão obsoletas (história); o que continua valendo foi trazido para cá.
 
+## V3 (2026-11-25): `src/apresentacao-lojista-v3.html` (7 slides + divisor + 6 do guia = 14) e `src/apresentacao-cliente-v3.html` (5 slides, 16:9)
+
+Montagem fiel a `roteiro-apresentacoes-v3.md`. Arquivos de apoio novos: `src/v3.css` (camada sobre `base.css`) e `src/v3.js` (config, flags, capturas). **Não renderizado (sem Bash):** larguras por cálculo; primeiro render pode pedir ajuste de quebra em lojista L1 ("“só retirando”" a 112 px), L4 (variante de 5 linhas), L7 (bloco 3) e cliente C1 ("Não entrega." a 240 px, ~1,5 mil de 1680 px).
+
+| # | Item | Situação / quem |
+|---|---|---|
+| V3.1 | **Flags** em `config.json`: `entregaWebag` (false: L4 e G5 dizem "a loja ou um motoboy parceiro entrega"; true: "O Webag leva" + "em breve"), `contaDeExemplo` (false: slide L6 removido e G6 só com o extrato), `semMensalidade` (false: adesivo só existe dentro do L6). Sem `config.json` o fallback é o mesmo, embutido em `v3.js` | Fundador liga com confirmação escrita (V1, V2, V3) |
+| V3.2 | **Comissão fora (decisão do CEO):** Parte 1 fica com 7 slides e "Quanto custa?" vira conversa de viva voz. G6 não cita comissão; **conferir P14**: se o extrato mostrar coluna de comissão, recortar ou rever a decisão | Designer, depois das capturas |
+| V3.3 | **J8 (DEC-039)**: segue bloqueando impressão de lojista L4, G5 e cliente C2, C4. Com `entregaWebag=false` o L4 perde a tese ("Você separa. A loja ou um motoboy parceiro leva." não resolve "e a entrega?"); o roteiro §3 diz que não há plano B honesto para o lojista. O cliente não tem frase de "motoboy do Webag", então a flag não o muda; plano B do roteiro está no comentário do HTML | Jurídico; CEO decide se imprime o lojista antes do parecer |
+| V3.4 | **Capturas**: `src/capturas-v3/<ID>.png`, nada inventado. Sem arquivo, aparece "Captura X pendente" na tela e o render **para por imagem faltando** (de propósito). P1 vira **P1-1 a P1-4** (quatro etapas): mobile-dev confirmar nomes e extensão. Recortes são palpite: recalibrar `--s`, `--cx`, `--cy` no `.cap`. Capturas de computador (P8, P9, P13, P14) com zoom 1,9 mostram só um trecho de 1440 px: pedir viewport mais estreito (~1100 px) para o recorte caber. A3 (plano B) não usada | mobile-dev |
+| V3.5 | **Pipeline**: `scripts/marketing-render.mjs` ainda procura `apresentacao-lojista` e `apresentacao-cliente` (`DECKS`); apontar para os `-v3` | CEO / dev do pipeline |
+| V3.6 | **Contato**: WhatsApp vazio vira linha à mão (L8 e rodapé da Parte 2, "Dúvida? WhatsApp do Yago"). QR só com `qrWhatsapp` preenchido (arquivo do `wa.me` a gerar). `@webag` e "Yago" seguem provisórios (V9, IF1) | Fundador |
+| V3.7 | **Fundador**: frase literal de visita para o L1 (IF8); "Estou montando o Webag" (V17); como guardar a lista de abertura (V8); "Francisco Morato e região" nos rodapés do L8 e C5; formato **4:5** do cliente (exige mudar `SLIDE` e `@page` do render e reorganizar os 5 quadros); 6 fotos reais de produto; teste de 60 s (DEC-129) antes de qualquer tempo no L5 | Fundador |
+| V3.8 | **Jurídico/PO/QA**: J4 e "Pode ser CPF" (L7 bloco 1); retirada ligada no lançamento (L7 bloco 3); R1.2 aceito pelo QA antes de imprimir L5 e G2; R1.3 antes de G3; "Recusar" inteiro no P10 (I1) | Jurídico, PO, QA, mobile-dev |
+| V3.9 | Fora da peça por decisão do roteiro: troca (J2), prazo de aceite (V4), carência, "aviso a cada etapa" (WB-191), variante de CTA "Qual loja você quer ver aqui?", P15 (opcional) e P7 (reserva) | n/a |
+
 ## V2.1 Confirmar antes de imprimir
 
 | # | Item | Onde | Ação |
