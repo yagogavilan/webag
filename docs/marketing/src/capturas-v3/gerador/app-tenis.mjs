@@ -1,0 +1,20 @@
+// A2: página do "Tênis casual" (Moda Express Franco) com tamanhos 36 a 40, só o 38 esgotado e nenhum escolhido. Rode antes tenis-tamanhos.mjs.
+import { launch, appSession, appLogin, appGo, vis, scrollOf } from '../../capturas/gerador/lib.mjs';
+import { salvar } from './salvar.mjs';
+const MODA = '8ab41b27-6685-4a95-958a-48b1dbdb0a3f';
+const b = await launch();
+const { page } = await appSession(b, { dsf: 2 });
+page.setDefaultTimeout(30000);
+await appLogin(page, 'marina.mkt@seed.webag.local');
+await appGo(page, `/store/${MODA}`);
+await vis(page, 'store.screen');
+await page.locator('[data-testid^="store.product-"]:visible').first().waitFor({ timeout: 60000 });
+await page.waitForTimeout(3000);
+await page.locator('[data-testid^="store.product-"]:visible', { hasText: 'Tênis casual' }).first().click();
+await vis(page, 'product.add');
+await page.waitForTimeout(2500);
+await scrollOf(page, '[data-testid="product.gallery"]', 0);
+console.log(await page.evaluate(() => [...document.querySelectorAll('[data-testid^="product.variant-"]')].map((e) => e.dataset.testid)));
+await page.waitForTimeout(800);
+await salvar(page, 'app-produto-tenis');
+await b.close();

@@ -58,3 +58,7 @@ Ambiente local de marketing (banco, Redis, S3 mínimo em `/tmp/webag-mkt`, API 3
 3. `node gerador/app.mjs` e `node gerador/painel.mjs [desk|mob]`. Salvam aqui em JPG.
 
 Teste do pipeline de render: `CHROMIUM_PATH=<chrome> pnpm marketing cliente --pasta teste-render --saida <dir>` usa `../teste-render/apresentacao-cliente.html` (2 slides com estas capturas, PDF 16:9).
+
+## Rodada final (2026-11-25)
+
+Capturas novas ou refeitas (geradores em `gerador/`): `app-produto-tenis.jpg` (A2: Tênis casual R$ 200,00, tamanhos 36 a 40, só o 38 esgotado; `tenis-tamanhos.mjs` ajusta as variações pela API do lojista e `app-tenis.mjs` captura), `painel-fotos-lista-mob.jpg` (P6, passo "Tirar as fotos", Moda Passo Firme; `fotos-lista.mjs`) e `painel-financeiro-desk.jpg` (P13 refeita: Moda Passo Firme, Hoje, **Vendas R$ 1.000,00 em 5 pedidos**, ticket R$ 200,00, você recebe R$ 839,81; pedidos criados por `vendas-redondas.mjs` pelo fluxo normal da API, nada gravado direto no ledger; `financeiro-g6.mjs` captura). O topo da loja com o nome (A1T no mapa de `v3.js`) reaproveita `app-loja.jpg`. A tabela acima mostra o estado da primeira rodada; a P13 de R$ 1.350,00 não existe mais. P11 e P12 seguem sem captura de propósito (dados do cliente).

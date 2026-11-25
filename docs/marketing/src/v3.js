@@ -15,24 +15,25 @@
   var BASE = O.capBase || "capturas-v3/";
   var EXT = O.capExt || ".png";
   /* Mapa ID do roteiro (§5) -> arquivo real em capturas-v3/. Um só lugar. Nenhuma imagem é duplicada: IDs diferentes podem apontar para o mesmo arquivo.
-     Provisórios (captura mais próxima, o ID pedido não existe): A2, P11, P12. Sem captura (null): P1-1..P1-4, P6, P15. */
+     A1T = topo da loja (nome visível) que se cola em cima da vitrine A1. Provisório (captura mais próxima): P12. Sem captura (null): P1-1..P1-4, P11, P15. */
   var CAPTURAS = {
     A1: "app-loja-vitrine.jpg",
-    A2: "app-produto.jpg",                 /* provisório: o roteiro pede 36 e 44 esgotados; a captura tem tamanhos M, G, P e nenhum esgotado */
+    A1T: "app-loja.jpg",                   /* topo da Moda Express Franco: capa, logo, nome e "Aberta" */
+    A2: "app-produto-tenis.jpg",           /* Tênis casual R$ 200,00; tamanhos 36 a 40, só o 38 esgotado, nenhum escolhido */
     A3: "app-pedido-separando.jpg",
     A4: "app-pedido-a-caminho.jpg",        /* J8: só com a flag entregaWebag (ver C4 no HTML) */
     "P1-1": null, "P1-2": null, "P1-3": null, "P1-4": null,   /* cadastro em 4 etapas: não capturado */
     P3: "painel-cadastro-rapido-mob.jpg",
     P4: "painel-colar-lista-mob.jpg",
     P5: "painel-adicionar-varios-mob.jpg",
-    P6: null,                              /* passo Fotos da lista: não capturado */
+    P6: "painel-fotos-lista-mob.jpg",      /* passo "Tirar as fotos" do Adicionar vários */
     P7: "painel-produtos-lista-mob.jpg",
     P8: "painel-precos-reajuste-previa-desk.jpg",
     P9: "painel-precos-reajuste-desfazer-desk.jpg",
     P10: "painel-pedido-novo-mob.jpg",
     P11: null,                             /* pedido em separação: não capturado (o detalhe do pedido traz dados do cliente) */
     P12: "painel-pronto-coleta-mob.jpg",   /* provisório: lista "Prontos"; a caixa com volumes não foi capturada */
-    P13: "painel-financeiro-desk.jpg",
+    P13: "painel-financeiro-desk.jpg",     /* Resumo de Hoje da Moda Passo Firme: Vendas R$ 1.000,00, 5 pedidos */
     P14: "painel-extrato-desk.jpg",
     P15: null
   };
@@ -44,7 +45,7 @@
     site: "",
     email: "",
     qrWhatsapp: "",
-    flags: { semMensalidade: false, trocaNoPainel: false, prazoAceite: false, entregaWebag: false, contaDeExemplo: false }
+    flags: { semMensalidade: false, trocaNoPainel: false, prazoAceite: false, entregaWebag: false, contaDeExemplo: false, ctaLojaQueQuer: false }
   };
 
   function withDefaults(c) {

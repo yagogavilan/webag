@@ -37,25 +37,29 @@
      O adesivo "Em breve" faz o papel do rodapé neste slide. -->
 <section class="slide roxo" id="c2">
   <div class="clip">
-    <div class="cap mob" data-cap="A1" style="left:1000px;top:-40px;width:800px;height:1160px;--s:2.05;--cx:0;--cy:95"><div class="shot"><img alt="App do Webag: página de uma loja com os produtos"></div></div>
+    <!-- A1 em duas peças da mesma loja: topo com o NOME (A1T) e a grade (A1); o recorte pula a faixa de chegada e a linha "entrega Webag" do topo. -->
+    <div class="cap" style="left:1000px;top:-40px;width:800px;height:1160px;overflow:hidden">
+      <div class="cap mob nosh pap" data-cap="A1T" style="left:0;top:0;width:800px;height:496px;border-radius:0;--s:2.05;--cx:0;--cy:64"><div class="shot"><img alt="App do Webag: topo da página de uma loja, com o nome da loja"></div></div>
+      <div class="cap mob nosh pap" data-cap="A1" style="left:0;top:496px;width:800px;height:664px;border-radius:0;--s:2.05;--cx:0;--cy:140"><div class="shot"><img alt="App do Webag: página de uma loja com os produtos"></div></div>
+    </div>
   </div>
   <span class="tag c" style="left:120px;top:80px">Em breve</span>
   <div class="tb" style="left:120px;top:200px;width:820px">
     <h2 style="--ts:170px"><span class="ln">Agora</span><span class="ln">ela</span><span class="ln"><span class="mark">entrega.</span></span></h2>
-    <p class="ap2">Está no app. Você escolhe e pede de onde estiver.</p>
+    <p class="ap2">As lojas que entrarem ficam no app. Você escolhe e pede de onde estiver.</p>
   </div>
   <div class="foot c abs" style="left:120px"><img src="assets/webag-logo-branca.svg" alt="Webag"></div>
 </section>
 
-<!-- C3. Prova: o tamanho. Tela A2 (produto com tamanhos; 36 e 44 esgotados, 38 selecionado). Não depende de J8.
-     Confirmar na captura: que o app marca o tamanho sem estoque (variantSoldOut). Só vale para produto com variação. -->
+<!-- C3. Prova: o tamanho. Tela A2 (Tênis casual com tamanhos 36 a 40; só o 38 esgotado e riscado, nenhum escolhido). Não depende de J8.
+     No app o esgotado é texto apagado com um risco por cima, sem a palavra "Esgotado" (styles.strike em product/[id].tsx): por isso o apoio diz "riscado". -->
 <section class="slide" id="c3">
   <div class="tb" style="left:120px;top:120px;width:820px">
     <h2 style="--ts:112px"><span class="ln">Tem no <span class="mark">38</span>?</span><span class="ln">Você vê antes</span><span class="ln">de pedir.</span></h2>
-    <p class="ap2">Tamanho esgotado aparece marcado. Sem esperar resposta no WhatsApp.</p>
+    <p class="ap2">Tamanho esgotado fica riscado. Sem esperar resposta no WhatsApp.</p>
   </div>
-  <!-- A2 PROVISÓRIA: a captura do roteiro (36 e 44 esgotados, 38 escolhido) não existe; no lugar, o produto com a escolha de tamanho (M, G, P; nenhum esgotado). Ver pendencias.md V3. -->
-  <div class="cap mob" data-cap="A2" style="left:980px;top:200px;width:820px;height:657px;--s:2.1;--cx:0;--cy:392"><div class="shot"><img alt="App do Webag: produto com a escolha de tamanho, tamanhos esgotados marcados"></div></div>
+  <!-- A2: Tênis casual R$ 200,00 com tamanhos 36 a 40; só o 38 esgotado (riscado), nenhum escolhido. Recorte do preço ao seletor; o aviso de arrependimento fica fora. -->
+  <div class="cap mob" data-cap="A2" style="left:980px;top:190px;width:820px;height:630px;--s:2.1;--cx:0;--cy:398"><div class="shot"><img alt="App do Webag: Tênis casual R$ 200,00 com os tamanhos 36 a 40, o 38 riscado por estar esgotado"></div></div>
   <div class="foot c abs" style="left:120px"><img src="assets/webag-logo.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
 </section>
 
@@ -63,27 +67,32 @@
      "Aviso a cada etapa" (WB-191) FICA FORA até o mobile-dev confirmar a notificação. Sem mapa nem previsão. -->
 <section class="slide lima" id="c4">
   <div class="clip">
-    <!-- Cartão do pedido em duas peças coladas: o horário grande ("Chega entre ...") fica no meio, fora. Horários "11:36" das etapas sob tarja da cor do fundo.
-         entregaWebag desligada (padrão): A3 (Em separação), cortada ANTES de "Aguardando motoboy". Ligada (J8 liberado): A4 (A caminho), até "Saiu para entrega". -->
-    <div class="cap mob pa nosh" data-if="!entregaWebag" data-cap="A3" style="left:920px;top:125px;width:859px;height:314px;--s:2.4;--cx:16;--cy:87"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa Em separação"></div></div>
-    <div class="cap mob pb nosh" data-if="!entregaWebag" data-cap="A3" style="left:920px;top:439px;width:859px;height:516px;--s:2.4;--cx:16;--cy:385"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa Em separação"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i></div></div>
-    <div class="cap mob pa nosh" data-if="entregaWebag" data-cap="A4" style="left:920px;top:105px;width:680px;height:248px;--s:1.9;--cx:16;--cy:87"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"></div></div>
-    <div class="cap mob pb nosh" data-if="entregaWebag" data-cap="A4" style="left:920px;top:353px;width:680px;height:621px;--s:1.9;--cx:16;--cy:385"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:635;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:691;--w:56;--h:20;--c:#faf8fb"></i></div></div>
+    <!-- Linha do tempo do pedido com todas as etapas (A3, "Em separação" ativa), sem o cabeçalho escuro (que traz a faixa "Chega entre ..."). Horários "11:36" sob tarja da cor do fundo.
+         Com entregaWebag ligada (J8 liberado): A4 (A caminho), em duas peças como antes. -->
+    <div class="cap mob nosh" data-if="!entregaWebag" data-cap="A3" style="left:1000px;top:130px;width:859px;height:768px;--s:2.4;--cx:16;--cy:440"><div class="shot"><img alt="App do Webag: linha do tempo do pedido, etapa Em separação"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i></div></div>
+    <div class="cap mob pa nosh" data-if="entregaWebag" data-cap="A4" style="left:1000px;top:105px;width:680px;height:248px;--s:1.9;--cx:16;--cy:87"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"></div></div>
+    <div class="cap mob pb nosh" data-if="entregaWebag" data-cap="A4" style="left:1000px;top:353px;width:680px;height:621px;--s:1.9;--cx:16;--cy:385"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:635;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:691;--w:56;--h:20;--c:#faf8fb"></i></div></div>
   </div>
-  <div class="tb" style="left:120px;top:100px;width:760px">
-    <h2 style="--ts:110px"><span class="ln">Acompanhe</span><span class="ln">o pedido</span><span class="ln">até a sua</span><span class="ln">porta.</span></h2>
-    <p class="ap2">Pedido recebido, confirmado, em separação, a caminho, entregue.</p>
+  <div class="tb" style="left:120px;top:100px;width:860px">
+    <h2 style="--ts:110px"><span class="ln">Acompanhe</span><span class="ln">o pedido,</span><span class="ln">etapa por etapa.</span></h2>
+    <p class="ap2">Recebido, aceito, em separação, saiu para entrega, entregue.</p>
     <p class="ap2">Dúvida? Fale com a loja.</p>
   </div>
   <div class="foot c abs" style="left:120px"><img src="assets/webag-logo.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
 </section>
 
-<!-- C5. Ação. Uma só: seguir o Instagram (@ provisório, IF1/V9; link tocável no PDF). Sem WhatsApp. "Francisco Morato e região" só aqui [confirmar].
-     Variante de teste "Qual loja você quer ver aqui? Mande o nome." NÃO incluída (hipótese; só com o fundador de acordo e um canal para receber). -->
+<!-- C5. Ação. Uma só (@ provisório, IF1/V9; link tocável no PDF). Sem WhatsApp. "Francisco Morato e região" só aqui [confirmar]. -->
 <section class="slide noite" id="c5">
-  <div class="tb" style="left:120px;top:100px;width:1680px">
+  <!-- Padrão (ctaLojaQueQuer false): "Saiba quando abre. Siga @webag". O @ ainda NÃO é confirmado (IF1/V9). Variante da estrategista pronta atrás da flag ctaLojaQueQuer (config.json):
+       "Qual loja você quer ver aqui? Mande o nome para @webag no Instagram. Avisamos quando abrir." Só liga com o @ real e um canal para ler as respostas. -->
+  <div class="tb" data-if="!ctaLojaQueQuer" style="left:120px;top:100px;width:1680px">
     <h2 style="--ts:200px"><span class="ln">Saiba quando</span><span class="ln">abre.</span></h2>
     <p class="cta" style="margin-top:60px">Siga <a class="mark" data-href="ig" href="#"><span data-cfg="instagram">@webag</span></a> no Instagram.</p>
+    <p class="ap2">Tem uma loja? Mostre isto ao dono.</p>
+  </div>
+  <div class="tb" data-if="ctaLojaQueQuer" style="left:120px;top:90px;width:1680px">
+    <h2 style="--ts:180px"><span class="ln">Qual loja você</span><span class="ln"><span class="mark">quer ver aqui?</span></span></h2>
+    <p class="ap2" style="margin-top:56px;color:#fff">Mande o nome para <a class="mark" data-href="ig" href="#"><span data-cfg="instagram">@webag</span></a> no Instagram. Avisamos quando abrir.</p>
     <p class="ap2">Tem uma loja? Mostre isto ao dono.</p>
   </div>
   <div class="foot c abs" style="left:120px"><img src="assets/webag-logo-branca.svg" alt="Webag"><i></i><b class="em">Em breve · Francisco Morato e região</b></div>

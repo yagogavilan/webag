@@ -1,6 +1,6 @@
 {
   "_provisorios": "nome e instagram sao provisorios (pendencias.md V9): o fundador confirma ou troca antes de enviar. whatsapp vazio = linha para escrever a mao",
-  "_v3": "qrWhatsapp = caminho (a partir de src/) de um SVG ou PNG do QR do wa.me; vazio = sem QR. entregaWebag=false: texto 'a loja ou um motoboy parceiro entrega' (J8 pendente). contaDeExemplo=false: sem o slide da conta de R$ 100 (comissao fora da peça). semMensalidade so liga com confirmacao escrita do fundador",
+  "_v3": "qrWhatsapp = caminho (a partir de src/) de um SVG ou PNG do QR do wa.me; vazio = sem QR. entregaWebag=false: texto 'a loja ou um motoboy parceiro entrega' (J8 pendente). contaDeExemplo=false: sem o slide da conta de R$ 100 (comissao fora da peça). semMensalidade so liga com confirmacao escrita do fundador. ctaLojaQueQuer=false: C5 'Saiba quando abre / Siga @webag' (o @ ainda nao e confirmado); true: variante 'Qual loja voce quer ver aqui? Mande o nome para @webag' (so com o @ real e um canal para receber as respostas)",
   "nome": "Yago",
   "whatsapp": "",
   "qrWhatsapp": "",
@@ -12,6 +12,7 @@
     "trocaNoPainel": false,
     "prazoAceite": false,
     "entregaWebag": false,
-    "contaDeExemplo": false
+    "contaDeExemplo": false,
+    "ctaLojaQueQuer": false
   }
 }
