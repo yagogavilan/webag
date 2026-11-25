@@ -29,6 +29,7 @@
     "totp": "node scripts/totp.mjs",
     "pagar": "node scripts/simular-pagamento.mjs",
     "telas": "node scripts/capture-screens.mjs",
+    "marketing": "node scripts/marketing-render.mjs",
     "web:compra": "node scripts/web-playwright.mjs compra",
     "web:smoke": "node scripts/web-playwright.mjs smoke",
     "web:e2e": "node scripts/web-playwright.mjs e2e",

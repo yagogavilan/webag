@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<meta name="marketing-slides" content="2">
+<title>Teste de render (fixture)</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+  /* Fixture do pipeline: 2 slides 16:9 com capturas 2x. Uso: pnpm marketing cliente --pasta teste-render --saida <dir> */
+  .tela{position:absolute;top:60px;width:430px;height:930px;border-radius:44px;overflow:hidden;background:#fff;box-shadow:0 0 0 10px var(--noite)}
+  .tela img{width:100%;height:100%;object-fit:cover;object-position:top}
+  h1{position:absolute;left:120px;top:300px;width:800px;font-family:var(--disp);font-weight:800;font-size:150px;line-height:1;letter-spacing:-0.035em}
+  p.leg{position:absolute;left:120px;top:760px;width:800px;font-size:64px;font-weight:600}
+</style>
+</head>
+<body>
+<section class="slide">
+  <h1>Escolha a loja. Peça pelo app.</h1>
+  <p class="leg">Capturas reais do app, em 2x.</p>
+  <div class="tela" style="left:1000px"><img src="../capturas-v3/app-inicio-lojas.jpg" alt="Início do app com lojas"></div>
+  <div class="tela" style="left:1440px;top:120px"><img src="../capturas-v3/app-loja-vitrine.jpg" alt="Vitrine da loja"></div>
+</section>
+<section class="slide" style="background:var(--noite);color:#fff">
+  <h1 style="color:#fff">Acompanhe até chegar.</h1>
+  <div class="tela" style="left:1000px"><img src="../capturas-v3/app-pedido-a-caminho.jpg" alt="Pedido a caminho"></div>
+  <div class="tela" style="left:1440px;top:120px"><img src="../capturas-v3/app-pedido-entregue.jpg" alt="Pedido entregue"></div>
+</section>
+<script>
+  Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.decode().catch(() => {}))]).then(() => document.documentElement.setAttribute('data-ready', '1'));
+</script>
+</body>
+</html>

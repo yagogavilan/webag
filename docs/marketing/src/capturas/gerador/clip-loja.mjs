@@ -1,0 +1,41 @@
+import { launch, appSession, scrollOf, call, MODA } from './lib.mjs';
+import { Recorder, markScroller, setScroll, imagesReady, tapAt, scrollBy, rectOf, ease } from './clip-lib.mjs';
+const OUT = process.env.OUT ?? '/tmp/webag-mkt/work/out';
+const b = await launch();
+const { context, page } = await appSession(b, { dsf: 3 });
+const cdp = await context.newCDPSession(page);
+await page.waitForTimeout(6500);
+// home rolada ate o card da loja (centralizado)
+await markScroller(page);
+const card = `[data-testid="home.store-${MODA}"]`;
+let r = await rectOf(page, card);
+const sc0 = await page.evaluate(() => window.__sc.scrollTop);
+await setScroll(page, sc0 + r.y - 250);
+await page.waitForTimeout(1200);
+r = await rectOf(page, card);
+console.log('card', r);
+const rec = new Recorder(page, cdp, { out: `${OUT}/app-loja.mp4`, crf: 20, clip: { x: 0, y: 0, width: 390, height: 844, scale: 3 } });
+await rec.begin();
+await rec.vtPause();
+await imagesReady(page, rec);
+await rec.run(0.55);
+await tapAt(rec, page, r.cx, r.y + r.h * 0.45, async () => {
+  await rec.untilVisible('[data-testid="store.screen"]');
+  await rec.untilVisible('[data-testid^="store.product-"]');
+  await imagesReady(page, rec);
+});
+await markScroller(page);
+await rec.run(0.45);
+await scrollBy(rec, page, 0, 520, 1.5);
+await rec.run(0.25);
+const prod = await rectOf(page, '[data-testid^="store.product-"]', 0);
+console.log('prod', prod);
+await tapAt(rec, page, prod.cx, prod.cy, async () => {
+  await rec.untilVisible('[data-testid="product.add"]');
+  await imagesReady(page, rec);
+});
+const left = 4.0 - rec.frames / 30;
+console.log('frames', rec.frames, 'resta', left);
+if (left > 0) await rec.run(left);
+console.log(await rec.end());
+await b.close();

@@ -1,0 +1,217 @@
+/* Webag - apresentações oficiais (lojista e cliente), v2. Base compartilhada.
+   Regras: cor sólida (sem degradê), sem emoji, sem mascote. Cada .slide = 1920x1080 px, uma página do PDF.
+   Texto mínimo 32 px, sem exceção (v2.1: as notas legais de 24 px subiram para 32). Títulos 110 a 200 px. Fontes: Bricolage Grotesque (títulos) e Figtree (texto).
+   IMPORTANTE (render): o pipeline mede scrollWidth/scrollHeight de cada .slide. Tudo que sangra (blocos diagonais, capturas
+   recortadas, faixas) fica dentro de um contêiner com overflow:hidden (.clip, .shot), nunca solto fora dos 1920x1080. */
+
+@font-face{font-family:"Bricolage Grotesque";font-weight:600;font-style:normal;font-display:block;src:url("../../design/recursos/fontes/bricolage-grotesque-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Bricolage Grotesque";font-weight:700;font-style:normal;font-display:block;src:url("../../design/recursos/fontes/bricolage-grotesque-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"Bricolage Grotesque";font-weight:800;font-style:normal;font-display:block;src:url("../../design/recursos/fontes/bricolage-grotesque-latin-800-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:400;font-style:normal;font-display:block;src:url("../../design/fonts/figtree-latin-400-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:600;font-style:normal;font-display:block;src:url("../../design/fonts/figtree-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:700;font-style:normal;font-display:block;src:url("../../design/fonts/figtree-latin-700-normal.woff2") format("woff2")}
+@font-face{font-family:"Figtree";font-weight:800;font-style:normal;font-display:block;src:url("../../design/fonts/figtree-latin-800-normal.woff2") format("woff2")}
+
+:root{
+  --roxo:#C02EF0;      /* marca (bloco). Branco sobre ele: 4,29:1, só texto grande (>= 24 px) */
+  --acao:#A21FBE;      /* ação / texto de marca sobre claro: 6,04:1 */
+  --noite:#1C1721;     /* segunda superfície; texto principal */
+  --lima:#D6FF4A;      /* acento: sempre com texto noite (15,3:1) */
+  --papel:#FAF8FB;
+  --studio:#EEEAF1;
+  --n200:#E8E3EB;
+  --n300:#D6CFDB;
+  --n400:#B3ABB9;
+  --n600:#5F566A;      /* texto secundário sobre papel: 6,9:1 */
+  --n700:#443C4C;
+  --n800:#2C2632;
+  --disp:"Bricolage Grotesque","Figtree",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --txt:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+
+@page{size:1920px 1080px;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:#2A242F}
+body{font-family:var(--txt);color:var(--noite);-webkit-print-color-adjust:exact;print-color-adjust:exact;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+img,svg{display:block}
+
+/* Slide: 1920 x 1080, sem rolagem, nada fora da área */
+.slide{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--papel);color:var(--noite);break-after:page;page-break-after:always;break-inside:avoid}
+.slide:last-of-type{break-after:auto;page-break-after:auto}
+.slide.roxo{background:var(--roxo);color:#fff}
+.slide.noite{background:var(--noite);color:#fff}
+.slide.lima{background:var(--lima);color:var(--noite)}
+
+/* Na tela: espaço entre slides e ajuste à janela. No PDF (print) nada disso vale. */
+@media screen{
+  html{zoom:var(--fit,1)}
+  .slide{margin:20px auto}
+}
+@media print{
+  html,body{background:none}
+  .slide{margin:0}
+}
+
+/* Utilitários de posição */
+.abs{position:absolute}
+.clip{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden}
+.nw{white-space:nowrap}
+.lima-t{color:var(--lima)}
+.roxo-t{color:var(--roxo)}
+.acao-t{color:var(--acao)}
+
+/* Tipografia de impacto: Bricolage 800, entrelinha justa. Tamanho vai inline (110 a 200 px nos títulos) */
+.d{position:absolute;font-family:var(--disp);font-weight:800;letter-spacing:-.035em;line-height:1}
+.dd{font-family:var(--disp);font-weight:800;letter-spacing:-.035em;line-height:1}
+.kick{position:absolute;font:800 32px/1.1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao)}
+.noite .kick{color:var(--lima)}
+.roxo .kick{color:#fff}
+.lima .kick{color:var(--noite)}
+.l{position:absolute;font:700 44px/1.25 var(--txt);color:var(--n700)}
+.noite .l,.roxo .l{color:#fff}
+.lima .l{color:var(--noite)}
+
+/* Marca-texto (palavra-chave) */
+.mark{position:relative;display:inline-block;isolation:isolate;color:var(--noite);white-space:nowrap}
+.mark::before{content:"";position:absolute;z-index:-1;left:-.1em;right:-.1em;top:.08em;bottom:0;background:var(--lima);transform:skewX(-8deg);border-radius:.1em}
+
+/* Adesivos (sombra dura, sempre inclinados) */
+.tag{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 36px/1 var(--txt);letter-spacing:.02em;padding:16px 30px;border-radius:14px;transform:rotate(-4deg);box-shadow:5px 5px 0 var(--noite)}
+.noite .tag{box-shadow:5px 5px 0 var(--roxo)}
+.stk{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 48px/1.05 var(--disp);letter-spacing:-.02em;padding:20px 34px;border-radius:16px;transform:rotate(-5deg);box-shadow:7px 7px 0 var(--noite);white-space:nowrap}
+.noite .stk{box-shadow:7px 7px 0 var(--roxo)}
+.pill{position:absolute;display:inline-block;background:var(--lima);color:var(--noite);font:800 36px/1 var(--txt);padding:18px 32px;border-radius:16px}
+.chip{display:inline-block;background:var(--n800);color:#fff;font:700 36px/1 var(--txt);padding:18px 30px;border-radius:16px}
+
+/* Progresso (barras inclinadas do kit) */
+.prog{position:absolute;display:flex;gap:12px}
+.prog i{display:block;width:92px;height:18px;border-radius:9px;background:var(--n300);transform:skewX(-8deg)}
+.prog i.on{background:var(--roxo)}
+.noite .prog i{background:var(--n700)}
+.noite .prog i.on{background:var(--lima)}
+.roxo .prog i{background:rgba(255,255,255,.38)}
+.roxo .prog i.on{background:#fff}
+
+/* Logo no rodapé (sem número de página: quem lê não conta slides) */
+.foot{position:absolute;left:120px;bottom:56px;z-index:5}
+.foot.r{left:auto;right:120px}
+.foot img{height:44px;width:auto}
+
+/* Símbolo da marca (sprite inline em cada HTML) */
+.sim{position:absolute}
+
+/* Lista com barra inclinada (assinatura da marca) */
+.pts{position:absolute;list-style:none;display:grid;gap:26px}
+.pts li{position:relative;padding-left:64px;font:700 38px/1.25 var(--txt);color:var(--n700)}
+.pts li::before{content:"";position:absolute;left:0;top:.5em;width:40px;height:14px;border-radius:7px;background:var(--roxo);transform:skewX(-8deg)}
+.noite .pts li{color:#fff}
+.noite .pts li::before{background:var(--lima)}
+
+/* Balões de conversa (dor do lojista) */
+.bub{position:absolute;border-radius:48px;padding:30px 52px;white-space:nowrap}
+.bub.in{background:var(--n800);color:#fff;font:600 60px/1.15 var(--txt);border-bottom-left-radius:12px}
+.bub.out{background:var(--lima);color:var(--noite);font:800 150px/1 var(--disp);letter-spacing:-.035em;padding:44px 66px 52px;border-bottom-right-radius:14px}
+
+/* Captura recortada: .shotwrap leva a sombra dura; .shot recorta (overflow:hidden); a <img> tem largura = 390 x escala (celular)
+   ou 1440 x escala (computador) e deslocamento negativo = origem do recorte x escala. Resolução-independente: com captura em
+   alta resolução (mesmo aspecto), nada muda. */
+.shotwrap{position:absolute;border-radius:48px;box-shadow:16px 16px 0 var(--noite)}
+.roxo .shotwrap{box-shadow:16px 16px 0 var(--noite)}
+.noite .shotwrap{box-shadow:16px 16px 0 var(--roxo)}
+.shotwrap.nosh{box-shadow:none}
+.shot{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;border-radius:inherit;background:var(--noite)}
+.shot img{position:absolute;max-width:none}
+/* Cobertura de dado de demonstração (horário, nome de produto de seed). Recalibrar se a captura mudar. */
+.patch{position:absolute;display:flex;align-items:center}
+.ring{position:absolute;border:6px solid var(--lima);border-radius:22px;box-shadow:0 0 0 5px var(--noite)}
+
+/* Ilustração do kit em cartão */
+.tile{position:absolute;overflow:hidden;border-radius:44px;box-shadow:9px 9px 0 var(--noite)}
+.tile img,.tile svg{width:100%;height:100%}
+
+/* Quadrantes de perguntas e respostas (lojista, slide 6) */
+.quad{position:absolute;width:960px;height:540px;padding:60px 90px;display:flex;flex-direction:column;justify-content:center}
+.quad .qq{display:flex;align-items:center;gap:22px;font:700 44px/1.2 var(--txt)}
+.quad .qq::before{content:"";flex:none;width:56px;height:14px;border-radius:7px;background:currentColor;transform:skewX(-8deg)}
+.quad .aa{font:800 140px/.96 var(--disp);letter-spacing:-.04em;margin-top:36px}
+.quad .ss{font:700 56px/1.15 var(--txt);margin-top:24px}
+
+/* Linhas de preenchimento à mão (campo vazio = linha) */
+.fill{display:flex;align-items:flex-end;gap:22px;height:64px;margin-bottom:20px}
+.fill:last-child{margin-bottom:0}
+.fill span{flex:none;font:800 36px/1 var(--txt);color:var(--noite)}
+.fill i{flex:1;display:block;height:52px;border-bottom:4px solid var(--noite)}
+
+/* Exemplo de venda */
+.bar3{position:absolute;display:flex;gap:6px;height:56px;transform:skewX(-8deg)}
+.bar3 span{display:block;border-radius:28px}
+.ledger{position:absolute;list-style:none}
+.ledger li{display:flex;align-items:center;gap:22px;height:96px;border-bottom:3px solid var(--n200)}
+.ledger .mk{flex:none;width:30px;height:30px;border-radius:8px;border:3px solid var(--noite)}
+.ledger .lb{flex:1;font:600 40px/1.2 var(--txt);color:var(--n700)}
+.ledger .vl{font:800 48px/1 var(--txt);font-variant-numeric:tabular-nums;color:var(--noite);white-space:nowrap}
+
+/* Bloco de contato. Campo vazio = linha para escrever à mão */
+.contact{position:absolute;background:#fff;color:var(--noite);border-radius:36px;padding:56px}
+.contact h3{font:800 64px/1.05 var(--disp);letter-spacing:-.03em;margin-bottom:34px;white-space:nowrap}
+.crow{margin-bottom:26px}
+.crow:last-child{margin-bottom:0}
+.crow .lbl{display:block;font:800 32px/1 var(--txt);letter-spacing:.1em;text-transform:uppercase;color:var(--acao);margin-bottom:8px}
+.crow .val{display:block;font:700 44px/1.15 var(--txt);min-height:56px;overflow-wrap:anywhere}
+.crow .val.blank{border-bottom:3px solid var(--n600);height:56px}
+
+/* Cartões da parte 2 */
+.doc{position:absolute;background:#fff;border:3px solid var(--n200);border-radius:28px;padding:30px 32px}
+.doc .kick{position:static;display:block;margin-bottom:14px}
+.doc h4{font:800 46px/1.1 var(--disp);letter-spacing:-.03em;color:var(--noite);margin-bottom:10px}
+.doc p{font:600 34px/1.3 var(--txt);color:var(--n700)}
+.stage{position:absolute;display:flex;align-items:center;gap:34px;padding:0 44px;border-radius:36px}
+.stage .nm{flex:none;width:92px;height:92px;border-radius:24px;font:800 56px/92px var(--disp);text-align:center}
+.stage h3{font:800 72px/1 var(--disp);letter-spacing:-.035em}
+.stage p{font:600 38px/1.2 var(--txt);margin-top:10px}
+
+/* v2.1: item controlado por flag ou por contato. Escondido por padrão; o script tira a classe quando vale */
+.off{display:none !important}
+
+/* v2.1: cartão ILUSTRATIVO desenhado em HTML/CSS (substitui capturas com dado de seed). Sempre rotulado "Exemplo" (.xtag).
+   Loja de moda/casa, valores redondos, sem código de pedido, sem horário, sem forma de pagamento.
+   Quando existirem capturas novas em src/capturas/, troque o .xcard pelo .shotwrap com a <img data-cap> e ajuste CAP_BASE. */
+.xcard{position:absolute;background:#fff;color:var(--noite);border-radius:50px;box-shadow:16px 16px 0 var(--noite);padding:44px 48px;display:flex;flex-direction:column;justify-content:space-between}
+.noite .xcard{box-shadow:16px 16px 0 var(--roxo)}
+.xcard.dk{background:var(--noite);color:#fff}
+.xcard.nosh{box-shadow:none;border:3px solid var(--n200)}
+.xtag{position:absolute;top:-30px;left:48px;background:var(--lima);color:var(--noite);font:800 32px/1 var(--txt);padding:12px 22px;border-radius:12px;transform:rotate(-3deg);box-shadow:4px 4px 0 var(--noite)}
+.noite .xtag{box-shadow:4px 4px 0 var(--roxo)}
+.xline{display:flex;justify-content:space-between;align-items:baseline;gap:24px;font:600 40px/1.2 var(--txt)}
+.xline b{font:800 40px/1.1 var(--txt);font-variant-numeric:tabular-nums;white-space:nowrap}
+.xbtn{display:flex;align-items:center;justify-content:center;height:112px;border-radius:22px;font:800 44px/1 var(--txt);white-space:nowrap}
+.xbtn.pri{background:var(--lima);color:var(--noite)}
+.xbtn.sec{border:4px solid #fff;color:#fff}
+.xbtn.acao{background:var(--acao);color:#fff}
+.xbtn.out{border:4px solid var(--acao);color:var(--acao);background:#fff}
+.xrow{display:flex;align-items:center;gap:24px}
+.xsw{flex:none;display:flex;align-items:center;justify-content:center;width:96px;height:96px;border-radius:22px}
+.xsw svg{width:56px;height:56px}
+.xnm{flex:1;min-width:0}
+.xnm b{display:block;font:800 40px/1.1 var(--txt)}
+.xnm span{display:block;font:600 36px/1.2 var(--txt);color:var(--n700);font-variant-numeric:tabular-nums;margin-top:6px}
+.xchip{flex:none;display:inline-flex;align-items:center;gap:12px;height:68px;padding:0 26px;border-radius:34px;font:800 36px/1 var(--txt)}
+.xchip.on{background:var(--lima);color:var(--noite)}
+.xchip.off2{background:var(--n200);color:var(--n700)}
+.xplus{flex:none;display:flex;align-items:center;justify-content:center;width:72px;height:72px;border-radius:50%;background:var(--acao);color:#fff;font:800 52px/1 var(--txt)}
+
+/* Linha do tempo do pedido (cliente, slide 4) */
+.tl{list-style:none}
+.tl li{position:relative;display:flex;align-items:center;gap:26px;height:70px;font:600 38px/1 var(--txt);color:var(--n700)}
+.tl li i{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--roxo)}
+.tl li i::after{content:"";display:block;width:10px;height:20px;border:solid #fff;border-width:0 5px 5px 0;transform:rotate(45deg) translate(-1px,-2px)}
+.tl li:not(:last-child)::after{content:"";position:absolute;left:20px;top:57px;height:26px;width:4px;background:var(--roxo)}
+.tl li.now{font-weight:800;color:var(--noite)}
+.tl li.now i{background:#fff;border:10px solid var(--roxo)}
+.tl li.now i::after{display:none}
+.tl li.now::after{background:var(--n300) !important}
+.tl li.next i{background:#fff;border:5px solid var(--n400)}
+.tl li.next i::after{display:none}
+
+/* Contato: subtítulo da pessoa */
+.contact .sub{font:600 38px/1.2 var(--txt);color:var(--n700);margin:-14px 0 30px}

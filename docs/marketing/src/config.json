@@ -1,0 +1,17 @@
+{
+  "_provisorios": "nome e instagram sao provisorios (pendencias.md V9): o fundador confirma ou troca antes de enviar. whatsapp vazio = linha para escrever a mao",
+  "_v3": "qrWhatsapp = caminho (a partir de src/) de um SVG ou PNG do QR do wa.me; vazio = sem QR. entregaWebag=false: texto 'a loja ou um motoboy parceiro entrega' (J8 pendente). contaDeExemplo=false: sem o slide da conta de R$ 100 (comissao fora da peça). semMensalidade so liga com confirmacao escrita do fundador",
+  "nome": "Yago",
+  "whatsapp": "",
+  "qrWhatsapp": "",
+  "instagram": "@webag",
+  "site": "",
+  "email": "",
+  "flags": {
+    "semMensalidade": false,
+    "trocaNoPainel": false,
+    "prazoAceite": false,
+    "entregaWebag": false,
+    "contaDeExemplo": false
+  }
+}
