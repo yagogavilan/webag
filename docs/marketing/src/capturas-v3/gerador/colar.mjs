@@ -1,0 +1,27 @@
+// "Adicionar varios" (roteiro P4 e P5): passo Colar com a lista de 6 linhas e passo Revisar com a lista ja lida (nada e criado). Uso: node colar.mjs [desk|mob]
+import { launch, painelLogin, painelGo, HIDE_ALERT } from '../../capturas/gerador/lib.mjs';
+import * as P from '../../capturas/gerador/pedido.mjs';
+import { salvar } from './salvar.mjs';
+const VIEWS = { desk: { width: 1440, height: 900 }, mob: { width: 390, height: 844 } };
+const only = process.argv[2] ?? 'desk';
+const LINHAS = ['Camiseta básica preta 60,00 - 10 un', 'Vaso de cerâmica 80,00 - 4 un', 'Calça jeans 130,00 - 3 un', 'Toalha de banho 40,00 - 8 un', 'Luminária de mesa 150,00 - 2 un', 'Tênis casual 200,00 - 5 un'];
+const b = await launch();
+const ctx = await b.newContext({ viewport: VIEWS[only], deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', hasTouch: only === 'mob' });
+const page = await ctx.newPage();
+page.setDefaultTimeout(30000);
+await painelLogin(page, P.MERCHANT);
+const free = async () => { await page.addStyleTag({ content: HIDE_ALERT }); await page.evaluate(() => document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'))); };
+await painelGo(page, '/lojista/produtos/adicionar-varios', false);
+await free();
+await page.getByTestId('lojista.colar.text').fill(LINHAS.join('\n'));
+await page.waitForTimeout(800);
+await page.evaluate(() => window.scrollTo(0, 0));
+await salvar(page, `painel-colar-lista-${only}`);
+await page.getByTestId('lojista.colar.read').click();
+await page.getByTestId('lojista.colar.review').waitFor();
+await page.waitForTimeout(1200);
+console.log((await page.getByTestId('lojista.colar.summary').innerText()));
+await page.evaluate((y) => window.scrollTo(0, y), only === 'desk' ? 130 : 0);
+await page.waitForTimeout(500);
+await salvar(page, `painel-adicionar-varios-${only}`);
+await b.close();

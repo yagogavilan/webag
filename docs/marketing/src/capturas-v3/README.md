@@ -1,6 +1,6 @@
 # Capturas v3 (app do cliente e painel do lojista)
 
-Capturas reais (a versão web do app e o painel `/lojista`) feitas em 2026-11-25 a 2x, JPG qualidade 82, nenhuma acima de 200 KB. Dados fictícios de lojas de **moda, casa e presentes** (roupa, tênis, vaso, luminária), valores em reais inteiros, nenhum alimento, nenhum CPF, telefone, e-mail ou endereço de cliente. Rótulos "Exemplo" não existem na imagem: são telas de verdade.
+Capturas reais (a versão web do app e o painel `/lojista`) feitas em 2026-11-25 a 2x, JPG qualidade 82, 29 arquivos, nenhum acima de 205 KB. Dados fictícios de lojas de **moda, casa e presentes** (roupa, tênis, vaso, luminária), valores em reais inteiros, nenhum alimento, nenhum CPF, telefone, e-mail ou endereço de cliente. Rótulos "Exemplo" não existem na imagem: são telas de verdade.
 
 Tamanhos: **app** 390x844 pt (780x1688 px); **painel desktop** 1440x900 (2880x1800 px); **painel celular** 390x844 pt (780x1688 px). Só viewport, sem rolagem de página inteira (a rolagem usada está na coluna Estado).
 
@@ -26,10 +26,18 @@ Tamanhos: **app** 390x844 pt (780x1688 px); **painel desktop** 1440x900 (2880x18
 | `painel-pronto-coleta` | `/lojista/pedidos` | Pedido "Pronto para coleta" (R$ 156,00) e o que está com o entregador. Desktop: página rolada 260 px; celular: aba "Prontos" |
 | `painel-produtos-lista` | `/lojista/produtos` | Lista com foto, preço e estoque; Vendendo/Pausado. Desktop rolado 190 px |
 | `painel-cadastro-rapido` | `/lojista/produtos/novo/<id>` | Cadastro rápido com foto enviada, nome "Moletom cinza", preço R$ 100,00, "Você recebe cerca de R$ 80,02" e categoria Roupas (rascunho, não publicado) |
-| `painel-adicionar-varios` | `/lojista/produtos/adicionar-varios` | Lista colada já lida: "5 linhas lidas: 5 prontas", cartões com nome, tamanho, quantidade e preço; botão "Criar 5 rascunhos" (não clicado) |
+| `painel-colar-lista` | `/lojista/produtos/adicionar-varios` | Passo 1 Colar: 6 linhas coladas ("Camiseta básica preta 60,00 - 10 un", vaso, calça, toalha, luminária, tênis), contador "6 linhas" |
+| `painel-adicionar-varios` | idem | Passo 2 Revisar: "6 linhas lidas: 6 prontas", cartões com nome, tamanho, quantidade e preço; botão "Criar 6 rascunhos" (não clicado). Desktop rolado 130 px |
 | `painel-precos-estoque` | `/lojista/produtos/precos` | Tabela de preços e estoque com "Você recebe". Desktop rolado 190 px |
+| `painel-precos-reajuste-previa-desk` | `/lojista/produtos/precos` | 3 produtos selecionados, "Mudar preço" aumentar R$ 5 com prévia (R$ 40,00 para R$ 45,00 etc.). Só desktop; o reajuste é desfeito no fim |
+| `painel-precos-reajuste-desfazer-desk` | idem | Depois de aplicar: "Preços reajustados em 3 produtos. Dá para desfazer por 9:59" com botão Desfazer |
 | `painel-financeiro` | `/lojista/financeiro` (Hoje, aba Resumo) | Vendas R$ 1.350,00, ticket médio R$ 150,00, você recebe R$ 1.133,59, vendas por dia |
 | `painel-extrato` | `/lojista/financeiro` (Hoje, aba Extrato) | Lista do extrato por pedido: vendas, comissão, líquido e situação |
+
+## Correspondência com `docs/marketing/roteiro-apresentacoes-v3.md` §5
+
+O roteiro ficou pronto depois da captura; o que coincide: **A1** `app-loja-vitrine` (6 produtos, preços redondos; sem faixa de tempo só se cortar o topo), **A3/A4** `app-pedido-separando` e `app-pedido-a-caminho` (mostram horário e número do pedido: o designer corta), **P3** `painel-cadastro-rapido-*` (sem a versão "sem Você recebe"), **P4** `painel-colar-lista-*`, **P5** `painel-adicionar-varios-*`, **P7** `painel-produtos-lista-mob` (sem produto pausado nem rascunho), **P8/P9** `painel-precos-reajuste-*-desk`, **P10** `painel-pedido-novo-mob` (card inteiro, com número do pedido: recortar), **P13/P14** `painel-financeiro-*`/`painel-extrato-*` (Hoje: R$ 1.350,00, 9 pedidos, não 5 x R$ 200).
+**Não feito:** A2 (tamanhos esgotados), P1 (onboarding), P6 (passo Fotos), P11 e P12 (detalhe do pedido: traz telefone e endereço do cliente, ver abaixo), P15 (entrega). A loja se chama "Moda Express Franco", não "Loja Exemplo", e as fotos são ilustrações (o roteiro pede foto real).
 
 ## Limites que o designer deve saber
 

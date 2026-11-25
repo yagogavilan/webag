@@ -1,0 +1,33 @@
+// Reajuste em massa na tabela de precos (roteiro P8 e P9): 3 produtos selecionados, +R$ 5 com previa; depois do "Aplicar", aviso de desfazer.
+// Desfaz o reajuste no fim (precos voltam ao que eram). Uso: node precos-reajuste.mjs [desk|mob]
+import { launch, painelLogin, painelGo, HIDE_ALERT } from '../../capturas/gerador/lib.mjs';
+import * as P from '../../capturas/gerador/pedido.mjs';
+import { salvar } from './salvar.mjs';
+const VIEWS = { desk: { width: 1440, height: 900 }, mob: { width: 390, height: 844 } };
+const only = process.argv[2] ?? 'desk';
+const b = await launch();
+const size = VIEWS[only];
+const ctx = await b.newContext({ viewport: size, deviceScaleFactor: 2, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', hasTouch: only === 'mob' });
+const page = await ctx.newPage();
+page.setDefaultTimeout(30000);
+await painelLogin(page, P.MERCHANT);
+const free = async () => { await page.addStyleTag({ content: HIDE_ALERT }); await page.evaluate(() => document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'))); };
+await painelGo(page, '/lojista/produtos/precos', false);
+await free();
+await page.waitForTimeout(1500);
+const boxes = page.locator('input[type="checkbox"][data-testid^="lojista.precos.select-"]:not([data-testid$="select-all"])');
+for (const i of [0, 2, 4]) await boxes.nth(i).check();
+await page.getByTestId('lojista.produtos.bulk-price').click();
+await page.getByTestId('lojista.produtos.bulk-direction-up').click().catch(() => {});
+await page.getByTestId('lojista.produtos.bulk-unit').selectOption('amount');
+await page.getByTestId('lojista.produtos.bulk-value').fill('5');
+await page.getByTestId('lojista.produtos.bulk-preview').waitFor();
+await page.waitForTimeout(2000);
+await salvar(page, `painel-precos-reajuste-previa-${only}`);
+await page.getByTestId('lojista.produtos.bulk-confirm').click();
+await page.getByTestId('lojista.precos.undo').waitFor();
+await page.waitForTimeout(1500);
+await salvar(page, `painel-precos-reajuste-desfazer-${only}`);
+await page.getByTestId('lojista.precos.undo-button').click();
+await page.waitForTimeout(2500);
+await b.close();
