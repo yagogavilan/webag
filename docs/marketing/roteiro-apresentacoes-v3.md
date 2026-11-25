@@ -7,7 +7,7 @@ Legenda: `[J8]` = depende do parecer sobre motoboys (DEC-039); `[confirmar]` = d
 
 - A v2 vendia o painel com cartões **desenhados**. A v3 usa **captura real limpa** (lista na seção 5) e põe o que é novo no centro: a lista do WhatsApp vira a loja (v1.1), que responde "dá trabalho cadastrar" e "não entendo de sistema".
 - **Erro da v2 corrigido:** "Enquanto isso, cadastre seus produtos" (guia, slide 2) é falso. O catálogo só abre com a loja aprovada (`catalog-gate.tsx`, 409 `STORE_NOT_APPROVED`). Na v3 o produto vem depois da aprovação.
-- A dependência de J8 foi concentrada: no lojista em 2 slides (L4 e G5) mais a objeção "não quero entregar"; no cliente em 2 (s2 e s4). O resto sobrevive sem o parecer.
+- A dependência de J8 foi concentrada: no lojista em 2 slides (L4 e G5) mais a objeção "não quero entregar"; no cliente em 2 (C2 e C4). O resto sobrevive sem o parecer.
 - Saem da peça: troca (J2), "10 minutos para aceitar" (V4), taxa do cliente e frete (J6), qualquer horário ou prazo, "som" do painel (V10: exige ativar no navegador).
 - Entra uma regra que a v2 não tinha: tudo que for tempo medido (a meta de 1 minuto por produto) só imprime depois do teste de 60 s (DEC-129), com mediana e número de pessoas.
 
@@ -17,10 +17,10 @@ Legenda: `[J8]` = depende do parecer sobre motoboys (DEC-039); `[confirmar]` = d
 **Ideia em 1 frase:** quem mora longe e hoje ouve "só retirando" passa a pedir pelo app, você só separa, e a lista de preços que você já manda no WhatsApp vira a sua loja.
 Ação única: mandar "quero entrar" ao WhatsApp do Yago (entrar na lista de abertura).
 
-| | Gancho (slide 1) | Fórmula | Por que | Risco |
+| | Gancho (L1) | Fórmula | Por que | Risco |
 |---|---|---|---|---|
 | **A (recomendado)** | Conversa de WhatsApp: "Tem no 38?" / "Tem sim." / "Moro longe. Dá pra entregar?" / "Só retirando, tá?" (visto, sem resposta). Título: **Quantas vendas "só retirando" já custou?** | Cena + identificação | O dono reconhece a própria frase em 1 s; a dor vira venda perdida, não "falta de sistema". É o gancho que a v2.2 mediu mais forte (nota 5 no s1). Serve na porta: ele lê o slide e já responde com a boca | É reencenação: precisa do selo "Cena de exemplo" (não é depoimento) e, melhor, da frase **literal** ouvida em visita (IF8) |
-| B | Print de lista de preços de WhatsApp (6 linhas, valores redondos). Título: **Essa lista você já tem.** | Curiosidade honesta (a peça cumpre no s5) | Não depende de J8; mostra esforço baixo | Sem dor, sem emoção: o dono entende o "como" antes de querer o "porquê" |
+| B | Print de lista de preços de WhatsApp (6 linhas, valores redondos). Título: **Essa lista você já tem.** | Curiosidade honesta (a peça cumpre no L5) | Não depende de J8; mostra esforço baixo | Sem dor, sem emoção: o dono entende o "como" antes de querer o "porquê" |
 | C | Duas colunas: 6 mensagens de ida e volta (tamanho, foto, preço, endereço) x 1 cartão de pedido pronto. Título: **Um pedido não precisa de uma conversa.** | Contraste antes/depois | Mostra o produto já no frame 1 | "Manda o PIX" na conversa viraria pagamento em cena (trava 1); fica abstrato sem a captura real do pedido (P10) |
 
 **Escolha: A** no slide 1; **B** vira o título do L5 ("Sua lista do WhatsApp vira sua loja"), onde a peça cumpre a curiosidade.
@@ -29,7 +29,7 @@ Ação única: mandar "quero entrar" ao WhatsApp do Yago (entrar na lista de abe
 **Ideia em 1 frase:** aquela loja que você gosta e que só vende no balcão passa a estar no seu celular, com o tamanho que tem à vista e o pedido acompanhado até a sua porta `[J8]`.
 Ação única: seguir o Instagram do Webag (`@webag` provisório) para saber quando abre.
 
-| | Gancho (slide 1) | Fórmula | Por que | Risco |
+| | Gancho (L1) | Fórmula | Por que | Risco |
 |---|---|---|---|---|
 | **A (recomendado)** | **Aquela loja que você adora. Não entrega.** + "Só dá pra comprar indo lá." | Identificação / quebra de crença | Cada pessoa pensa numa loja específica, em 1 s. É a ideia já aprovada na direção criativa (§3). Sem emoji, só tipografia | A resposta (C2) é J8. Parece com a v2: o diferencial vem do C3 e do CTA |
 | B | **Tem no 38? Você vê antes de pedir.** | Identificação + produto | Espelha o gancho do lojista (a mesma pergunta, do outro lado); a prova (tamanho esgotado marcado) não depende de J8 | Estreita para moda e calçado; "Aquela loja" cobre casa e acessórios |
@@ -51,7 +51,7 @@ Formato: PDF 16:9, mostrado pelo fundador no celular ou impresso. Titulo no máx
 - Confirmar: frase literal ouvida nas visitas (IF8); foto da fachada de loja só com autorização escrita do dono (IF6).
 
 **L2. Tese**
-- Ideia: a resposta ao s1: a loja dele aparece para quem não passa na porta.
+- Ideia: a resposta ao L1: a loja dele aparece para quem não passa na porta.
 - Título: **Venda além da sua rua.** (5)
 - Apoio: "Sua loja no celular de quem mora longe." Tag "Para lojistas. Em breve."
 - Tela: **A1** (app do cliente, página da loja), recorte do topo (nome, categoria) e da grade de produtos, grande, no lado direito.
@@ -69,7 +69,7 @@ Formato: PDF 16:9, mostrado pelo fundador no celular ou impresso. Titulo no máx
 - Título: **Você separa. O Webag leva.** (5)
 - Apoio: "Marcou pronto para coleta, o motoboy busca na loja."
 - Tela: **P12** (painel, caixa "Pronto para coleta" com volumes), recorte sem o número do pedido.
-- Confirmar: J8 e DEC-039 (nenhum motoboy contratado antes do parecer); o modelo (lojista liga ou desliga a entrega) vale também para o s7.
+- Confirmar: J8 e DEC-039 (nenhum motoboy contratado antes do parecer); o modelo (lojista liga ou desliga a entrega) vale também para o L7.
 - Sem J8: não há plano B de uma linha. Ver §3.
 
 **L5. Novo: a lista vira loja**
