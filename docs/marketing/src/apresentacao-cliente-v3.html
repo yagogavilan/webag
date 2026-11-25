@@ -37,7 +37,7 @@
      O adesivo "Em breve" faz o papel do rodapé neste slide. -->
 <section class="slide roxo" id="c2">
   <div class="clip">
-    <div class="cap mob" data-cap="A1" style="left:1000px;top:-40px;width:800px;height:1160px;--s:2.05;--cx:0;--cy:0"><div class="shot"><img alt="App do Webag: página de uma loja com os produtos"></div></div>
+    <div class="cap mob" data-cap="A1" style="left:1000px;top:-40px;width:800px;height:1160px;--s:2.05;--cx:0;--cy:95"><div class="shot"><img alt="App do Webag: página de uma loja com os produtos"></div></div>
   </div>
   <span class="tag c" style="left:120px;top:80px">Em breve</span>
   <div class="tb" style="left:120px;top:200px;width:820px">
@@ -54,15 +54,21 @@
     <h2 style="--ts:112px"><span class="ln">Tem no <span class="mark">38</span>?</span><span class="ln">Você vê antes</span><span class="ln">de pedir.</span></h2>
     <p class="ap2">Tamanho esgotado aparece marcado. Sem esperar resposta no WhatsApp.</p>
   </div>
-  <div class="cap mob" data-cap="A2" style="left:980px;top:60px;width:820px;height:940px;--s:2.1;--cx:0;--cy:120"><div class="shot"><img alt="App do Webag: produto com a escolha de tamanho, tamanhos esgotados marcados"></div></div>
+  <!-- A2 PROVISÓRIA: a captura do roteiro (36 e 44 esgotados, 38 escolhido) não existe; no lugar, o produto com a escolha de tamanho (M, G, P; nenhum esgotado). Ver pendencias.md V3. -->
+  <div class="cap mob" data-cap="A2" style="left:980px;top:200px;width:820px;height:657px;--s:2.1;--cx:0;--cy:392"><div class="shot"><img alt="App do Webag: produto com a escolha de tamanho, tamanhos esgotados marcados"></div></div>
   <div class="foot c abs" style="left:120px"><img src="assets/webag-logo.svg" alt="Webag"><i></i><b class="em">Em breve</b></div>
 </section>
 
-<!-- C4. Acompanhar [J8]. Tela A4 (etapa "A caminho"), sem horário, sem código de entrega, sem nome ou foto de motoboy.
+<!-- C4. Acompanhar [J8]. Tela A3 (Em separação) com a flag entregaWebag desligada, A4 (A caminho) com ela ligada; sem horário, sem código, sem nome ou foto de motoboy.
      "Aviso a cada etapa" (WB-191) FICA FORA até o mobile-dev confirmar a notificação. Sem mapa nem previsão. -->
 <section class="slide lima" id="c4">
   <div class="clip">
-    <div class="cap mob" data-cap="A4" style="left:940px;top:80px;width:860px;height:1100px;--s:2.2;--cx:0;--cy:80"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"></div></div>
+    <!-- Cartão do pedido em duas peças coladas: o horário grande ("Chega entre ...") fica no meio, fora. Horários "11:36" das etapas sob tarja da cor do fundo.
+         entregaWebag desligada (padrão): A3 (Em separação), cortada ANTES de "Aguardando motoboy". Ligada (J8 liberado): A4 (A caminho), até "Saiu para entrega". -->
+    <div class="cap mob pa nosh" data-if="!entregaWebag" data-cap="A3" style="left:920px;top:125px;width:859px;height:314px;--s:2.4;--cx:16;--cy:87"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa Em separação"></div></div>
+    <div class="cap mob pb nosh" data-if="!entregaWebag" data-cap="A3" style="left:920px;top:439px;width:859px;height:516px;--s:2.4;--cx:16;--cy:385"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa Em separação"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i></div></div>
+    <div class="cap mob pa nosh" data-if="entregaWebag" data-cap="A4" style="left:920px;top:105px;width:680px;height:248px;--s:1.9;--cx:16;--cy:87"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"></div></div>
+    <div class="cap mob pb nosh" data-if="entregaWebag" data-cap="A4" style="left:920px;top:353px;width:680px;height:621px;--s:1.9;--cx:16;--cy:385"><div class="shot"><img alt="App do Webag: acompanhamento do pedido, etapa A caminho"><i class="hd" style="--x:48;--y:467;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:523;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:579;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:635;--w:56;--h:20;--c:#faf8fb"></i><i class="hd" style="--x:48;--y:691;--w:56;--h:20;--c:#faf8fb"></i></div></div>
   </div>
   <div class="tb" style="left:120px;top:100px;width:760px">
     <h2 style="--ts:110px"><span class="ln">Acompanhe</span><span class="ln">o pedido</span><span class="ln">até a sua</span><span class="ln">porta.</span></h2>

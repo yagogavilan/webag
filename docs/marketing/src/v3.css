@@ -82,3 +82,16 @@
 .tag.c{font-size:56px;padding:20px 38px;border-radius:18px}
 .cta{font:800 96px/1.1 var(--disp);letter-spacing:-.035em;color:#fff}
 .cta a{color:var(--noite);text-decoration:none}
+
+/* ---------- cobertura de dado na captura (tarja na cor do fundo = não aparece como tarja) ----------
+   Só quando o recorte não consegue deixar o texto de fora. Posição e tamanho em px CSS da captura (os mesmos --cx/--cy do .cap).
+   Uso: <i class="hd" style="--x:60;--y:480;--w:120;--h:20;--c:#fff"></i> dentro de .shot. --c = cor do fundo naquele ponto. */
+.cap .hd{position:absolute;z-index:1;left:calc((var(--x) - var(--cx,0)) * var(--s) * 1px);top:calc((var(--y) - var(--cy,0)) * var(--s) * 1px);width:calc(var(--w) * var(--s) * 1px);height:calc(var(--h) * var(--s) * 1px);background:var(--c,#fff)}
+/* peças coladas de uma mesma captura (um cartão cortado no meio para deixar o texto do meio de fora): .pa em cima, .pb embaixo */
+.cap.pa{border-radius:44px 44px 0 0}
+.cap.pb{border-radius:0 0 44px 44px}
+.cap.pap .shot{background:var(--papel)}          /* recorte que ultrapassa a borda da captura: o fundo da tela do app é igual ao do slide */
+.steps.light .st6{color:var(--noite)}
+.steps.light .st6 b{background:var(--roxo);color:#fff}
+.steps.light .st6{width:390px}
+.steps.light .st6 span{font-size:44px}

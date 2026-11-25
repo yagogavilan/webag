@@ -6,19 +6,37 @@ Peças: `src/apresentacao-lojista.html` (14 slides: 7 de conversa, 1 divisor, 6 
 
 ## V3 (2026-11-25): `src/apresentacao-lojista-v3.html` (7 slides + divisor + 6 do guia = 14) e `src/apresentacao-cliente-v3.html` (5 slides, 16:9)
 
-Montagem fiel a `roteiro-apresentacoes-v3.md`. Arquivos de apoio novos: `src/v3.css` (camada sobre `base.css`) e `src/v3.js` (config, flags, capturas). **Não renderizado (sem Bash):** larguras por cálculo; primeiro render pode pedir ajuste de quebra em lojista L1 ("“só retirando”" a 112 px), L4 (variante de 5 linhas), L7 (bloco 3) e cliente C1 ("Não entrega." a 240 px, ~1,5 mil de 1680 px).
+Montagem fiel a `roteiro-apresentacoes-v3.md`. Arquivos de apoio novos: `src/v3.css` (camada sobre `base.css`) e `src/v3.js` (config, flags, capturas). **Renderizado em 2026-11-25** (`pnpm marketing lojista|cliente`): lojista 14 páginas, cliente 5, todas conferidas como imagem; relatório por slide em V3.10. Larguras de título sem quebra inesperada em L1, L4 (5 linhas) e C1.
 
 | # | Item | Situação / quem |
 |---|---|---|
 | V3.1 | **Flags** em `config.json`: `entregaWebag` (false: L4 e G5 dizem "a loja ou um motoboy parceiro entrega"; true: "O Webag leva" + "em breve"), `contaDeExemplo` (false: slide L6 removido e G6 só com o extrato), `semMensalidade` (false: adesivo só existe dentro do L6). Sem `config.json` o fallback é o mesmo, embutido em `v3.js` | Fundador liga com confirmação escrita (V1, V2, V3) |
 | V3.2 | **Comissão fora (decisão do CEO):** Parte 1 fica com 7 slides e "Quanto custa?" vira conversa de viva voz. G6 não cita comissão; **conferir P14**: se o extrato mostrar coluna de comissão, recortar ou rever a decisão | Designer, depois das capturas |
 | V3.3 | **J8 (DEC-039)**: segue bloqueando impressão de lojista L4, G5 e cliente C2, C4. Com `entregaWebag=false` o L4 perde a tese ("Você separa. A loja ou um motoboy parceiro leva." não resolve "e a entrega?"); o roteiro §3 diz que não há plano B honesto para o lojista. O cliente não tem frase de "motoboy do Webag", então a flag não o muda; plano B do roteiro está no comentário do HTML | Jurídico; CEO decide se imprime o lojista antes do parecer |
-| V3.4 | **Capturas**: `src/capturas-v3/<ID>.png`, nada inventado. Sem arquivo, aparece "Captura X pendente" na tela e o render **para por imagem faltando** (de propósito). P1 vira **P1-1 a P1-4** (quatro etapas): mobile-dev confirmar nomes e extensão. Recortes são palpite: recalibrar `--s`, `--cx`, `--cy` no `.cap`. Capturas de computador (P8, P9, P13, P14) com zoom 1,9 mostram só um trecho de 1440 px: pedir viewport mais estreito (~1100 px) para o recorte caber. A3 (plano B) não usada | mobile-dev |
-| V3.5 | **Pipeline**: `scripts/marketing-render.mjs` ainda procura `apresentacao-lojista` e `apresentacao-cliente` (`DECKS`); apontar para os `-v3` | CEO / dev do pipeline |
+| V3.4 | **Capturas (render de 2026-11-25)**: o ID do roteiro vira o arquivo real pelo mapa `CAPTURAS` em `src/v3.js` (um só lugar; aceita .jpg; nada duplicado). IDs sem captura (`null`): P1-1..P1-4, P6, P11, P15. Provisórias: A2, P12 (ver V3.10). Recortes calibrados a olho no render; tarja só na cor do fundo (classe `.hd`, v3.css) | mobile-dev (recapturar A2, P1, P6, P11, P12) |
+| V3.5 | **Pipeline**: `pnpm marketing` já aponta para os `-v3` (as fixtures antigas de `--pasta` caem no nome sem sufixo), acha sozinho o Chromium em `/opt/pw-browsers/chromium-*/chrome-linux*/chrome` (ou `PLAYWRIGHT_BROWSERS_PATH`) e grava a capa `<peça>-capa.png` (1920x1080) ao lado do PDF. **Feito** | n/a |
 | V3.6 | **Contato**: WhatsApp vazio vira linha à mão (L8 e rodapé da Parte 2, "Dúvida? WhatsApp do Yago"). QR só com `qrWhatsapp` preenchido (arquivo do `wa.me` a gerar). `@webag` e "Yago" seguem provisórios (V9, IF1) | Fundador |
 | V3.7 | **Fundador**: frase literal de visita para o L1 (IF8); "Estou montando o Webag" (V17); como guardar a lista de abertura (V8); "Francisco Morato e região" nos rodapés do L8 e C5; formato **4:5** do cliente (exige mudar `SLIDE` e `@page` do render e reorganizar os 5 quadros); 6 fotos reais de produto; teste de 60 s (DEC-129) antes de qualquer tempo no L5 | Fundador |
 | V3.8 | **Jurídico/PO/QA**: J4 e "Pode ser CPF" (L7 bloco 1); retirada ligada no lançamento (L7 bloco 3); R1.2 aceito pelo QA antes de imprimir L5 e G2; R1.3 antes de G3; "Recusar" inteiro no P10 (I1) | Jurídico, PO, QA, mobile-dev |
 | V3.9 | Fora da peça por decisão do roteiro: troca (J2), prazo de aceite (V4), carência, "aviso a cada etapa" (WB-191), variante de CTA "Qual loja você quer ver aqui?", P15 (opcional) e P7 (reserva) | n/a |
+| V3.10 | **Relatório slide a slide (render de 2026-11-25; flags no padrão).** Bom = legível, sem dado real, recorte conferido no PNG. Provisório = precisa de captura nova ou decisão. Em todo slide de captura a tela ocupa menos de 40% da área quando o recorte tem de deixar texto sensível de fora (L3, L4, L5, G2, G3, G5, G6): é a regra da direção criativa que não fecha com estas capturas |  |
+| L1 | Bom. Tipografia, selo "Cena de exemplo"; frase literal de visita (IF8) pendente | Fundador |
+| L2 | Bom. A1 = `app-loja-vitrine` recortada abaixo de "Política de trocas" (J2), sem nome de loja nem faixa de horário; fotos são ilustrações, não fotos reais | Fundador (fotos) |
+| L3 | Bom. P10 em 2 peças coladas: sem código WB, sem horário, sem pílula "marque pronto até 12:07" nem contagem "08:58 ... cancelado" (V4); tarja só na cor do cartão | n/a |
+| L4 | **Provisório.** P12 não existe: usada a lista "Prontos" (etiqueta "Pronto para coleta", itens, R$ 156,00), sem código nem horário; sem a caixa de volumes. Com `entregaWebag` desligada o texto é o do roteiro "A loja ou um motoboy parceiro"; J8 segue bloqueando | mobile-dev, jurídico |
+| L5 | Bom. P4 (colar) e P5 (revisar, "6 linhas lidas: 6 prontas"); sem tempo impresso (DEC-129). Texto de apoio das telas ~21 a 27 px | n/a |
+| L7, L8, divisor | Bom. Sem tela. WhatsApp vazio vira linha à mão; QR vazio | Fundador |
+| G1 | **Provisório, sem tela.** P1-1..4 não existem; as 4 etapas viraram numeração em tipografia | mobile-dev |
+| G2 | **Provisório.** P3 recortada acima de "Você recebe cerca de R$ 80,02" (comissão fora); P6 não existe, no lugar P4 (colar a lista), que não mostra "tire as fotos" | mobile-dev |
+| G3 | Bom, pendente QA (R1.3). P8 só o trecho do modal; o "(você recebe R$ ...)" de cada linha sai por recorte e tarja branca; P9 só o aviso "Desfazer" (9:59 é contagem, não horário). Desktop com zoom 1,7 a 2,4 | QA |
+| G4 | Bom. Mesma P10 do L3 | n/a |
+| G5 | **Provisório.** P11 e P12 não existem: uma só tela (lista "Prontos"), sem volumes; legenda "O pedido aceito fica em separação" e "com o número de volumes" removidas por não terem tela | mobile-dev, jurídico (J8) |
+| G6 | **Provisório, decisão pendente.** Com `contaDeExemplo` desligada mostra P13 (cartões Vendas R$ 1.350,00 e Você recebe R$ 1.133,59, linha "Depois da comissão e da tarifa" sob tarja), não o extrato: o extrato (P14) traz código, horário e "Comissão R$ ..." em cada linha. O número 1.133,59 já implica a comissão: **CEO/fundador decidem se fica** (V2, V3). Com a flag ligada o P14 não foi calibrado | CEO, fundador |
+| C1, C5 | Bom. Sem tela; @webag provisório | Fundador |
+| C2 | Bom. A1 recortada (abas e grade de produtos), sem faixa de horário | n/a |
+| C3 | **Provisório, não bate com o texto.** A2 não existe: usada `app-produto` (tamanhos M, G, P; nenhum esgotado), mas o slide diz "Tem no 38?" e "esgotado aparece marcado". Recapturar A2 antes de imprimir; senão trocar a tela por tipografia | mobile-dev |
+| C4 | Provisório (J8). Com `entregaWebag` desligada mostra A3 (Em separação), cortada antes de "Aguardando motoboy"; ligada, A4 até "Saiu para entrega". Horário grande "Chega entre ..." fora (peças coladas) e "11:36" sob tarja. O título "até a sua porta" fica mais forte que a tela com a flag desligada | Jurídico, CEO |
+| Capas | `saida/apresentacao-lojista-v3-capa.png` e `...cliente-v3-capa.png` (1920x1080, < 400 KB) | n/a |
 
 ## V2.1 Confirmar antes de imprimir
 

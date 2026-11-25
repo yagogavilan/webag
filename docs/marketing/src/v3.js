@@ -6,12 +6,37 @@
      data-cfg="nome|instagram|whatsappFmt"                   texto vindo do config
      a[data-href="ig|wa"]                                    link do Instagram / do WhatsApp (wa.me)
      img[data-qr]                                            QR do WhatsApp: src = config.qrWhatsapp
-     .cap[data-cap="P10"]                                    captura: arquivo = capBase + data-cap + capExt                   */
+     .cap[data-cap="P10"]                                    captura: o ID vira arquivo pelo mapa CAPTURAS abaixo (único lugar a editar)
+                                                             ID fora do mapa = capBase + ID + capExt; ID com valor null = sem captura: o .cap é removido
+                                                             (o slide fica sem tela; ver pendencias.md V3)                                                 */
 (function () {
   "use strict";
   var O = window.V3 || {};
   var BASE = O.capBase || "capturas-v3/";
   var EXT = O.capExt || ".png";
+  /* Mapa ID do roteiro (§5) -> arquivo real em capturas-v3/. Um só lugar. Nenhuma imagem é duplicada: IDs diferentes podem apontar para o mesmo arquivo.
+     Provisórios (captura mais próxima, o ID pedido não existe): A2, P11, P12. Sem captura (null): P1-1..P1-4, P6, P15. */
+  var CAPTURAS = {
+    A1: "app-loja-vitrine.jpg",
+    A2: "app-produto.jpg",                 /* provisório: o roteiro pede 36 e 44 esgotados; a captura tem tamanhos M, G, P e nenhum esgotado */
+    A3: "app-pedido-separando.jpg",
+    A4: "app-pedido-a-caminho.jpg",        /* J8: só com a flag entregaWebag (ver C4 no HTML) */
+    "P1-1": null, "P1-2": null, "P1-3": null, "P1-4": null,   /* cadastro em 4 etapas: não capturado */
+    P3: "painel-cadastro-rapido-mob.jpg",
+    P4: "painel-colar-lista-mob.jpg",
+    P5: "painel-adicionar-varios-mob.jpg",
+    P6: null,                              /* passo Fotos da lista: não capturado */
+    P7: "painel-produtos-lista-mob.jpg",
+    P8: "painel-precos-reajuste-previa-desk.jpg",
+    P9: "painel-precos-reajuste-desfazer-desk.jpg",
+    P10: "painel-pedido-novo-mob.jpg",
+    P11: null,                             /* pedido em separação: não capturado (o detalhe do pedido traz dados do cliente) */
+    P12: "painel-pronto-coleta-mob.jpg",   /* provisório: lista "Prontos"; a caixa com volumes não foi capturada */
+    P13: "painel-financeiro-desk.jpg",
+    P14: "painel-extrato-desk.jpg",
+    P15: null
+  };
+  if (O.capMap) Object.keys(O.capMap).forEach(function (k) { CAPTURAS[k] = O.capMap[k]; });
   var DEF = {
     nome: "Yago",
     whatsapp: "",
@@ -87,10 +112,13 @@
     });
     all("img[data-qr]").forEach(function (img) { if (cfg.qrWhatsapp) img.setAttribute("src", cfg.qrWhatsapp); });
     all(".cap[data-cap]").forEach(function (cap) {
+      var id = cap.getAttribute("data-cap");
+      var file = Object.prototype.hasOwnProperty.call(CAPTURAS, id) ? CAPTURAS[id] : id + EXT;
+      if (file === null) { if (cap.parentNode) cap.parentNode.removeChild(cap); return; }
       var img = cap.querySelector("img");
       if (!img) return;
       img.addEventListener("error", function () { cap.classList.add("miss"); });
-      img.setAttribute("src", BASE + cap.getAttribute("data-cap") + EXT);
+      img.setAttribute("src", BASE + file);
     });
     var meta = document.querySelector('meta[name="marketing-slides"]');
     if (meta) meta.setAttribute("content", String(document.querySelectorAll("section.slide").length));

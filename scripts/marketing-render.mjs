@@ -11,7 +11,7 @@
 // Variavel: CHROMIUM_PATH = executavel do Chromium, se o do Playwright nao estiver instalado (ver docs/marketing/README.md).
 // Detalhes de contrato (tamanhos, nomes, window.setTime) e decisoes de render: docs/marketing/README.md.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
@@ -24,7 +24,7 @@ const srcRoot = join(marketing, 'src');
 const docsRoot = join(root, 'docs'); // raiz do servidor: as pecas referenciam ../../telas e ../../design (fora de marketing/src)
 
 const TARGETS = ['lojista', 'cliente', 'instagram', 'video', 'video-lojista', 'video-cliente', 'tudo'];
-const DECKS = { lojista: 'apresentacao-lojista', cliente: 'apresentacao-cliente' };
+const DECKS = { lojista: 'apresentacao-lojista-v3', cliente: 'apresentacao-cliente-v3' };
 const SLIDE = { w: 1920, h: 1080 };
 const INSTAGRAM = [
   { name: 'perfil', w: 1080, h: 1080, roots: ['main.perfil', 'main.post', 'main', 'body > *'] },
@@ -199,6 +199,23 @@ function startServer() {
 }
 
 // ---------------------------------------------------------------- Playwright do workspace
+/** Sem CHROMIUM_PATH e sem o Chromium do Playwright: procura um Chromium ja instalado (ex.: /opt/pw-browsers/chromium-<n>/chrome-linux*, binario `chrome`). */
+function findInstalledChromium() {
+  const bases = [process.env.PLAYWRIGHT_BROWSERS_PATH, '/opt/pw-browsers'].filter(Boolean);
+  for (const base of bases) {
+    if (!existsSync(base)) continue;
+    const found = [];
+    for (const d of readdirSync(base).filter((n) => /^chromium-\d+$/.test(n))) {
+      for (const sub of readdirSync(join(base, d)).filter((n) => /^chrome-linux/.test(n))) {
+        const exe = join(base, d, sub, 'chrome');
+        if (existsSync(exe)) found.push(exe);
+      }
+    }
+    if (found.length) return found.sort().at(-1);
+  }
+  return undefined;
+}
+
 function loadChromium() {
   let chromium;
   try {
@@ -210,7 +227,8 @@ function loadChromium() {
       'Playwright nao encontrado no workspace. Rode `pnpm install` na raiz (apps/web depende de @playwright/test).',
     );
   }
-  const executablePath = process.env.CHROMIUM_PATH || undefined;
+  let executablePath = process.env.CHROMIUM_PATH || undefined;
+  if (!executablePath && !existsSync(chromium.executablePath())) executablePath = findInstalledChromium();
   const exe = executablePath ?? chromium.executablePath();
   if (!existsSync(exe)) {
     fail(
@@ -300,7 +318,8 @@ function throwIfProblems(problems) {
 
 // ---------------------------------------------------------------- apresentacoes (PDF)
 async function renderDeck(browser, origin, key) {
-  const name = DECKS[key];
+  // v3 por padrao; as fixtures antigas (--pasta teste-render) usam o nome sem sufixo
+  const name = existsSync(join(srcDir, `${DECKS[key]}.html`)) ? DECKS[key] : DECKS[key].replace(/-v3$/, '');
   const file = join(srcDir, `${name}.html`);
   if (!existsSync(file)) return skipMissing(file);
   const t0 = Date.now();
@@ -340,6 +359,11 @@ async function renderDeck(browser, origin, key) {
       if (errors.length) fail(`${label}:\n  ${errors.join('\n  ')}`);
     };
     check(await measure(), 'tela');
+    // capa: 1o slide em PNG 1920x1080 (previa; a tela, nao a midia print)
+    mkdirSync(outDir, { recursive: true });
+    const cover = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: SLIDE.w, height: SLIDE.h } });
+    writeFileSync(join(outDir, `${name}-capa.png`), cover);
+    if (cover.length > 400 * 1024) warn(`${name}-capa.png tem ${kb(cover.length)} (alvo < 400 KB)`);
     // o PDF usa a midia "print": fixa pagina 1920x1080 sem margem, uma pagina por slide, cores impressas
     await page.emulateMedia({ media: 'print' });
     await page.addStyleTag({
